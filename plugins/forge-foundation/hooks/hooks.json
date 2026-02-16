@@ -1,0 +1,10 @@
+{
+  "hooks": [
+    {
+      "event": "PreToolUse",
+      "tools": ["Edit", "Write"],
+      "command": "python3 plugins/forge-foundation/hooks/security-scan.py",
+      "description": "Scan code changes for security issues before writing"
+    }
+  ]
+}

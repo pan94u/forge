@@ -1,0 +1,141 @@
+name: Documentation Generation
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'mcp-servers/**/src/**'
+      - 'web-ide/**/src/**'
+      - 'adapters/**/src/**'
+      - 'cli/**/src/**'
+  workflow_dispatch:
+    inputs:
+      force_regenerate:
+        description: 'Force regeneration of all documentation'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  check-coverage:
+    name: Check Documentation Coverage
+    runs-on: ubuntu-latest
+    outputs:
+      needs_generation: ${{ steps.check.outputs.needs_generation }}
+      undocumented_modules: ${{ steps.check.outputs.undocumented_modules }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Check documentation coverage
+        id: check
+        run: |
+          NEEDS_GEN="false"
+          UNDOCUMENTED=""
+
+          # Check each module for documentation
+          for module_dir in mcp-servers/*/src adapters/*/src cli/src web-ide/backend/src; do
+            if [ ! -d "$module_dir" ]; then continue; fi
+            MODULE_NAME=$(echo "$module_dir" | cut -d'/' -f1-2 | tr '/' '-')
+            DOC_FILE="knowledge-base/generated-docs/${MODULE_NAME}.md"
+
+            if [ ! -f "$DOC_FILE" ] || [ "${{ inputs.force_regenerate }}" = "true" ]; then
+              NEEDS_GEN="true"
+              UNDOCUMENTED="${UNDOCUMENTED}${MODULE_NAME},"
+              echo "Missing or stale docs: $MODULE_NAME"
+            else
+              # Check if source is newer than docs
+              SRC_MODIFIED=$(find "$module_dir" -name "*.kt" -newer "$DOC_FILE" | head -1)
+              if [ -n "$SRC_MODIFIED" ]; then
+                NEEDS_GEN="true"
+                UNDOCUMENTED="${UNDOCUMENTED}${MODULE_NAME},"
+                echo "Stale docs (source modified): $MODULE_NAME"
+              fi
+            fi
+          done
+
+          echo "needs_generation=$NEEDS_GEN" >> $GITHUB_OUTPUT
+          echo "undocumented_modules=$UNDOCUMENTED" >> $GITHUB_OUTPUT
+
+  generate-docs:
+    name: Generate Documentation
+    needs: check-coverage
+    if: needs.check-coverage.outputs.needs_generation == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Generate module documentation
+        run: |
+          mkdir -p knowledge-base/generated-docs
+          TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+          # Generate docs for each Kotlin module
+          for module_dir in mcp-servers/*/src adapters/*/src cli/src; do
+            if [ ! -d "$module_dir" ]; then continue; fi
+            MODULE_NAME=$(echo "$module_dir" | cut -d'/' -f1-2 | tr '/' '-')
+            DOC_FILE="knowledge-base/generated-docs/${MODULE_NAME}.md"
+
+            echo "Generating docs for: $MODULE_NAME"
+
+            # Extract public API surface from Kotlin files
+            {
+              echo "# $MODULE_NAME"
+              echo ""
+              echo "Generated: $TIMESTAMP"
+              echo ""
+              echo "## Module Structure"
+              echo ""
+              echo '```'
+              find "$module_dir" -name "*.kt" | sort | sed 's|^|  |'
+              echo '```'
+              echo ""
+              echo "## Public Interfaces and Classes"
+              echo ""
+
+              # Extract interface and class declarations
+              find "$module_dir" -name "*.kt" -exec grep -l "^interface\|^class\|^data class\|^sealed\|^enum\|^object" {} \; | sort | while read -r file; do
+                RELATIVE=$(echo "$file" | sed "s|$module_dir/||")
+                echo "### $RELATIVE"
+                echo ""
+                grep -n "^interface\|^class\|^data class\|^sealed\|^enum\|^object\|^abstract class" "$file" | while read -r line; do
+                  echo "- \`$(echo "$line" | sed 's/:.*/: /')$(echo "$line" | sed 's/[^:]*://' | sed 's/{.*//' | xargs)\`"
+                done
+                echo ""
+              done
+            } > "$DOC_FILE"
+          done
+
+      - name: Create documentation PR
+        run: |
+          git config user.name "forge-bot"
+          git config user.email "forge-bot@example.com"
+          BRANCH="docs/auto-generate-$(date +%Y%m%d-%H%M%S)"
+          git checkout -b "$BRANCH"
+          git add knowledge-base/generated-docs/
+          if git diff --cached --quiet; then
+            echo "No documentation changes"
+            exit 0
+          fi
+          git commit -m "docs: auto-generate module documentation"
+          git push origin "$BRANCH"
+          gh pr create \
+            --title "Auto-generated Documentation Update" \
+            --body "Automatically generated documentation for modules with updated source code. Please review for accuracy." \
+            --base main \
+            --head "$BRANCH" \
+            --label "documentation,automation"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

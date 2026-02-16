@@ -1,0 +1,261 @@
+version: "3.9"
+
+# Forge Platform — Local Development Docker Compose
+# Usage: docker compose up -d
+# Health: docker compose ps
+
+networks:
+  forge-network:
+    driver: bridge
+    name: forge-network
+
+volumes:
+  postgres-data:
+    driver: local
+  knowledge-mcp-data:
+    driver: local
+  artifact-mcp-data:
+    driver: local
+
+services:
+  # ---------------------------------------------------------------------------
+  # PostgreSQL 16 — Shared database for local development
+  # ---------------------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    container_name: forge-postgres
+    restart: unless-stopped
+    networks:
+      - forge-network
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: forge
+      POSTGRES_PASSWORD: forge_local_dev
+      POSTGRES_DB: forge
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./init-scripts:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U forge -d forge"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # ---------------------------------------------------------------------------
+  # forge-knowledge-mcp — Skill Profile registry and CLAUDE.md management
+  # ---------------------------------------------------------------------------
+  forge-knowledge-mcp:
+    image: forge-platform/knowledge-mcp:latest
+    build:
+      context: ../../mcp-servers/knowledge-mcp
+      dockerfile: Dockerfile
+    container_name: forge-knowledge-mcp
+    restart: unless-stopped
+    networks:
+      - forge-network
+    ports:
+      - "8081:8081"
+    environment:
+      SERVER_PORT: "8081"
+      SPRING_PROFILES_ACTIVE: local
+      DB_URL: jdbc:postgresql://postgres:5432/forge
+      DB_USERNAME: forge
+      DB_PASSWORD: forge_local_dev
+      SKILL_REGISTRY_PATH: /data/skills
+      LOG_LEVEL: DEBUG
+    volumes:
+      - knowledge-mcp-data:/data/skills
+      - ../../skills:/data/skills-source:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/health/ready"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 45s
+
+  # ---------------------------------------------------------------------------
+  # forge-database-mcp — Schema introspection and query generation
+  # ---------------------------------------------------------------------------
+  forge-database-mcp:
+    image: forge-platform/database-mcp:latest
+    build:
+      context: ../../mcp-servers/database-mcp
+      dockerfile: Dockerfile
+    container_name: forge-database-mcp
+    restart: unless-stopped
+    networks:
+      - forge-network
+    ports:
+      - "8082:8082"
+    environment:
+      SERVER_PORT: "8082"
+      SPRING_PROFILES_ACTIVE: local
+      DB_URL: jdbc:postgresql://postgres:5432/forge
+      DB_USERNAME: forge
+      DB_PASSWORD: forge_local_dev
+      SCHEMA_CACHE_TTL_SECONDS: "300"
+      LOG_LEVEL: DEBUG
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8082/health/ready"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 45s
+
+  # ---------------------------------------------------------------------------
+  # forge-service-graph-mcp — Service topology and API contract management
+  # ---------------------------------------------------------------------------
+  forge-service-graph-mcp:
+    image: forge-platform/service-graph-mcp:latest
+    build:
+      context: ../../mcp-servers/service-graph-mcp
+      dockerfile: Dockerfile
+    container_name: forge-service-graph-mcp
+    restart: unless-stopped
+    networks:
+      - forge-network
+    ports:
+      - "8083:8083"
+    environment:
+      SERVER_PORT: "8083"
+      SPRING_PROFILES_ACTIVE: local
+      DB_URL: jdbc:postgresql://postgres:5432/forge
+      DB_USERNAME: forge
+      DB_PASSWORD: forge_local_dev
+      SERVICE_REGISTRY_REFRESH_SECONDS: "60"
+      LOG_LEVEL: DEBUG
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8083/health/ready"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 45s
+
+  # ---------------------------------------------------------------------------
+  # forge-artifact-mcp — Build artifact metadata and deployment history
+  # ---------------------------------------------------------------------------
+  forge-artifact-mcp:
+    image: forge-platform/artifact-mcp:latest
+    build:
+      context: ../../mcp-servers/artifact-mcp
+      dockerfile: Dockerfile
+    container_name: forge-artifact-mcp
+    restart: unless-stopped
+    networks:
+      - forge-network
+    ports:
+      - "8084:8084"
+    environment:
+      SERVER_PORT: "8084"
+      SPRING_PROFILES_ACTIVE: local
+      DB_URL: jdbc:postgresql://postgres:5432/forge
+      DB_USERNAME: forge
+      DB_PASSWORD: forge_local_dev
+      ARTIFACT_STORAGE_PATH: /data/artifacts
+      LOG_LEVEL: DEBUG
+    volumes:
+      - artifact-mcp-data:/data/artifacts
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8084/health/ready"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 45s
+
+  # ---------------------------------------------------------------------------
+  # forge-observability-mcp — Logs, metrics, traces, and error aggregation
+  # ---------------------------------------------------------------------------
+  forge-observability-mcp:
+    image: forge-platform/observability-mcp:latest
+    build:
+      context: ../../mcp-servers/observability-mcp
+      dockerfile: Dockerfile
+    container_name: forge-observability-mcp
+    restart: unless-stopped
+    networks:
+      - forge-network
+    ports:
+      - "8085:8085"
+    environment:
+      SERVER_PORT: "8085"
+      SPRING_PROFILES_ACTIVE: local
+      DB_URL: jdbc:postgresql://postgres:5432/forge
+      DB_USERNAME: forge
+      DB_PASSWORD: forge_local_dev
+      METRICS_RETENTION_DAYS: "30"
+      LOG_LEVEL: DEBUG
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8085/health/ready"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 45s
+
+  # ---------------------------------------------------------------------------
+  # forge-web-ide-backend — Web IDE backend (Spring Boot + WebFlux)
+  # ---------------------------------------------------------------------------
+  forge-web-ide-backend:
+    image: forge-platform/web-ide-backend:latest
+    build:
+      context: ../../web-ide/backend
+      dockerfile: Dockerfile
+    container_name: forge-web-ide-backend
+    restart: unless-stopped
+    networks:
+      - forge-network
+    ports:
+      - "8080:8080"
+    environment:
+      SERVER_PORT: "8080"
+      SPRING_PROFILES_ACTIVE: local
+      DB_URL: jdbc:postgresql://postgres:5432/forge
+      DB_USERNAME: forge
+      DB_PASSWORD: forge_local_dev
+      KNOWLEDGE_MCP_URL: http://forge-knowledge-mcp:8081
+      DATABASE_MCP_URL: http://forge-database-mcp:8082
+      SERVICE_GRAPH_MCP_URL: http://forge-service-graph-mcp:8083
+      ARTIFACT_MCP_URL: http://forge-artifact-mcp:8084
+      OBSERVABILITY_MCP_URL: http://forge-observability-mcp:8085
+      CLAUDE_CODE_PATH: /usr/local/bin/claude
+      SESSION_TIMEOUT_MINUTES: "60"
+      WEBSOCKET_MAX_SESSIONS: "50"
+      LOG_LEVEL: DEBUG
+    volumes:
+      - ../../:/workspace:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      forge-knowledge-mcp:
+        condition: service_healthy
+      forge-database-mcp:
+        condition: service_healthy
+      forge-service-graph-mcp:
+        condition: service_healthy
+      forge-artifact-mcp:
+        condition: service_healthy
+      forge-observability-mcp:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 60s

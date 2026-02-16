@@ -1,0 +1,71 @@
+id: eval-001-knowledge-growth
+name: Knowledge Growth Metrics
+description: >
+  Evaluate the Learning Loop's effectiveness at capturing and integrating
+  new knowledge from completed tasks. Measures whether the agent can
+  identify patterns worth codifying, suggest skill improvements, and
+  maintain knowledge freshness.
+tags:
+  - learning-loop
+  - knowledge
+  - meta-evaluation
+baseline_pass_rate: 0.70
+
+prompt: |
+  Review the following completed task log and identify learnings that
+  should be captured in the knowledge base:
+
+  Task Log:
+  - Task: Add rate limiting to /api/v1/orders endpoint
+  - Duration: 45 minutes
+  - Files modified: OrderController.kt, RateLimitFilter.kt (new), application.yml
+  - Approach: Used Bucket4j library with Redis backend for distributed rate limiting
+  - Issues encountered:
+    1. Initial approach with Spring's built-in rate limiter didn't support distributed setups
+    2. Had to add Redis dependency and configure connection pooling
+    3. Rate limit headers (X-RateLimit-Remaining) needed custom filter
+  - Tests added: RateLimitFilterTest.kt, OrderControllerRateLimitTest.kt
+  - Review feedback: "Consider extracting rate limit config to a shared library"
+
+  Based on this task log:
+  1. What conventions or patterns should be documented?
+  2. Should any existing skills be updated?
+  3. Are there new skills that should be created?
+  4. What knowledge base entries should be added?
+  5. Rate the knowledge capture completeness (1-10)
+
+context:
+  existing_skills:
+    - "api-development"
+    - "spring-boot-patterns"
+    - "testing-patterns"
+  knowledge_base_entries:
+    - "Redis usage patterns"
+    - "Spring Boot configuration"
+
+assertions:
+  - type: contains
+    expected: "rate limit"
+    description: "Identifies rate limiting as a pattern to document"
+
+  - type: contains
+    expected: "Bucket4j"
+    description: "Captures the specific library choice"
+
+  - type: contains
+    expected: "Redis"
+    description: "Notes the distributed aspect requiring Redis"
+
+  - type: contains
+    expected: "skill"
+    description: "Suggests skill updates or new skills"
+
+  - type: contains
+    expected: "convention"
+    description: "Identifies conventions to document"
+
+quality_criteria:
+  pattern_identification: 0.80
+  actionability: 0.75
+  specificity: 0.70
+  integration_suggestions: 0.75

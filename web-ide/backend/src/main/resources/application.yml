@@ -1,0 +1,294 @@
+# =============================================================================
+# Forge Web IDE Backend — Spring Boot Configuration
+# =============================================================================
+
+server:
+  port: ${SERVER_PORT:8080}
+  shutdown: graceful
+  servlet:
+    context-path: /
+  compression:
+    enabled: true
+    mime-types: application/json,application/xml,text/html,text/plain,text/css,application/javascript
+    min-response-size: 1024
+
+# =============================================================================
+# Spring Configuration
+# =============================================================================
+spring:
+  application:
+    name: forge-web-ide-backend
+
+  # ---------------------------------------------------------------------------
+  # Jackson JSON serialization
+  # ---------------------------------------------------------------------------
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
+      indent-output: false
+    deserialization:
+      fail-on-unknown-properties: false
+    default-property-inclusion: non_null
+    date-format: com.fasterxml.jackson.databind.util.ISO8601DateFormat
+
+  # ---------------------------------------------------------------------------
+  # Security — OAuth2 Resource Server
+  # ---------------------------------------------------------------------------
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${OAUTH2_ISSUER_URI:https://auth.example.com/realms/forge}
+          audiences: forge-web-ide
+      client:
+        registration:
+          forge:
+            client-id: ${OAUTH2_CLIENT_ID:forge-web-ide}
+            client-secret: ${OAUTH2_CLIENT_SECRET:}
+            scope: openid,profile,email
+            authorization-grant-type: authorization_code
+            redirect-uri: "{baseUrl}/login/oauth2/code/{registrationId}"
+        provider:
+          forge:
+            issuer-uri: ${OAUTH2_ISSUER_URI:https://auth.example.com/realms/forge}
+
+  # ---------------------------------------------------------------------------
+  # DataSource — PostgreSQL
+  # ---------------------------------------------------------------------------
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/forge}
+    username: ${DB_USERNAME:forge}
+    password: ${DB_PASSWORD:}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      pool-name: forge-web-ide-pool
+      minimum-idle: 5
+      maximum-pool-size: 20
+      idle-timeout: 300000
+      max-lifetime: 600000
+      connection-timeout: 30000
+      leak-detection-threshold: 60000
+
+  # ---------------------------------------------------------------------------
+  # JPA / Hibernate
+  # ---------------------------------------------------------------------------
+  jpa:
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: false
+        generate_statistics: false
+        jdbc:
+          batch_size: 25
+          batch_versioned_data: true
+        order_inserts: true
+        order_updates: true
+
+  # ---------------------------------------------------------------------------
+  # Flyway Database Migration
+  # ---------------------------------------------------------------------------
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+    validate-on-migrate: true
+
+  # ---------------------------------------------------------------------------
+  # WebSocket Configuration
+  # ---------------------------------------------------------------------------
+  websocket:
+    max-text-message-size: 65536
+    max-binary-message-size: 65536
+
+  # ---------------------------------------------------------------------------
+  # Lifecycle — graceful shutdown
+  # ---------------------------------------------------------------------------
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
+
+# =============================================================================
+# Forge Application Configuration
+# =============================================================================
+forge:
+  # ---------------------------------------------------------------------------
+  # MCP Server URLs
+  # ---------------------------------------------------------------------------
+  mcp:
+    knowledge:
+      url: ${KNOWLEDGE_MCP_URL:http://localhost:8081}
+      timeout-seconds: 30
+    database:
+      url: ${DATABASE_MCP_URL:http://localhost:8082}
+      timeout-seconds: 30
+    service-graph:
+      url: ${SERVICE_GRAPH_MCP_URL:http://localhost:8083}
+      timeout-seconds: 30
+    artifact:
+      url: ${ARTIFACT_MCP_URL:http://localhost:8084}
+      timeout-seconds: 30
+    observability:
+      url: ${OBSERVABILITY_MCP_URL:http://localhost:8085}
+      timeout-seconds: 30
+
+  # ---------------------------------------------------------------------------
+  # Claude Code Session Management
+  # ---------------------------------------------------------------------------
+  session:
+    timeout-minutes: ${SESSION_TIMEOUT_MINUTES:30}
+    max-concurrent-sessions: ${WEBSOCKET_MAX_SESSIONS:50}
+    claude-code-path: ${CLAUDE_CODE_PATH:claude}
+    working-directory: ${FORGE_WORKSPACE:/workspace}
+    cleanup-interval-seconds: 60
+
+  # ---------------------------------------------------------------------------
+  # WebSocket Settings
+  # ---------------------------------------------------------------------------
+  websocket:
+    endpoint: /ws
+    allowed-origins:
+      - ${FORGE_FRONTEND_URL:http://localhost:3000}
+      - ${FORGE_FRONTEND_URL_ALT:http://localhost:5173}
+    heartbeat-interval-seconds: 25
+    max-sessions-per-user: 5
+    message-buffer-size: 8192
+
+# =============================================================================
+# Logging Configuration — Structured JSON
+# =============================================================================
+logging:
+  level:
+    root: ${LOG_LEVEL:INFO}
+    com.forge: ${LOG_LEVEL:INFO}
+    com.forge.webide: DEBUG
+    org.springframework.security: WARN
+    org.springframework.web: INFO
+    org.hibernate.SQL: WARN
+    org.hibernate.type.descriptor.sql: WARN
+    org.flywaydb: INFO
+    io.netty: WARN
+  pattern:
+    console: >-
+      %d{yyyy-MM-dd'T'HH:mm:ss.SSSZ}
+      %highlight(%-5level)
+      [%thread]
+      %cyan(%logger{36})
+      - %msg%n
+  file:
+    name: ${LOG_FILE:logs/forge-web-ide-backend.log}
+    max-size: 100MB
+    max-history: 30
+    total-size-cap: 3GB
+
+# =============================================================================
+# Actuator — Health, Metrics, and Management Endpoints
+# =============================================================================
+management:
+  server:
+    port: ${MANAGEMENT_PORT:8080}
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus,env,flyway
+      base-path: /actuator
+  endpoint:
+    health:
+      show-details: when_authorized
+      show-components: when_authorized
+      probes:
+        enabled: true
+      group:
+        liveness:
+          include: livenessState
+        readiness:
+          include: readinessState,db,diskSpace
+    info:
+      enabled: true
+    metrics:
+      enabled: true
+    prometheus:
+      enabled: true
+  health:
+    db:
+      enabled: true
+    diskSpace:
+      enabled: true
+    livenessState:
+      enabled: true
+    readinessState:
+      enabled: true
+  metrics:
+    tags:
+      application: forge-web-ide-backend
+      environment: ${SPRING_PROFILES_ACTIVE:local}
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+      slo:
+        http.server.requests: 50ms,100ms,200ms,500ms,1s,5s
+    export:
+      prometheus:
+        enabled: true
+
+  # ---------------------------------------------------------------------------
+  # OpenTelemetry Tracing
+  # ---------------------------------------------------------------------------
+  tracing:
+    enabled: true
+    sampling:
+      probability: ${OTEL_SAMPLING_PROBABILITY:1.0}
+  otlp:
+    tracing:
+      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4317}
+
+# =============================================================================
+# Profile Overrides
+# =============================================================================
+---
+spring:
+  config:
+    activate:
+      on-profile: local
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          # In local mode, use a local Keycloak or disable JWT validation
+          issuer-uri: http://localhost:9090/realms/forge
+  h2:
+    console:
+      enabled: false
+
+logging:
+  level:
+    com.forge: DEBUG
+    org.springframework.web: DEBUG
+
+---
+spring:
+  config:
+    activate:
+      on-profile: production
+
+logging:
+  level:
+    root: WARN
+    com.forge: INFO
+    org.springframework.security: WARN
+  pattern:
+    # JSON structured logging for production log aggregation
+    console: >-
+      {"timestamp":"%d{yyyy-MM-dd'T'HH:mm:ss.SSSZ}",
+      "level":"%level",
+      "thread":"%thread",
+      "logger":"%logger{36}",
+      "message":"%msg",
+      "service":"forge-web-ide-backend"}%n
+
+management:
+  endpoint:
+    health:
+      show-details: never
+      show-components: never

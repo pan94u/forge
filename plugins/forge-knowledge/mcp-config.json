@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "forge-knowledge": {
+      "command": "java",
+      "args": ["-jar", "mcp-servers/forge-knowledge-mcp/build/libs/forge-knowledge-mcp.jar"],
+      "env": {
+        "FORGE_KNOWLEDGE_DIR": "${FORGE_KNOWLEDGE_DIR:-./knowledge-base}",
+        "FORGE_WIKI_ENDPOINT": "${FORGE_WIKI_ENDPOINT:-}",
+        "FORGE_ADR_DIR": "${FORGE_ADR_DIR:-./docs/adr}"
+      }
+    }
+  }
+}

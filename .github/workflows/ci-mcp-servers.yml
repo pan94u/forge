@@ -1,0 +1,149 @@
+name: CI - MCP Servers
+
+on:
+  pull_request:
+    paths:
+      - 'mcp-servers/**'
+      - 'build.gradle.kts'
+      - 'settings.gradle.kts'
+  push:
+    branches: [main]
+    paths:
+      - 'mcp-servers/**'
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build-and-test:
+    name: Build & Test MCP Servers
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: forge_test
+          POSTGRES_USER: forge
+          POSTGRES_PASSWORD: forge_test_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Cache Gradle dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-mcp-${{ hashFiles('mcp-servers/**/build.gradle.kts') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-mcp-
+
+      - name: Build common module
+        run: ./gradlew :mcp-servers:forge-mcp-common:build --no-daemon
+
+      - name: Build all MCP servers
+        run: |
+          ./gradlew \
+            :mcp-servers:forge-knowledge-mcp:build \
+            :mcp-servers:forge-database-mcp:build \
+            :mcp-servers:forge-service-graph-mcp:build \
+            :mcp-servers:forge-artifact-mcp:build \
+            :mcp-servers:forge-observability-mcp:build \
+            --no-daemon
+
+      - name: Run unit tests
+        run: |
+          ./gradlew \
+            :mcp-servers:forge-mcp-common:test \
+            :mcp-servers:forge-knowledge-mcp:test \
+            :mcp-servers:forge-database-mcp:test \
+            :mcp-servers:forge-service-graph-mcp:test \
+            :mcp-servers:forge-artifact-mcp:test \
+            :mcp-servers:forge-observability-mcp:test \
+            --no-daemon
+        env:
+          DATABASE_URL: jdbc:postgresql://localhost:5432/forge_test
+          DATABASE_USER: forge
+          DATABASE_PASSWORD: forge_test_password
+
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mcp-server-test-reports
+          path: mcp-servers/**/build/reports/tests/
+          retention-days: 14
+
+      - name: Check for JAR artifacts
+        run: |
+          for server in forge-knowledge-mcp forge-database-mcp forge-service-graph-mcp forge-artifact-mcp forge-observability-mcp; do
+            JAR=$(find mcp-servers/$server/build/libs -name "*.jar" -not -name "*-plain.jar" | head -1)
+            if [ -z "$JAR" ]; then
+              echo "ERROR: No JAR found for $server"
+              exit 1
+            fi
+            echo "OK: $server -> $JAR"
+          done
+
+  docker-build:
+    name: Build Docker Images
+    needs: build-and-test
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        server:
+          - forge-knowledge-mcp
+          - forge-database-mcp
+          - forge-service-graph-mcp
+          - forge-artifact-mcp
+          - forge-observability-mcp
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Build JAR
+        run: ./gradlew :mcp-servers:${{ matrix.server }}:bootJar --no-daemon
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: mcp-servers/${{ matrix.server }}
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}/${{ matrix.server }}:${{ github.sha }}
+            ghcr.io/${{ github.repository }}/${{ matrix.server }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

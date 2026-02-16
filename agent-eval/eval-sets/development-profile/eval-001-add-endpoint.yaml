@@ -1,0 +1,76 @@
+id: eval-001-add-endpoint
+name: Add REST Endpoint
+description: >
+  Evaluate the agent's ability to implement a new REST API endpoint
+  following the project's existing patterns and conventions.
+tags:
+  - development
+  - rest-api
+  - spring-boot
+baseline_pass_rate: 0.80
+
+prompt: |
+  Add a new REST endpoint to the user service:
+
+  GET /api/v1/users/{userId}/activity
+  - Returns the last 30 days of user activity
+  - Supports pagination (page, size query params)
+  - Requires authentication (Bearer token)
+  - Returns 404 if user not found
+  - Returns 403 if requesting user lacks permission
+
+  Follow the existing patterns in the codebase for:
+  - Controller structure
+  - Service layer
+  - Repository queries
+  - DTO mapping
+  - Error handling
+  - Tests
+
+context:
+  framework: "Spring Boot 3.3"
+  language: "Kotlin"
+  persistence: "Spring Data JPA with PostgreSQL"
+  auth: "Spring Security with JWT"
+  testing: "JUnit 5 + MockK"
+  existing_patterns:
+    controller: "Uses @RestController, @GetMapping, ResponseEntity"
+    service: "Interface + Impl pattern with @Service"
+    repository: "Spring Data JPA with custom @Query methods"
+    dto: "Separate request/response DTOs with mapping extensions"
+    error_handling: "Global @ControllerAdvice with custom exceptions"
+
+assertions:
+  - type: contains
+    expected: "@RestController"
+    description: "Uses Spring RestController annotation"
+
+  - type: contains
+    expected: "@GetMapping"
+    description: "Uses GET mapping annotation"
+
+  - type: contains
+    expected: "Pageable"
+    description: "Implements pagination support"
+
+  - type: contains
+    expected: "@Test"
+    description: "Includes test cases"
+
+  - type: contains
+    expected: "404"
+    description: "Handles user not found case"
+
+  - type: contains
+    expected: "403"
+    description: "Handles authorization check"
+
+  - type: not_contains
+    expected: "TODO"
+    description: "No TODO placeholders left in implementation"
+
+quality_criteria:
+  completeness: 0.85
+  correctness: 0.80
+  convention_adherence: 0.90
+  test_coverage: 0.80

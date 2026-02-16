@@ -1,0 +1,337 @@
+# Forge Platform — Web IDE Deployments
+# Backend (Spring Boot + WebFlux) and Frontend (Nginx static serving)
+
+---
+# =============================================================================
+# ConfigMap — Web IDE Backend configuration
+# =============================================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: web-ide-backend-config
+  namespace: forge-platform
+  labels:
+    app.kubernetes.io/name: forge-web-ide-backend
+    app.kubernetes.io/part-of: forge
+    app.kubernetes.io/component: web-ide
+data:
+  SPRING_PROFILES_ACTIVE: "production"
+  LOG_LEVEL: "INFO"
+  LOG_FORMAT: "json"
+  KNOWLEDGE_MCP_URL: "http://forge-knowledge-mcp:8081"
+  DATABASE_MCP_URL: "http://forge-database-mcp:8082"
+  SERVICE_GRAPH_MCP_URL: "http://forge-service-graph-mcp:8083"
+  ARTIFACT_MCP_URL: "http://forge-artifact-mcp:8084"
+  OBSERVABILITY_MCP_URL: "http://forge-observability-mcp:8085"
+  SESSION_TIMEOUT_MINUTES: "30"
+  WEBSOCKET_MAX_SESSIONS: "200"
+  OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector.observability:4317"
+  OTEL_SERVICE_NAME: "forge-web-ide-backend"
+
+---
+# =============================================================================
+# Web IDE Backend — Deployment
+# =============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: forge-web-ide-backend
+  namespace: forge-platform
+  labels:
+    app.kubernetes.io/name: forge-web-ide-backend
+    app.kubernetes.io/part-of: forge
+    app.kubernetes.io/component: web-ide
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: forge-web-ide-backend
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: forge-web-ide-backend
+        app.kubernetes.io/part-of: forge
+        app.kubernetes.io/component: web-ide
+    spec:
+      serviceAccountName: forge-web-ide
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: app.kubernetes.io/name
+                      operator: In
+                      values:
+                        - forge-web-ide-backend
+                topologyKey: kubernetes.io/hostname
+      containers:
+        - name: web-ide-backend
+          image: forge-platform/web-ide-backend:latest
+          ports:
+            - containerPort: 8080
+              name: http
+              protocol: TCP
+          env:
+            - name: SERVER_PORT
+              value: "8080"
+            - name: DB_URL
+              valueFrom:
+                secretKeyRef:
+                  name: forge-database-credentials
+                  key: url
+            - name: DB_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: forge-database-credentials
+                  key: username
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: forge-database-credentials
+                  key: password
+            - name: OAUTH2_ISSUER_URI
+              valueFrom:
+                secretKeyRef:
+                  name: forge-oauth2-credentials
+                  key: issuer-uri
+            - name: OAUTH2_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: forge-oauth2-credentials
+                  key: client-id
+          envFrom:
+            - configMapRef:
+                name: web-ide-backend-config
+          resources:
+            requests:
+              cpu: 500m
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          startupProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 5
+            failureThreshold: 12
+      restartPolicy: Always
+
+---
+# =============================================================================
+# Web IDE Backend — Service
+# =============================================================================
+apiVersion: v1
+kind: Service
+metadata:
+  name: forge-web-ide-backend
+  namespace: forge-platform
+  labels:
+    app.kubernetes.io/name: forge-web-ide-backend
+    app.kubernetes.io/part-of: forge
+    app.kubernetes.io/component: web-ide
+  annotations:
+    # Enable session affinity for WebSocket connections
+    service.beta.kubernetes.io/aws-load-balancer-stickiness-enabled: "true"
+    service.beta.kubernetes.io/aws-load-balancer-stickiness-type: "source_ip"
+spec:
+  type: ClusterIP
+  sessionAffinity: ClientIP
+  sessionAffinityConfig:
+    clientIP:
+      timeoutSeconds: 1800
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: forge-web-ide-backend
+  ports:
+    - port: 8080
+      targetPort: http
+      protocol: TCP
+      name: http
+
+---
+# =============================================================================
+# ConfigMap — Nginx configuration for frontend static serving
+# =============================================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: web-ide-frontend-nginx-config
+  namespace: forge-platform
+  labels:
+    app.kubernetes.io/name: forge-web-ide-frontend
+    app.kubernetes.io/part-of: forge
+    app.kubernetes.io/component: web-ide
+data:
+  nginx.conf: |
+    worker_processes auto;
+    error_log /var/log/nginx/error.log warn;
+    pid /tmp/nginx.pid;
+
+    events {
+        worker_connections 1024;
+    }
+
+    http {
+        include /etc/nginx/mime.types;
+        default_type application/octet-stream;
+
+        log_format json_combined escape=json
+            '{"time":"$time_iso8601",'
+            '"remote_addr":"$remote_addr",'
+            '"request":"$request",'
+            '"status":$status,'
+            '"body_bytes_sent":$body_bytes_sent,'
+            '"request_time":$request_time,'
+            '"user_agent":"$http_user_agent"}';
+
+        access_log /var/log/nginx/access.log json_combined;
+
+        sendfile on;
+        tcp_nopush on;
+        keepalive_timeout 65;
+        gzip on;
+        gzip_types text/plain text/css application/json application/javascript
+                   text/xml application/xml application/xml+rss text/javascript;
+
+        server {
+            listen 3000;
+            server_name _;
+            root /usr/share/nginx/html;
+            index index.html;
+
+            # SPA routing — serve index.html for all non-file routes
+            location / {
+                try_files $uri $uri/ /index.html;
+            }
+
+            # Cache static assets aggressively
+            location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$ {
+                expires 1y;
+                add_header Cache-Control "public, immutable";
+            }
+
+            # Health check endpoint
+            location /healthz {
+                access_log off;
+                return 200 "OK";
+                add_header Content-Type text/plain;
+            }
+
+            # Security headers
+            add_header X-Frame-Options "SAMEORIGIN" always;
+            add_header X-Content-Type-Options "nosniff" always;
+            add_header X-XSS-Protection "1; mode=block" always;
+            add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+            add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' wss: ws:;" always;
+        }
+    }
+
+---
+# =============================================================================
+# Web IDE Frontend — Deployment (Nginx static serving)
+# =============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: forge-web-ide-frontend
+  namespace: forge-platform
+  labels:
+    app.kubernetes.io/name: forge-web-ide-frontend
+    app.kubernetes.io/part-of: forge
+    app.kubernetes.io/component: web-ide
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: forge-web-ide-frontend
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: forge-web-ide-frontend
+        app.kubernetes.io/part-of: forge
+        app.kubernetes.io/component: web-ide
+    spec:
+      containers:
+        - name: frontend
+          image: forge-platform/web-ide-frontend:latest
+          ports:
+            - containerPort: 3000
+              name: http
+              protocol: TCP
+          volumeMounts:
+            - name: nginx-config
+              mountPath: /etc/nginx/nginx.conf
+              subPath: nginx.conf
+              readOnly: true
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 250m
+              memory: 256Mi
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 15
+            timeoutSeconds: 3
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+      volumes:
+        - name: nginx-config
+          configMap:
+            name: web-ide-frontend-nginx-config
+      restartPolicy: Always
+
+---
+# =============================================================================
+# Web IDE Frontend — Service
+# =============================================================================
+apiVersion: v1
+kind: Service
+metadata:
+  name: forge-web-ide-frontend
+  namespace: forge-platform
+  labels:
+    app.kubernetes.io/name: forge-web-ide-frontend
+    app.kubernetes.io/part-of: forge
+    app.kubernetes.io/component: web-ide
+spec:
+  type: ClusterIP
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: forge-web-ide-frontend
+  ports:
+    - port: 3000
+      targetPort: http
+      protocol: TCP
+      name: http

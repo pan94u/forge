@@ -1,0 +1,71 @@
+{
+  "name": "forge-foundation",
+  "version": "0.1.0",
+  "description": "Foundation plugin for the Forge platform providing Java/Kotlin conventions, Spring Boot patterns, testing standards, API design, security practices, and domain-specific guidance for enterprise application development.",
+  "author": "Forge Platform Team",
+  "license": "MIT",
+  "engine": ">=1.0.0",
+  "components": {
+    "skills": {
+      "path": "skills/",
+      "entries": [
+        "java-conventions/SKILL.md",
+        "kotlin-conventions/SKILL.md",
+        "spring-boot-patterns/SKILL.md",
+        "gradle-build/SKILL.md",
+        "testing-standards/SKILL.md",
+        "api-design/SKILL.md",
+        "database-patterns/SKILL.md",
+        "error-handling/SKILL.md",
+        "logging-observability/SKILL.md",
+        "security-practices/SKILL.md",
+        "codebase-profiler/SKILL.md",
+        "convention-miner/SKILL.md",
+        "domain-payment/SKILL.md",
+        "domain-order/SKILL.md",
+        "domain-inventory/SKILL.md"
+      ]
+    },
+    "commands": {
+      "path": "commands/",
+      "entries": [
+        "forge-init.md",
+        "forge-review.md",
+        "forge-arch-check.md",
+        "forge-kb-search.md",
+        "forge-profile.md",
+        "forge-gen-docs.md"
+      ]
+    },
+    "agents": {
+      "path": "agents/",
+      "entries": [
+        "java-architect.md",
+        "security-auditor.md",
+        "test-coverage-analyst.md",
+        "doc-generator.md"
+      ]
+    },
+    "hooks": {
+      "path": "hooks/",
+      "config": "hooks.json",
+      "scripts": [
+        "security-scan.py"
+      ]
+    }
+  },
+  "mcp": {
+    "config": ".mcp.json"
+  },
+  "dependencies": {},
+  "tags": [
+    "java",
+    "kotlin",
+    "spring-boot",
+    "enterprise",
+    "conventions",
+    "security",
+    "testing",
+    "api-design"
+  ]
+}

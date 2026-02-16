@@ -1,0 +1,551 @@
+# Forge Platform — MCP Server Deployments
+# Each MCP server gets a Deployment and a ClusterIP Service.
+
+---
+# =============================================================================
+# ConfigMap — Shared configuration for all MCP servers
+# =============================================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mcp-shared-config
+  namespace: forge-platform
+  labels:
+    app.kubernetes.io/part-of: forge
+    app.kubernetes.io/component: mcp
+data:
+  SPRING_PROFILES_ACTIVE: "production"
+  LOG_LEVEL: "INFO"
+  LOG_FORMAT: "json"
+  OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector.observability:4317"
+  OTEL_SERVICE_NAMESPACE: "forge-platform"
+
+---
+# =============================================================================
+# forge-knowledge-mcp — Skill Profile registry and CLAUDE.md management
+# =============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: forge-knowledge-mcp
+  namespace: forge-platform
+  labels:
+    app.kubernetes.io/name: forge-knowledge-mcp
+    app.kubernetes.io/part-of: forge
+    app.kubernetes.io/component: mcp
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: forge-knowledge-mcp
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: forge-knowledge-mcp
+        app.kubernetes.io/part-of: forge
+        app.kubernetes.io/component: mcp
+    spec:
+      serviceAccountName: forge-mcp
+      containers:
+        - name: knowledge-mcp
+          image: forge-platform/knowledge-mcp:latest
+          ports:
+            - containerPort: 8081
+              name: http
+              protocol: TCP
+          env:
+            - name: SERVER_PORT
+              value: "8081"
+            - name: DB_URL
+              valueFrom:
+                secretKeyRef:
+                  name: forge-database-credentials
+                  key: url
+            - name: DB_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: forge-database-credentials
+                  key: username
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: forge-database-credentials
+                  key: password
+          envFrom:
+            - configMapRef:
+                name: mcp-shared-config
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          startupProbe:
+            httpGet:
+              path: /health/live
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            failureThreshold: 12
+      restartPolicy: Always
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: forge-knowledge-mcp
+  namespace: forge-platform
+  labels:
+    app.kubernetes.io/name: forge-knowledge-mcp
+    app.kubernetes.io/part-of: forge
+    app.kubernetes.io/component: mcp
+spec:
+  type: ClusterIP
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: forge-knowledge-mcp
+  ports:
+    - port: 8081
+      targetPort: http
+      protocol: TCP
+      name: http
+
+---
+# =============================================================================
+# forge-database-mcp — Schema introspection and query generation
+# =============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: forge-database-mcp
+  namespace: forge-platform
+  labels:
+    app.kubernetes.io/name: forge-database-mcp
+    app.kubernetes.io/part-of: forge
+    app.kubernetes.io/component: mcp
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: forge-database-mcp
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: forge-database-mcp
+        app.kubernetes.io/part-of: forge
+        app.kubernetes.io/component: mcp
+    spec:
+      serviceAccountName: forge-mcp
+      containers:
+        - name: database-mcp
+          image: forge-platform/database-mcp:latest
+          ports:
+            - containerPort: 8082
+              name: http
+              protocol: TCP
+          env:
+            - name: SERVER_PORT
+              value: "8082"
+            - name: DB_URL
+              valueFrom:
+                secretKeyRef:
+                  name: forge-database-credentials
+                  key: url
+            - name: DB_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: forge-database-credentials
+                  key: username
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: forge-database-credentials
+                  key: password
+          envFrom:
+            - configMapRef:
+                name: mcp-shared-config
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          startupProbe:
+            httpGet:
+              path: /health/live
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            failureThreshold: 12
+      restartPolicy: Always
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: forge-database-mcp
+  namespace: forge-platform
+  labels:
+    app.kubernetes.io/name: forge-database-mcp
+    app.kubernetes.io/part-of: forge
+    app.kubernetes.io/component: mcp
+spec:
+  type: ClusterIP
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: forge-database-mcp
+  ports:
+    - port: 8082
+      targetPort: http
+      protocol: TCP
+      name: http
+
+---
+# =============================================================================
+# forge-service-graph-mcp — Service topology and API contract management
+# =============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: forge-service-graph-mcp
+  namespace: forge-platform
+  labels:
+    app.kubernetes.io/name: forge-service-graph-mcp
+    app.kubernetes.io/part-of: forge
+    app.kubernetes.io/component: mcp
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: forge-service-graph-mcp
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: forge-service-graph-mcp
+        app.kubernetes.io/part-of: forge
+        app.kubernetes.io/component: mcp
+    spec:
+      serviceAccountName: forge-mcp
+      containers:
+        - name: service-graph-mcp
+          image: forge-platform/service-graph-mcp:latest
+          ports:
+            - containerPort: 8083
+              name: http
+              protocol: TCP
+          env:
+            - name: SERVER_PORT
+              value: "8083"
+            - name: DB_URL
+              valueFrom:
+                secretKeyRef:
+                  name: forge-database-credentials
+                  key: url
+            - name: DB_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: forge-database-credentials
+                  key: username
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: forge-database-credentials
+                  key: password
+          envFrom:
+            - configMapRef:
+                name: mcp-shared-config
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          startupProbe:
+            httpGet:
+              path: /health/live
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            failureThreshold: 12
+      restartPolicy: Always
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: forge-service-graph-mcp
+  namespace: forge-platform
+  labels:
+    app.kubernetes.io/name: forge-service-graph-mcp
+    app.kubernetes.io/part-of: forge
+    app.kubernetes.io/component: mcp
+spec:
+  type: ClusterIP
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: forge-service-graph-mcp
+  ports:
+    - port: 8083
+      targetPort: http
+      protocol: TCP
+      name: http
+
+---
+# =============================================================================
+# forge-artifact-mcp — Build artifact metadata and deployment history
+# =============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: forge-artifact-mcp
+  namespace: forge-platform
+  labels:
+    app.kubernetes.io/name: forge-artifact-mcp
+    app.kubernetes.io/part-of: forge
+    app.kubernetes.io/component: mcp
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: forge-artifact-mcp
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: forge-artifact-mcp
+        app.kubernetes.io/part-of: forge
+        app.kubernetes.io/component: mcp
+    spec:
+      serviceAccountName: forge-mcp
+      containers:
+        - name: artifact-mcp
+          image: forge-platform/artifact-mcp:latest
+          ports:
+            - containerPort: 8084
+              name: http
+              protocol: TCP
+          env:
+            - name: SERVER_PORT
+              value: "8084"
+            - name: DB_URL
+              valueFrom:
+                secretKeyRef:
+                  name: forge-database-credentials
+                  key: url
+            - name: DB_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: forge-database-credentials
+                  key: username
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: forge-database-credentials
+                  key: password
+          envFrom:
+            - configMapRef:
+                name: mcp-shared-config
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          startupProbe:
+            httpGet:
+              path: /health/live
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            failureThreshold: 12
+      restartPolicy: Always
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: forge-artifact-mcp
+  namespace: forge-platform
+  labels:
+    app.kubernetes.io/name: forge-artifact-mcp
+    app.kubernetes.io/part-of: forge
+    app.kubernetes.io/component: mcp
+spec:
+  type: ClusterIP
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: forge-artifact-mcp
+  ports:
+    - port: 8084
+      targetPort: http
+      protocol: TCP
+      name: http
+
+---
+# =============================================================================
+# forge-observability-mcp — Logs, metrics, traces, and error aggregation
+# =============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: forge-observability-mcp
+  namespace: forge-platform
+  labels:
+    app.kubernetes.io/name: forge-observability-mcp
+    app.kubernetes.io/part-of: forge
+    app.kubernetes.io/component: mcp
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: forge-observability-mcp
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: forge-observability-mcp
+        app.kubernetes.io/part-of: forge
+        app.kubernetes.io/component: mcp
+    spec:
+      serviceAccountName: forge-mcp
+      containers:
+        - name: observability-mcp
+          image: forge-platform/observability-mcp:latest
+          ports:
+            - containerPort: 8085
+              name: http
+              protocol: TCP
+          env:
+            - name: SERVER_PORT
+              value: "8085"
+            - name: DB_URL
+              valueFrom:
+                secretKeyRef:
+                  name: forge-database-credentials
+                  key: url
+            - name: DB_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: forge-database-credentials
+                  key: username
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: forge-database-credentials
+                  key: password
+          envFrom:
+            - configMapRef:
+                name: mcp-shared-config
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          startupProbe:
+            httpGet:
+              path: /health/live
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            failureThreshold: 12
+      restartPolicy: Always
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: forge-observability-mcp
+  namespace: forge-platform
+  labels:
+    app.kubernetes.io/name: forge-observability-mcp
+    app.kubernetes.io/part-of: forge
+    app.kubernetes.io/component: mcp
+spec:
+  type: ClusterIP
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: forge-observability-mcp
+  ports:
+    - port: 8085
+      targetPort: http
+      protocol: TCP
+      name: http

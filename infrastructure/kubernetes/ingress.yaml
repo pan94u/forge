@@ -1,0 +1,243 @@
+# Forge Platform — Ingress Configuration
+# Routes external traffic to Web IDE and MCP services with TLS termination.
+
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: forge-platform-ingress
+  namespace: forge-platform
+  labels:
+    app.kubernetes.io/name: forge-platform-ingress
+    app.kubernetes.io/part-of: forge
+    app.kubernetes.io/component: networking
+  annotations:
+    # Ingress controller configuration (nginx-ingress)
+    kubernetes.io/ingress.class: nginx
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+
+    # TLS configuration
+    cert-manager.io/cluster-issuer: letsencrypt-production
+
+    # WebSocket support — critical for Web IDE terminal streaming
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "60"
+    nginx.ingress.kubernetes.io/websocket-services: forge-web-ide-backend
+
+    # Connection upgrade headers for WebSocket
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection "upgrade";
+      proxy_set_header X-Real-IP $remote_addr;
+      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_set_header X-Forwarded-Proto $scheme;
+
+    # Session affinity for WebSocket connections
+    nginx.ingress.kubernetes.io/affinity: cookie
+    nginx.ingress.kubernetes.io/affinity-mode: persistent
+    nginx.ingress.kubernetes.io/session-cookie-name: FORGE_SESSION
+    nginx.ingress.kubernetes.io/session-cookie-expires: "1800"
+    nginx.ingress.kubernetes.io/session-cookie-max-age: "1800"
+    nginx.ingress.kubernetes.io/session-cookie-samesite: Strict
+    nginx.ingress.kubernetes.io/session-cookie-secure: "true"
+
+    # Rate limiting
+    nginx.ingress.kubernetes.io/limit-rps: "50"
+    nginx.ingress.kubernetes.io/limit-burst-multiplier: "5"
+
+    # Request body size (for file uploads in Web IDE)
+    nginx.ingress.kubernetes.io/proxy-body-size: 10m
+
+    # CORS configuration
+    nginx.ingress.kubernetes.io/enable-cors: "true"
+    nginx.ingress.kubernetes.io/cors-allow-origin: "https://forge.example.com"
+    nginx.ingress.kubernetes.io/cors-allow-methods: "GET, POST, PUT, DELETE, PATCH, OPTIONS"
+    nginx.ingress.kubernetes.io/cors-allow-headers: "Authorization, Content-Type, X-Request-ID, X-Idempotency-Key"
+    nginx.ingress.kubernetes.io/cors-allow-credentials: "true"
+
+spec:
+  tls:
+    - hosts:
+        - forge.example.com
+      secretName: forge-tls-certificate
+
+  rules:
+    - host: forge.example.com
+      http:
+        paths:
+          # ------------------------------------------------------------------
+          # Web IDE Backend API — /api/* routes
+          # ------------------------------------------------------------------
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: forge-web-ide-backend
+                port:
+                  number: 8080
+
+          # ------------------------------------------------------------------
+          # Web IDE Backend WebSocket — /ws/* routes
+          # ------------------------------------------------------------------
+          - path: /ws
+            pathType: Prefix
+            backend:
+              service:
+                name: forge-web-ide-backend
+                port:
+                  number: 8080
+
+          # ------------------------------------------------------------------
+          # Web IDE Backend Actuator — /actuator/* routes (restricted)
+          # ------------------------------------------------------------------
+          - path: /actuator
+            pathType: Prefix
+            backend:
+              service:
+                name: forge-web-ide-backend
+                port:
+                  number: 8080
+
+          # ------------------------------------------------------------------
+          # MCP Servers — /mcp/<server-name>/* routes
+          # ------------------------------------------------------------------
+          - path: /mcp/knowledge
+            pathType: Prefix
+            backend:
+              service:
+                name: forge-knowledge-mcp
+                port:
+                  number: 8081
+
+          - path: /mcp/database
+            pathType: Prefix
+            backend:
+              service:
+                name: forge-database-mcp
+                port:
+                  number: 8082
+
+          - path: /mcp/service-graph
+            pathType: Prefix
+            backend:
+              service:
+                name: forge-service-graph-mcp
+                port:
+                  number: 8083
+
+          - path: /mcp/artifact
+            pathType: Prefix
+            backend:
+              service:
+                name: forge-artifact-mcp
+                port:
+                  number: 8084
+
+          - path: /mcp/observability
+            pathType: Prefix
+            backend:
+              service:
+                name: forge-observability-mcp
+                port:
+                  number: 8085
+
+          # ------------------------------------------------------------------
+          # Web IDE Frontend — catch-all for SPA routing (must be last)
+          # ------------------------------------------------------------------
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: forge-web-ide-frontend
+                port:
+                  number: 3000
+
+---
+# =============================================================================
+# NetworkPolicy — Restrict traffic within the forge-platform namespace
+# =============================================================================
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: forge-platform-network-policy
+  namespace: forge-platform
+  labels:
+    app.kubernetes.io/part-of: forge
+    app.kubernetes.io/component: networking
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Allow traffic from the ingress controller
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              app.kubernetes.io/name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: 8080
+        - protocol: TCP
+          port: 8081
+        - protocol: TCP
+          port: 8082
+        - protocol: TCP
+          port: 8083
+        - protocol: TCP
+          port: 8084
+        - protocol: TCP
+          port: 8085
+        - protocol: TCP
+          port: 3000
+
+    # Allow intra-namespace communication
+    - from:
+        - podSelector: {}
+
+  egress:
+    # Allow DNS resolution
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+
+    # Allow intra-namespace communication
+    - to:
+        - podSelector: {}
+
+    # Allow egress to external services (HTTPS)
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+      ports:
+        - protocol: TCP
+          port: 443
+
+    # Allow egress to PostgreSQL (within cluster)
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              app.kubernetes.io/name: databases
+      ports:
+        - protocol: TCP
+          port: 5432
+
+    # Allow egress to observability stack
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              app.kubernetes.io/name: observability
+      ports:
+        - protocol: TCP
+          port: 4317
+        - protocol: TCP
+          port: 9090

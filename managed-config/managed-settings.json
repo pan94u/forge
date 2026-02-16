@@ -1,0 +1,103 @@
+{
+  "$schema": "https://forge-platform.dev/schemas/managed-settings.json",
+  "_comment": "Enterprise managed settings for Claude Code. Deployed via MDM or configuration management. Settings here override user preferences and cannot be changed by individual users.",
+  "version": "1.0.0",
+  "organization": {
+    "name": "Example Corp",
+    "id": "org-example-corp"
+  },
+  "claude_code": {
+    "permissions": {
+      "allow_internet_access": true,
+      "allow_file_system_write": true,
+      "allow_shell_commands": true,
+      "allow_mcp_servers": true,
+      "restricted_commands": [
+        "rm -rf /",
+        "format",
+        "fdisk",
+        "mkfs"
+      ],
+      "restricted_paths": [
+        "/etc",
+        "/usr/local/bin",
+        "~/.ssh",
+        "~/.aws/credentials"
+      ]
+    },
+    "model_preferences": {
+      "default_model": "claude-sonnet-4-20250514",
+      "allowed_models": [
+        "claude-opus-4-20250514",
+        "claude-sonnet-4-20250514",
+        "claude-haiku-3-5-20241022"
+      ],
+      "max_tokens_per_request": 16000,
+      "max_requests_per_hour": 100
+    },
+    "security": {
+      "require_authentication": true,
+      "allowed_auth_methods": ["oauth2", "api-key"],
+      "session_timeout_minutes": 480,
+      "audit_logging": true,
+      "audit_log_destination": "https://audit.example.com/api/v1/events",
+      "redact_patterns": [
+        "(?i)(password|secret|token|api[_-]?key)\\s*[=:]\\s*\\S+",
+        "\\b[A-Za-z0-9+/]{40,}={0,2}\\b",
+        "sk-[a-zA-Z0-9]{32,}"
+      ]
+    },
+    "plugins": {
+      "allowed_plugins": [
+        "forge-foundation",
+        "forge-superagent",
+        "forge-knowledge",
+        "forge-deployment",
+        "forge-team-templates"
+      ],
+      "auto_install_plugins": [
+        "forge-foundation",
+        "forge-superagent"
+      ],
+      "plugin_registry_url": "https://forge-registry.example.com/api/v1/plugins",
+      "allow_community_plugins": false
+    },
+    "features": {
+      "enable_learning_loop": true,
+      "enable_convention_mining": true,
+      "enable_auto_doc_generation": true,
+      "enable_skill_suggestions": true,
+      "enable_telemetry": true,
+      "telemetry_endpoint": "https://telemetry.example.com/api/v1/events"
+    }
+  },
+  "mcp_servers": {
+    "required_servers": [
+      "forge-knowledge",
+      "forge-database"
+    ],
+    "optional_servers": [
+      "forge-service-graph",
+      "forge-artifact",
+      "forge-observability"
+    ],
+    "server_registry_url": "https://forge-registry.example.com/api/v1/mcp-servers"
+  },
+  "compliance": {
+    "require_code_review": true,
+    "require_test_coverage_minimum": 80,
+    "block_direct_production_access": true,
+    "data_classification_required": true,
+    "acceptable_licenses": [
+      "MIT",
+      "Apache-2.0",
+      "BSD-2-Clause",
+      "BSD-3-Clause",
+      "ISC"
+    ],
+    "blocked_licenses": [
+      "GPL-3.0",
+      "AGPL-3.0"
+    ]
+  }
+}

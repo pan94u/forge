@@ -1,0 +1,115 @@
+id: eval-001-write-unit-tests
+name: Write Unit Tests for Service
+description: >
+  Evaluate the agent's ability to write comprehensive unit tests
+  for an existing service class, covering happy paths, edge cases,
+  and error scenarios.
+tags:
+  - testing
+  - unit-tests
+  - kotlin
+baseline_pass_rate: 0.85
+
+prompt: |
+  Write comprehensive unit tests for the following OrderService:
+
+  ```kotlin
+  @Service
+  class OrderService(
+      private val orderRepository: OrderRepository,
+      private val inventoryService: InventoryService,
+      private val paymentService: PaymentService,
+      private val notificationService: NotificationService
+  ) {
+      fun placeOrder(request: PlaceOrderRequest): Order {
+          // Validate request
+          require(request.items.isNotEmpty()) { "Order must have at least one item" }
+          require(request.items.all { it.quantity > 0 }) { "Item quantity must be positive" }
+
+          // Check inventory
+          for (item in request.items) {
+              val available = inventoryService.checkAvailability(item.productId)
+              if (available < item.quantity) {
+                  throw InsufficientInventoryException(item.productId, item.quantity, available)
+              }
+          }
+
+          // Calculate total
+          val total = request.items.sumOf { it.price * it.quantity }
+          if (total <= BigDecimal.ZERO) throw InvalidOrderException("Order total must be positive")
+
+          // Process payment
+          val paymentResult = paymentService.charge(request.customerId, total)
+          if (!paymentResult.success) {
+              throw PaymentFailedException(paymentResult.errorMessage)
+          }
+
+          // Create order
+          val order = Order(
+              customerId = request.customerId,
+              items = request.items,
+              total = total,
+              status = OrderStatus.CONFIRMED,
+              paymentId = paymentResult.transactionId
+          )
+          val savedOrder = orderRepository.save(order)
+
+          // Send notification (fire and forget)
+          try {
+              notificationService.sendOrderConfirmation(savedOrder)
+          } catch (e: Exception) {
+              // Log but don't fail the order
+          }
+
+          return savedOrder
+      }
+  }
+  ```
+
+  Requirements:
+  - Use JUnit 5 + MockK
+  - Cover all paths: happy path, validation errors, inventory check, payment failure, notification failure
+  - Follow AAA (Arrange-Act-Assert) pattern
+  - Use descriptive test method names
+  - Mock all dependencies
+
+context:
+  test_framework: "JUnit 5"
+  mock_framework: "MockK"
+  assertion_library: "AssertJ"
+  language: "Kotlin"
+
+assertions:
+  - type: contains
+    expected: "@Test"
+    description: "Contains test annotations"
+
+  - type: contains
+    expected: "mockk"
+    description: "Uses MockK for mocking"
+
+  - type: contains
+    expected: "every {"
+    description: "Sets up mock behaviors with MockK every{} blocks"
+
+  - type: contains
+    expected: "InsufficientInventoryException"
+    description: "Tests inventory check failure"
+
+  - type: contains
+    expected: "PaymentFailedException"
+    description: "Tests payment failure scenario"
+
+  - type: contains
+    expected: "notificationService"
+    description: "Tests notification handling"
+
+  - type: contains
+    expected: "empty"
+    description: "Tests empty items validation"
+
+quality_criteria:
+  test_completeness: 0.90
+  test_isolation: 0.95
+  naming_quality: 0.85
+  assertion_quality: 0.85

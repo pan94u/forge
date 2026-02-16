@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "forge-knowledge": {
+      "type": "http",
+      "url": "${FORGE_KNOWLEDGE_MCP_URL:-http://localhost:8081}",
+      "headers": { "Authorization": "Bearer ${FORGE_MCP_TOKEN}" }
+    },
+    "forge-service-graph": {
+      "type": "http",
+      "url": "${FORGE_SERVICE_GRAPH_MCP_URL:-http://localhost:8083}",
+      "headers": { "Authorization": "Bearer ${FORGE_MCP_TOKEN}" }
+    }
+  }
+}

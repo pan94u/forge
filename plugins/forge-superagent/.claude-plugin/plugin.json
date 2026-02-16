@@ -1,0 +1,8 @@
+{
+  "name": "forge-superagent",
+  "version": "0.1.0",
+  "description": "Forge SuperAgent — Dual-loop architecture core. One intelligent agent dynamically switching Skill Profiles across delivery lifecycle stages.",
+  "skills": "skills/",
+  "agents": [],
+  "hooks": []
+}

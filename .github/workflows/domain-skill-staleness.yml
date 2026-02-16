@@ -1,0 +1,117 @@
+name: Domain Skill Staleness Check
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '**/*.kt'
+      - '**/*.ts'
+      - '**/*.tsx'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  check-staleness:
+    name: Check Domain Skill Freshness
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Identify changed domains
+        id: domains
+        run: |
+          # Get files changed in the last commit
+          CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD 2>/dev/null || git diff --name-only HEAD)
+
+          # Map changed files to domain areas
+          DOMAINS=""
+          if echo "$CHANGED_FILES" | grep -q "order"; then DOMAINS="${DOMAINS}order,"; fi
+          if echo "$CHANGED_FILES" | grep -q "payment"; then DOMAINS="${DOMAINS}payment,"; fi
+          if echo "$CHANGED_FILES" | grep -q "inventory"; then DOMAINS="${DOMAINS}inventory,"; fi
+          if echo "$CHANGED_FILES" | grep -q "user\|auth"; then DOMAINS="${DOMAINS}user,"; fi
+          if echo "$CHANGED_FILES" | grep -q "notification"; then DOMAINS="${DOMAINS}notification,"; fi
+          if echo "$CHANGED_FILES" | grep -q "api\|controller\|endpoint"; then DOMAINS="${DOMAINS}api,"; fi
+          if echo "$CHANGED_FILES" | grep -q "database\|migration\|schema"; then DOMAINS="${DOMAINS}database,"; fi
+
+          echo "domains=$DOMAINS" >> $GITHUB_OUTPUT
+          echo "Changed domains: $DOMAINS"
+
+      - name: Check skill freshness for changed domains
+        id: staleness
+        run: |
+          STALE_SKILLS=""
+          THRESHOLD_DAYS=60
+
+          # Check each skill's last modification date
+          find plugins -name "SKILL.md" -type f | while read -r skill_file; do
+            SKILL_NAME=$(basename "$(dirname "$skill_file")")
+            SKILL_AGE_DAYS=$(( ($(date +%s) - $(stat -c %Y "$skill_file" 2>/dev/null || stat -f %m "$skill_file")) / 86400 ))
+
+            # Check if this skill relates to any changed domain
+            DOMAINS="${{ steps.domains.outputs.domains }}"
+            SKILL_CONTENT=$(cat "$skill_file")
+
+            for domain in $(echo "$DOMAINS" | tr ',' ' '); do
+              if [ -z "$domain" ]; then continue; fi
+              if echo "$SKILL_CONTENT" | grep -qi "$domain"; then
+                if [ "$SKILL_AGE_DAYS" -gt "$THRESHOLD_DAYS" ]; then
+                  echo "STALE: $skill_file (${SKILL_AGE_DAYS} days old, related to '$domain')"
+                  STALE_SKILLS="${STALE_SKILLS}${skill_file}|${SKILL_AGE_DAYS}|${domain}\n"
+                fi
+              fi
+            done
+          done
+
+          if [ -n "$STALE_SKILLS" ]; then
+            echo "stale_found=true" >> $GITHUB_OUTPUT
+            echo -e "$STALE_SKILLS" > stale-skills.txt
+          else
+            echo "stale_found=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create staleness issue
+        if: steps.staleness.outputs.stale_found == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            let staleData = '';
+            try {
+              staleData = fs.readFileSync('stale-skills.txt', 'utf8');
+            } catch (e) {
+              console.log('No stale skills file found');
+              return;
+            }
+
+            const lines = staleData.trim().split('\n').filter(l => l.includes('|'));
+            if (lines.length === 0) return;
+
+            let body = '## Domain Skill Staleness Alert\n\n';
+            body += 'The following skills may need updating due to recent code changes in related domains:\n\n';
+            body += '| Skill | Age (days) | Related Domain |\n';
+            body += '|-------|-----------|----------------|\n';
+
+            for (const line of lines) {
+              const [file, age, domain] = line.split('|');
+              body += `| ${file} | ${age} | ${domain} |\n`;
+            }
+
+            body += '\n### Action Required\n\n';
+            body += '1. Review each stale skill against the recent code changes\n';
+            body += '2. Update skills that no longer reflect current patterns\n';
+            body += '3. Close this issue when all skills have been reviewed\n';
+
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `Stale domain skills detected (${new Date().toISOString().split('T')[0]})`,
+              body: body,
+              labels: ['skill-maintenance', 'automation']
+            });

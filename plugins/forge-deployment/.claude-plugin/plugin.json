@@ -1,0 +1,38 @@
+{
+  "name": "forge-deployment",
+  "version": "0.1.0",
+  "description": "Deployment patterns and operational skills for Forge. Provides Kubernetes deployment patterns, CI/CD pipeline skills, pre-deployment checklists, and incident response playbooks.",
+  "author": "Forge Platform Team",
+  "license": "proprietary",
+  "minClaudeCodeVersion": "1.0.0",
+  "permissions": [
+    "mcp:forge-knowledge",
+    "mcp:forge-observability"
+  ],
+  "skills": [
+    "skills/kubernetes-patterns/SKILL.md",
+    "skills/ci-cd-patterns/SKILL.md"
+  ],
+  "commands": [
+    "commands/deploy-checklist.md",
+    "commands/incident-response.md"
+  ],
+  "hooks": [],
+  "configuration": {
+    "cluster_context": {
+      "type": "string",
+      "description": "Default Kubernetes cluster context",
+      "default": ""
+    },
+    "ci_platform": {
+      "type": "string",
+      "description": "CI/CD platform: github-actions, gitlab-ci, jenkins",
+      "default": "github-actions"
+    },
+    "deployment_environments": {
+      "type": "array",
+      "description": "List of deployment environments in promotion order",
+      "default": ["dev", "staging", "production"]
+    }
+  }
+}

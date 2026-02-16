@@ -1,0 +1,79 @@
+id: eval-002-fix-bug
+name: Fix Null Pointer Bug
+description: >
+  Evaluate the agent's ability to diagnose a bug from a stack trace,
+  identify the root cause, and implement a correct fix with tests.
+tags:
+  - development
+  - debugging
+  - bug-fix
+baseline_pass_rate: 0.80
+
+prompt: |
+  A NullPointerException is occurring in production. Here is the stack trace:
+
+  ```
+  java.lang.NullPointerException: Cannot invoke "String.toLowerCase()" because the return value of "com.example.service.UserService.getDisplayName(Long)" is null
+      at com.example.controller.ProfileController.getProfile(ProfileController.kt:42)
+      at sun.reflect.NativeMethodAccessorImpl.invoke0(Native Method)
+      at org.springframework.web.servlet.FrameworkServlet.service(FrameworkServlet.java:918)
+  ```
+
+  The relevant code:
+
+  ```kotlin
+  // ProfileController.kt
+  @GetMapping("/api/v1/profile/{userId}")
+  fun getProfile(@PathVariable userId: Long): ResponseEntity<ProfileResponse> {
+      val displayName = userService.getDisplayName(userId)
+      val normalizedName = displayName.toLowerCase()  // Line 42
+      val profile = profileService.buildProfile(userId, normalizedName)
+      return ResponseEntity.ok(profile)
+  }
+  ```
+
+  ```kotlin
+  // UserService.kt
+  fun getDisplayName(userId: Long): String? {
+      val user = userRepository.findById(userId).orElse(null)
+      return user?.displayName
+  }
+  ```
+
+  Fix this bug. Consider:
+  1. Root cause analysis
+  2. The fix should handle all edge cases
+  3. Backward compatibility
+  4. Add appropriate tests
+
+context:
+  framework: "Spring Boot 3.3"
+  language: "Kotlin"
+  null_safety: "Kotlin null safety should be leveraged"
+
+assertions:
+  - type: contains
+    expected: "null"
+    description: "Response identifies null as the root cause"
+
+  - type: contains
+    expected: "getDisplayName"
+    description: "Response identifies the problematic method"
+
+  - type: matches_pattern
+    expected: "\\?\\."
+    description: "Uses Kotlin safe call operator in the fix"
+
+  - type: contains
+    expected: "@Test"
+    description: "Includes test cases for the fix"
+
+  - type: contains
+    expected: "user not found"
+    description: "Handles the case where user does not exist"
+
+quality_criteria:
+  root_cause_identification: 0.95
+  fix_correctness: 0.90
+  edge_case_handling: 0.85
+  test_coverage: 0.80

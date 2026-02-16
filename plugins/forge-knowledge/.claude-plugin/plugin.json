@@ -1,0 +1,42 @@
+{
+  "name": "forge-knowledge",
+  "version": "0.1.0",
+  "description": "Enterprise knowledge access plugin for Forge. Provides skills and commands for searching internal wikis, runbooks, ADRs, and domain models via the forge-knowledge MCP server.",
+  "author": "Forge Platform Team",
+  "license": "proprietary",
+  "minClaudeCodeVersion": "1.0.0",
+  "permissions": [
+    "mcp:forge-knowledge"
+  ],
+  "skills": [
+    "skills/internal-api-knowledge/SKILL.md",
+    "skills/domain-model-knowledge/SKILL.md",
+    "skills/runbook-knowledge/SKILL.md"
+  ],
+  "commands": [
+    "commands/search-wiki.md",
+    "commands/search-runbooks.md",
+    "commands/search-adr.md"
+  ],
+  "hooks": [],
+  "mcpServers": [
+    "forge-knowledge"
+  ],
+  "configuration": {
+    "knowledge_base_path": {
+      "type": "string",
+      "description": "Path to the knowledge base directory",
+      "default": "./knowledge-base"
+    },
+    "wiki_endpoint": {
+      "type": "string",
+      "description": "URL of the internal wiki API (Confluence, Notion, etc.)",
+      "default": ""
+    },
+    "adr_directory": {
+      "type": "string",
+      "description": "Path to the Architecture Decision Records directory",
+      "default": "./docs/adr"
+    }
+  }
+}

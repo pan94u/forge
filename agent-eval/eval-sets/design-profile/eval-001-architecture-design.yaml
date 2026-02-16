@@ -1,0 +1,76 @@
+id: eval-001-architecture-design
+name: Architecture Design for Notification System
+description: >
+  Evaluate the agent's ability to design a scalable system architecture,
+  considering trade-offs, component interactions, and operational concerns.
+tags:
+  - design
+  - architecture
+  - system-design
+baseline_pass_rate: 0.75
+
+prompt: |
+  Design the architecture for a notification system with these requirements:
+
+  Functional:
+  - Support email, SMS, push notification, and in-app notification channels
+  - Users can configure notification preferences per channel
+  - Support both immediate and scheduled notifications
+  - Support batch notifications (e.g., daily digest)
+  - Template-based notification content with variable substitution
+  - Delivery tracking and retry on failure
+
+  Non-functional:
+  - Handle 10,000 notifications per second at peak
+  - 99.9% delivery guarantee for critical notifications
+  - Sub-second delivery for real-time notifications
+  - Must not block the calling service
+
+  Constraints:
+  - Must integrate with existing Spring Boot microservices
+  - Must use existing PostgreSQL and Redis infrastructure
+  - Must be deployable on Kubernetes
+
+  Please provide:
+  1. High-level architecture diagram (described in text)
+  2. Component breakdown with responsibilities
+  3. Data model for notification storage and tracking
+  4. Message flow for each notification type
+  5. Failure handling and retry strategy
+  6. Key trade-off decisions with rationale
+
+context:
+  existing_infra: "Kubernetes, PostgreSQL, Redis, Kafka"
+  team_size: "3 backend engineers"
+  timeline: "8 weeks"
+
+assertions:
+  - type: contains
+    expected: "queue"
+    description: "Proposes asynchronous message queue"
+
+  - type: contains
+    expected: "retry"
+    description: "Addresses retry strategy"
+
+  - type: contains
+    expected: "template"
+    description: "Addresses notification templates"
+
+  - type: contains
+    expected: "preference"
+    description: "Addresses user preference management"
+
+  - type: contains
+    expected: "dead letter"
+    description: "Addresses failed message handling"
+
+  - type: contains
+    expected: "scale"
+    description: "Addresses scalability concerns"
+
+quality_criteria:
+  completeness: 0.85
+  technical_depth: 0.80
+  trade_off_analysis: 0.75
+  practicality: 0.85

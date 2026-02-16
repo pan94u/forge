@@ -1,0 +1,161 @@
+name: Convention Sync
+
+on:
+  schedule:
+    # Run on the first Monday of every month at 09:00 UTC
+    - cron: '0 9 1-7 * 1'
+  workflow_dispatch:
+    inputs:
+      target_repo:
+        description: 'Repository to mine conventions from (owner/repo)'
+        required: false
+        default: ''
+      dry_run:
+        description: 'Dry run (no PR created)'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  mine-conventions:
+    name: Mine Conventions
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Forge platform
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install analysis tools
+        run: |
+          pip install pyyaml
+          pip install gitpython
+
+      - name: Run convention miner
+        id: mine
+        run: |
+          python3 << 'PYEOF'
+          import os
+          import yaml
+          import json
+          from datetime import datetime
+          from pathlib import Path
+
+          # Analyze the codebase for patterns
+          conventions_dir = Path("knowledge-base/conventions")
+          conventions_dir.mkdir(parents=True, exist_ok=True)
+
+          # Scan for naming conventions in Kotlin files
+          naming_patterns = {}
+          for kt_file in Path(".").rglob("*.kt"):
+              content = kt_file.read_text(errors='ignore')
+              if "Controller" in kt_file.name:
+                  naming_patterns.setdefault("controller_suffix", 0)
+                  naming_patterns["controller_suffix"] += 1
+              if "Service" in kt_file.name:
+                  naming_patterns.setdefault("service_suffix", 0)
+                  naming_patterns["service_suffix"] += 1
+              if "Repository" in kt_file.name:
+                  naming_patterns.setdefault("repository_suffix", 0)
+                  naming_patterns["repository_suffix"] += 1
+              if "@Test" in content:
+                  naming_patterns.setdefault("junit_tests", 0)
+                  naming_patterns["junit_tests"] += 1
+
+          # Write convention report
+          report = {
+              "category": "naming-and-structure",
+              "last_mined": datetime.now().isoformat(),
+              "source": os.environ.get("GITHUB_REPOSITORY", "local"),
+              "patterns": [
+                  {
+                      "pattern": f"Files with '{key}' pattern",
+                      "occurrences": count,
+                      "recommendation": "enforce" if count > 5 else "suggest"
+                  }
+                  for key, count in naming_patterns.items()
+              ]
+          }
+
+          report_path = conventions_dir / "naming-conventions.yaml"
+          with open(report_path, "w") as f:
+              yaml.dump(report, f, default_flow_style=False, sort_keys=False)
+
+          print(f"Convention report written to {report_path}")
+          print(f"Found {len(naming_patterns)} patterns across the codebase")
+          PYEOF
+
+      - name: Compare with existing skills
+        id: diff
+        run: |
+          python3 << 'PYEOF'
+          import yaml
+          from pathlib import Path
+
+          # Load mined conventions
+          conventions_file = Path("knowledge-base/conventions/naming-conventions.yaml")
+          if not conventions_file.exists():
+              print("No conventions file found, skipping comparison")
+              exit(0)
+
+          with open(conventions_file) as f:
+              conventions = yaml.safe_load(f)
+
+          # Check if skills reflect the mined conventions
+          drift_items = []
+          for skill_md in Path("plugins").rglob("SKILL.md"):
+              content = skill_md.read_text()
+              # Check if skill mentions the discovered patterns
+              for pattern in conventions.get("patterns", []):
+                  pattern_name = pattern.get("pattern", "")
+                  if pattern.get("recommendation") == "enforce" and pattern_name.lower() not in content.lower():
+                      drift_items.append({
+                          "skill": str(skill_md),
+                          "missing_convention": pattern_name
+                      })
+
+          if drift_items:
+              print(f"Found {len(drift_items)} potential drift items between conventions and skills")
+              for item in drift_items[:10]:
+                  print(f"  - {item['skill']}: may need to document '{item['missing_convention']}'")
+          else:
+              print("No significant drift detected between conventions and skills")
+          PYEOF
+
+      - name: Create sync PR
+        if: ${{ !inputs.dry_run }}
+        run: |
+          git config user.name "forge-bot"
+          git config user.email "forge-bot@example.com"
+          BRANCH="convention-sync/$(date +%Y-%m)"
+          git checkout -b "$BRANCH"
+          git add knowledge-base/conventions/
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+          git commit -m "chore: monthly convention mining sync $(date +%Y-%m)"
+          git push origin "$BRANCH"
+          gh pr create \
+            --title "Convention Sync: $(date +%B %Y)" \
+            --body "Monthly convention mining results. Review the updated convention reports in \`knowledge-base/conventions/\` and check for drift between mined patterns and existing skills." \
+            --base main \
+            --head "$BRANCH" \
+            --label "automation,conventions"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

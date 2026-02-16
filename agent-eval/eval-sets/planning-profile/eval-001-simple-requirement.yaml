@@ -1,0 +1,60 @@
+id: eval-001-simple-requirement
+name: Simple Requirement Analysis
+description: >
+  Evaluate the agent's ability to analyze a simple feature requirement,
+  break it down into tasks, identify dependencies, and produce a structured plan.
+tags:
+  - planning
+  - requirements
+  - decomposition
+baseline_pass_rate: 0.85
+
+prompt: |
+  Analyze the following requirement and create a development plan:
+
+  "As a user, I want to be able to reset my password via email so that
+  I can regain access to my account if I forget my password."
+
+  Please provide:
+  1. Acceptance criteria
+  2. Technical tasks broken down by component
+  3. Dependencies between tasks
+  4. Estimated complexity (S/M/L) for each task
+  5. Suggested implementation order
+
+context:
+  project_type: "Spring Boot REST API with React frontend"
+  auth_system: "JWT-based authentication"
+  email_provider: "AWS SES"
+  database: "PostgreSQL"
+
+assertions:
+  - type: contains
+    expected: "acceptance criteria"
+    description: "Response includes acceptance criteria section"
+
+  - type: contains
+    expected: "email"
+    description: "Response addresses email sending component"
+
+  - type: contains
+    expected: "token"
+    description: "Response mentions reset token mechanism"
+
+  - type: contains
+    expected: "frontend"
+    description: "Response addresses frontend/UI changes"
+
+  - type: contains
+    expected: "database"
+    description: "Response addresses database schema changes"
+
+  - type: not_contains
+    expected: "I don't know"
+    description: "Response does not express uncertainty about the task"
+
+quality_criteria:
+  completeness: 0.9
+  correctness: 0.85
+  structure: 0.9
+  actionability: 0.85

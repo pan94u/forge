@@ -1,0 +1,85 @@
+package com.forge.adapter.model
+
+import kotlinx.coroutines.flow.Flow
+
+/**
+ * Unified interface for interacting with language model providers.
+ *
+ * The ModelAdapter abstracts away provider-specific API details, allowing
+ * the Forge platform to swap between Claude API, AWS Bedrock, local models,
+ * or any future provider without changing skill/baseline code.
+ *
+ * Usage:
+ * ```kotlin
+ * val adapter: ModelAdapter = ClaudeAdapter(apiKey)
+ * val result = adapter.complete("Explain microservices", CompletionOptions(maxTokens = 1024))
+ * println(result.content)
+ * ```
+ */
+interface ModelAdapter {
+
+    /**
+     * Send a completion request and receive the full response.
+     *
+     * @param prompt The user prompt text
+     * @param options Completion parameters (model, temperature, max tokens, etc.)
+     * @return The complete response with content, usage stats, and metadata
+     * @throws ModelAdapterException if the request fails
+     */
+    suspend fun complete(prompt: String, options: CompletionOptions = CompletionOptions()): CompletionResult
+
+    /**
+     * Send a completion request and receive the response as a stream of text chunks.
+     *
+     * Useful for real-time display or processing of long outputs.
+     *
+     * @param prompt The user prompt text
+     * @param options Completion parameters
+     * @return A Flow emitting text chunks as they arrive
+     * @throws ModelAdapterException if the connection fails
+     */
+    suspend fun streamComplete(prompt: String, options: CompletionOptions = CompletionOptions()): Flow<String>
+
+    /**
+     * Return the list of models supported by this adapter.
+     */
+    fun supportedModels(): List<ModelInfo>
+
+    /**
+     * Check whether this adapter is properly configured and can reach its backend.
+     *
+     * @return true if the adapter can make requests
+     */
+    suspend fun healthCheck(): Boolean
+}
+
+/**
+ * Base exception for model adapter errors.
+ */
+open class ModelAdapterException(
+    message: String,
+    cause: Throwable? = null,
+    val statusCode: Int? = null,
+    val retryable: Boolean = false
+) : RuntimeException(message, cause)
+
+/**
+ * Thrown when authentication fails (invalid API key, expired token, etc.).
+ */
+class AuthenticationException(message: String, cause: Throwable? = null) :
+    ModelAdapterException(message, cause, statusCode = 401, retryable = false)
+
+/**
+ * Thrown when the provider rate-limits the request.
+ */
+class RateLimitException(
+    message: String,
+    val retryAfterMs: Long? = null,
+    cause: Throwable? = null
+) : ModelAdapterException(message, cause, statusCode = 429, retryable = true)
+
+/**
+ * Thrown when the requested model is not available.
+ */
+class ModelNotAvailableException(message: String, cause: Throwable? = null) :
+    ModelAdapterException(message, cause, statusCode = 404, retryable = false)
