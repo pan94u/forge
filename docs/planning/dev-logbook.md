@@ -237,6 +237,45 @@ git commit  # 02e003c
 
 **Phase 0 代码层面验收: 7/8 完成 (87.5%)**，剩余 1 项需实际用户测试。
 
+### Git 提交记录
+
+| Commit | 说明 | 文件数 | 插入行数 |
+|--------|------|--------|---------|
+| `02e003c` | feat: Initialize Forge platform | 227 | 37,179 |
+| `93b6ef7` | fix: Complete Phase 0 acceptance criteria | 19 | 1,421 |
+
+### Phase 0 总结
+
+**用时**: ~2 个 Session（约 10 小时工作时间）
+**产出**: 244 个文件，38,600+ 行代码/配置/文档
+**Agent 调用**: 12 个 Agent（8 成功，2 部分完成，2 失败后手动兜底）
+**关键里程碑**: Phase 0 骨架 + 验收标准 87.5% 达成
+
+**Phase 0 → Phase 1 过渡准备就绪。**
+
+---
+
+## Session 3 — 2026-02-17：Phase 1 实施（单环运转 + Web IDE 骨架）
+
+> Phase 1 目标：交付环（环 1）在"开发"阶段完整运转，Web IDE 骨架上线。
+
+### 3.0 Phase 1 交付物清单
+
+| # | 交付物 | Phase 0 状态 | Phase 1 目标 |
+|---|--------|-------------|-------------|
+| 1 | 扩展到 10-15 名 CLI 试点用户 | 5 名种子 | 15 名试点 |
+| 2 | 再增 4 个 Foundation Skill | 10 个已有 | +spring-boot-patterns 已有，需深化 api-design/database-patterns/error-handling |
+| 3 | SuperAgent development-profile 完整实现 | 骨架 | OODA + 底线 + HITL 完整闭环 |
+| 4 | `forge-service-graph-mcp` | 代码已有 | 部署可用 + impact_analysis 可查询 |
+| 5 | `doc-generator` Agent | 骨架 | 热点代码优先补文档 |
+| 6 | Forge CLI 核心命令 | 5 命令骨架 | init/doctor/skill/mcp 完善 |
+| 7 | `/forge-review` 企业代码审查 | 547 行指令 | 结合 Skill + 底线实战验证 |
+| 8 | Web IDE 前端骨架 | Next.js 骨架 | 路由 + 布局 + SSO 认证 |
+| 9 | AI Chat MVP | WebSocket handler 骨架 | Claude Agent SDK + 流式对话 + MCP Tool 调用 |
+| 10 | 知识浏览器 MVP | 组件骨架 | 搜索 + 文档查看 + 架构图渲染 |
+| 11 | `model-adapter` 骨架 | 接口 + 3 实现 | ClaudeAdapter 完善 |
+| 12 | 度量基线采集 | 无 | PR 周期 / 审查时间基准数据 |
+
 ---
 
 ## 附录：Agent 执行记录
