@@ -131,7 +131,7 @@ class ClaudeClient {
         "Content-Type": "application/json",
         Accept: "text/event-stream",
       },
-      body: JSON.stringify({ message, contexts }),
+      body: JSON.stringify({ type: "message", content: message, contexts }),
       signal,
     });
 
@@ -194,7 +194,7 @@ class ClaudeClient {
     const response = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message, contexts }),
+      body: JSON.stringify({ type: "message", content: message, contexts }),
     });
 
     if (!response.ok) {
