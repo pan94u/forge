@@ -1,6 +1,9 @@
 package com.forge.webide.controller
 
+import com.forge.webide.entity.ChatSessionEntity
 import com.forge.webide.model.*
+import com.forge.webide.repository.ChatMessageRepository
+import com.forge.webide.repository.ChatSessionRepository
 import com.forge.webide.service.ClaudeAgentService
 import org.springframework.http.HttpStatus
 import org.springframework.http.MediaType
@@ -8,15 +11,16 @@ import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.*
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter
 import java.security.Principal
-import java.util.concurrent.ConcurrentHashMap
+import java.time.Instant
+import java.util.UUID
 
 @RestController
 @RequestMapping("/api/chat")
 class AiChatController(
-    private val claudeAgentService: ClaudeAgentService
+    private val claudeAgentService: ClaudeAgentService,
+    private val chatSessionRepository: ChatSessionRepository,
+    private val chatMessageRepository: ChatMessageRepository
 ) {
-    private val sessions = ConcurrentHashMap<String, ChatSession>()
-    private val messageStore = ConcurrentHashMap<String, MutableList<ChatMessage>>()
 
     @PostMapping("/sessions")
     fun createSession(
@@ -24,12 +28,23 @@ class AiChatController(
         principal: Principal?
     ): ResponseEntity<ChatSession> {
         val userId = principal?.name ?: "anonymous"
-        val session = ChatSession(
+        val sessionId = UUID.randomUUID().toString()
+
+        val entity = ChatSessionEntity(
+            id = sessionId,
             workspaceId = request.workspaceId,
-            userId = userId
+            userId = userId,
+            createdAt = Instant.now(),
+            updatedAt = Instant.now()
         )
-        sessions[session.id] = session
-        messageStore[session.id] = mutableListOf()
+        chatSessionRepository.save(entity)
+
+        val session = ChatSession(
+            id = sessionId,
+            workspaceId = request.workspaceId,
+            userId = userId,
+            createdAt = entity.createdAt
+        )
         return ResponseEntity.status(HttpStatus.CREATED).body(session)
     }
 
@@ -37,8 +52,32 @@ class AiChatController(
     fun getMessages(
         @PathVariable sessionId: String
     ): ResponseEntity<List<ChatMessage>> {
-        val messages = messageStore[sessionId]
-            ?: return ResponseEntity.notFound().build()
+        if (!chatSessionRepository.existsById(sessionId)) {
+            return ResponseEntity.notFound().build()
+        }
+
+        val messages = chatMessageRepository.findBySessionIdOrderByCreatedAt(sessionId).map { entity ->
+            ChatMessage(
+                id = entity.id,
+                sessionId = entity.sessionId,
+                role = when (entity.role) {
+                    "user" -> MessageRole.USER
+                    "assistant" -> MessageRole.ASSISTANT
+                    else -> MessageRole.USER
+                },
+                content = entity.content,
+                timestamp = entity.createdAt,
+                toolCalls = entity.toolCalls.map { tc ->
+                    ToolCallRecord(
+                        id = tc.id,
+                        name = tc.toolName,
+                        input = emptyMap(), // Stored as string; could parse JSON
+                        output = tc.output,
+                        status = tc.status
+                    )
+                }.ifEmpty { null }
+            )
+        }
         return ResponseEntity.ok(messages)
     }
 
@@ -48,16 +87,8 @@ class AiChatController(
         @RequestBody request: ChatStreamMessage,
         principal: Principal?
     ): ResponseEntity<ChatMessage> {
-        val session = sessions[sessionId]
+        val session = chatSessionRepository.findById(sessionId).orElse(null)
             ?: return ResponseEntity.notFound().build()
-
-        val userMessage = ChatMessage(
-            sessionId = sessionId,
-            role = MessageRole.USER,
-            content = request.content,
-            contexts = request.contexts
-        )
-        messageStore[sessionId]?.add(userMessage)
 
         val response = claudeAgentService.sendMessage(
             sessionId = sessionId,
@@ -72,7 +103,6 @@ class AiChatController(
             content = response.content,
             toolCalls = response.toolCalls
         )
-        messageStore[sessionId]?.add(assistantMessage)
 
         return ResponseEntity.ok(assistantMessage)
     }
@@ -87,19 +117,10 @@ class AiChatController(
         @RequestBody request: ChatStreamMessage,
         principal: Principal?
     ): SseEmitter {
-        val session = sessions[sessionId]
+        val session = chatSessionRepository.findById(sessionId).orElse(null)
             ?: throw IllegalArgumentException("Session not found: $sessionId")
 
         val emitter = SseEmitter(300_000L) // 5-minute timeout
-
-        // Store user message
-        val userMessage = ChatMessage(
-            sessionId = sessionId,
-            role = MessageRole.USER,
-            content = request.content,
-            contexts = request.contexts
-        )
-        messageStore[sessionId]?.add(userMessage)
 
         // Stream response asynchronously
         claudeAgentService.streamMessage(
@@ -119,7 +140,6 @@ class AiChatController(
                 }
             },
             onComplete = { assistantMessage ->
-                messageStore[sessionId]?.add(assistantMessage)
                 try {
                     emitter.send(
                         SseEmitter.event()

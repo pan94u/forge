@@ -1,6 +1,7 @@
 package com.forge.adapter.model
 
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
 
 /**
  * Unified interface for interacting with language model providers.
@@ -44,6 +45,34 @@ interface ModelAdapter {
      * Return the list of models supported by this adapter.
      */
     fun supportedModels(): List<ModelInfo>
+
+    /**
+     * Send a completion request with tool definitions and receive structured streaming events.
+     *
+     * Supports tool_use content blocks, partial JSON input streaming, and stop_reason detection.
+     * Default implementation falls back to streamComplete() (text-only, no tool support).
+     *
+     * @param messages Conversation messages including tool results
+     * @param options Completion parameters
+     * @param tools Tool definitions available to the model
+     * @return A Flow emitting StreamEvent instances as they arrive
+     */
+    suspend fun streamWithTools(
+        messages: List<Message>,
+        options: CompletionOptions = CompletionOptions(),
+        tools: List<ToolDefinition> = emptyList()
+    ): Flow<StreamEvent> {
+        // Default: fall back to text-only streaming
+        val prompt = messages.lastOrNull { it.role == Message.Role.USER }?.content ?: ""
+        return flow {
+            emit(StreamEvent.MessageStart("", options.model ?: "unknown"))
+            streamComplete(prompt, options).collect { chunk ->
+                emit(StreamEvent.ContentDelta(chunk))
+            }
+            emit(StreamEvent.MessageDelta(StopReason.END_TURN))
+            emit(StreamEvent.MessageStop)
+        }
+    }
 
     /**
      * Check whether this adapter is properly configured and can reach its backend.

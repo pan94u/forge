@@ -34,12 +34,18 @@ data class CompletionOptions(
 
 /**
  * A message in a conversation history.
+ *
+ * For tool calling flows:
+ * - Assistant messages may include [toolUses] (the model requesting tool execution)
+ * - Tool role messages include [toolResults] (results sent back to the model)
  */
 data class Message(
     val role: Role,
-    val content: String
+    val content: String,
+    val toolUses: List<ToolUse>? = null,
+    val toolResults: List<ToolResult>? = null
 ) {
-    enum class Role { USER, ASSISTANT, SYSTEM }
+    enum class Role { USER, ASSISTANT, SYSTEM, TOOL }
 }
 
 /**
@@ -85,6 +91,8 @@ enum class StopReason {
     STOP_SEQUENCE,
     /** Hit max tokens limit */
     MAX_TOKENS,
+    /** Model wants to use a tool */
+    TOOL_USE,
     /** Error occurred during generation */
     ERROR
 }
@@ -121,3 +129,32 @@ data class ModelInfo(
 enum class CostTier {
     LOW, MEDIUM, HIGH
 }
+
+// --- Tool Calling Types ---
+
+/**
+ * Definition of a tool that can be provided to the model.
+ */
+data class ToolDefinition(
+    val name: String,
+    val description: String,
+    val inputSchema: Map<String, Any?>
+)
+
+/**
+ * A tool use request from the model.
+ */
+data class ToolUse(
+    val id: String,
+    val name: String,
+    val input: Map<String, Any?>
+)
+
+/**
+ * A tool result to send back to the model.
+ */
+data class ToolResult(
+    val toolUseId: String,
+    val content: String,
+    val isError: Boolean = false
+)

@@ -1,44 +1,57 @@
 package com.forge.webide.service
 
+import com.forge.adapter.model.*
 import com.forge.webide.model.*
+import com.forge.webide.repository.ChatMessageRepository
+import com.forge.webide.repository.ChatSessionRepository
+import com.forge.webide.entity.ChatMessageEntity
+import com.forge.webide.entity.ToolCallEntity
+import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.runBlocking
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
-import org.springframework.http.MediaType
 import org.springframework.stereotype.Service
-import org.springframework.web.reactive.function.client.WebClient
-import java.util.concurrent.ConcurrentHashMap
+import java.time.Instant
+import java.util.UUID
 import java.util.concurrent.Executors
 
 /**
- * Integrates with the Claude Agent SDK for AI-powered chat capabilities.
- * Manages conversation context, tool calls, and streaming responses.
+ * Integrates with the Claude API via [ClaudeAdapter] for AI-powered chat capabilities.
+ *
+ * Supports:
+ * - Real streaming via SSE (no artificial delays)
+ * - Multi-turn agentic tool calling loop (max 5 turns)
+ * - Database persistence of conversations
  */
 @Service
 class ClaudeAgentService(
+    private val claudeAdapter: ClaudeAdapter,
     private val mcpProxyService: McpProxyService,
-    private val knowledgeGapDetectorService: KnowledgeGapDetectorService
+    private val knowledgeGapDetectorService: KnowledgeGapDetectorService,
+    private val chatSessionRepository: ChatSessionRepository,
+    private val chatMessageRepository: ChatMessageRepository
 ) {
     private val logger = LoggerFactory.getLogger(ClaudeAgentService::class.java)
     private val executor = Executors.newFixedThreadPool(10)
 
-    @Value("\${forge.claude.api-key:}")
-    private var apiKey: String = ""
-
     @Value("\${forge.claude.model:claude-sonnet-4-20250514}")
     private var model: String = "claude-sonnet-4-20250514"
 
-    @Value("\${forge.claude.api-url:https://api.anthropic.com}")
-    private var apiUrl: String = "https://api.anthropic.com"
+    companion object {
+        private const val MAX_AGENTIC_TURNS = 5
+        private const val SYSTEM_PROMPT = """You are Forge AI, an intelligent development assistant embedded in the Forge Web IDE.
 
-    private val conversationHistory = ConcurrentHashMap<String, MutableList<Map<String, Any>>>()
+You help developers with:
+- Understanding and explaining code
+- Answering questions about the codebase and architecture
+- Suggesting improvements and best practices
+- Debugging issues
+- Writing and modifying code
+- Navigating the knowledge base
 
-    private val webClient: WebClient by lazy {
-        WebClient.builder()
-            .baseUrl(apiUrl)
-            .defaultHeader("x-api-key", apiKey)
-            .defaultHeader("anthropic-version", "2023-06-01")
-            .defaultHeader("Content-Type", MediaType.APPLICATION_JSON_VALUE)
-            .build()
+When provided with file context, analyze the code carefully and provide specific, actionable advice.
+When using MCP tools, explain what you're doing and why.
+Always be concise but thorough in your responses."""
     }
 
     /**
@@ -50,67 +63,53 @@ class ClaudeAgentService(
         contexts: List<ContextReference>,
         workspaceId: String
     ): ChatMessageResponse {
-        val history = conversationHistory.getOrPut(sessionId) { mutableListOf() }
-
-        // Build the user message with context
         val fullMessage = buildContextualMessage(message, contexts)
+        val history = loadConversationHistory(sessionId)
 
-        history.add(mapOf(
-            "role" to "user",
-            "content" to fullMessage
-        ))
+        val messages = history + Message(role = Message.Role.USER, content = fullMessage)
 
-        // Get available MCP tools
-        val tools = mcpProxyService.listTools()
+        val tools = mcpProxyService.listTools().map { tool ->
+            ToolDefinition(
+                name = tool.name,
+                description = tool.description,
+                inputSchema = tool.inputSchema
+            )
+        }
 
         return try {
-            val requestBody = buildRequestBody(history, tools)
+            val options = CompletionOptions(
+                model = model,
+                maxTokens = 4096,
+                systemPrompt = SYSTEM_PROMPT
+            )
 
-            val response = webClient.post()
-                .uri("/v1/messages")
-                .bodyValue(requestBody)
-                .retrieve()
-                .bodyToMono(Map::class.java)
-                .block()
-
-            val content = extractContent(response)
-            val toolCalls = extractToolCalls(response)
-
-            // Process tool calls if any
-            val processedToolCalls = toolCalls.map { tc ->
-                try {
-                    val result = mcpProxyService.callTool(tc.name, tc.input)
-                    tc.copy(
-                        output = McpProxyService.formatResult(result),
-                        status = if (result.isError) "error" else "complete"
-                    )
-                } catch (e: Exception) {
-                    tc.copy(output = "Error: ${e.message}", status = "error")
-                }
+            // Run single-turn completion
+            val result = runBlocking {
+                val events = claudeAdapter.streamWithTools(messages, options, tools).toList()
+                collectStreamResult(events)
             }
 
-            history.add(mapOf(
-                "role" to "assistant",
-                "content" to content
-            ))
+            // Persist messages
+            persistMessage(sessionId, Message.Role.USER, fullMessage)
+            persistMessage(sessionId, Message.Role.ASSISTANT, result.content, result.toolCalls)
 
-            // Detect knowledge gaps
-            knowledgeGapDetectorService.analyzeForGaps(message, content, contexts)
+            knowledgeGapDetectorService.analyzeForGaps(message, result.content, contexts)
 
-            ChatMessageResponse(content, processedToolCalls)
+            ChatMessageResponse(result.content, result.toolCalls)
         } catch (e: Exception) {
             logger.error("Claude API call failed: ${e.message}", e)
-
-            // Fallback response
             val fallback = generateFallbackResponse(message, contexts)
-            history.add(mapOf("role" to "assistant", "content" to fallback))
-
+            persistMessage(sessionId, Message.Role.USER, fullMessage)
+            persistMessage(sessionId, Message.Role.ASSISTANT, fallback)
             ChatMessageResponse(fallback, emptyList())
         }
     }
 
     /**
-     * Stream a message to Claude with real-time event callbacks.
+     * Stream a message with real-time events via the agentic loop.
+     *
+     * Supports multi-turn tool calling: Claude requests tools → tools execute →
+     * results feed back → Claude continues. Max [MAX_AGENTIC_TURNS] turns.
      */
     fun streamMessage(
         sessionId: String,
@@ -123,32 +122,40 @@ class ClaudeAgentService(
     ) {
         executor.submit {
             try {
-                val result = sendMessage(sessionId, message, contexts, workspaceId)
+                val fullMessage = buildContextualMessage(message, contexts)
+                val history = loadConversationHistory(sessionId)
 
-                // Simulate streaming by sending content in chunks
-                onEvent(mapOf("type" to "thinking", "content" to "Analyzing your question..."))
-
-                // Send tool call events
-                result.toolCalls.forEach { tc ->
-                    onEvent(mapOf(
-                        "type" to "tool_use",
-                        "toolCallId" to tc.id,
-                        "toolName" to tc.name,
-                        "toolInput" to tc.input
-                    ))
-                    onEvent(mapOf(
-                        "type" to "tool_result",
-                        "toolCallId" to tc.id,
-                        "content" to (tc.output ?: "")
-                    ))
+                val tools = mcpProxyService.listTools().map { tool ->
+                    ToolDefinition(
+                        name = tool.name,
+                        description = tool.description,
+                        inputSchema = tool.inputSchema
+                    )
                 }
 
-                // Stream content in chunks to simulate real streaming
-                val chunks = result.content.chunked(50)
-                chunks.forEach { chunk ->
-                    onEvent(mapOf("type" to "content", "content" to chunk))
-                    Thread.sleep(20)
+                val options = CompletionOptions(
+                    model = model,
+                    maxTokens = 4096,
+                    systemPrompt = SYSTEM_PROMPT
+                )
+
+                // Persist the user message
+                persistMessage(sessionId, Message.Role.USER, fullMessage)
+
+                // Run the agentic loop
+                val result = runBlocking {
+                    agenticStream(
+                        messages = history + Message(role = Message.Role.USER, content = fullMessage),
+                        options = options,
+                        tools = tools,
+                        onEvent = onEvent
+                    )
                 }
+
+                // Persist the final assistant response
+                persistMessage(sessionId, Message.Role.ASSISTANT, result.content, result.toolCalls)
+
+                knowledgeGapDetectorService.analyzeForGaps(message, result.content, contexts)
 
                 val assistantMessage = ChatMessage(
                     sessionId = sessionId,
@@ -164,6 +171,233 @@ class ClaudeAgentService(
             }
         }
     }
+
+    /**
+     * Core agentic streaming loop.
+     *
+     * Each turn:
+     * 1. Streams ClaudeAdapter.streamWithTools() → emits events to WebSocket
+     * 2. Collects the full response (text + tool_use blocks)
+     * 3. If stop_reason == TOOL_USE: execute tools → build tool_result → loop
+     * 4. If stop_reason == END_TURN: return final result
+     */
+    private suspend fun agenticStream(
+        messages: List<Message>,
+        options: CompletionOptions,
+        tools: List<ToolDefinition>,
+        onEvent: (Map<String, Any?>) -> Unit
+    ): AgenticResult {
+        var currentMessages = messages.toMutableList()
+        var allToolCalls = mutableListOf<ToolCallRecord>()
+        var finalContent = ""
+
+        for (turn in 1..MAX_AGENTIC_TURNS) {
+            logger.debug("Agentic turn $turn / $MAX_AGENTIC_TURNS")
+
+            // Accumulate events from this turn
+            var turnText = StringBuilder()
+            var currentToolUses = mutableListOf<PendingToolUse>()
+            var currentToolInputJson = StringBuilder()
+            var stopReason: StopReason? = null
+            var currentToolId = ""
+            var currentToolName = ""
+
+            // Stream and emit events in real-time
+            claudeAdapter.streamWithTools(currentMessages, options, tools).collect { event ->
+                when (event) {
+                    is StreamEvent.MessageStart -> {
+                        // no-op for the client; they already know we're streaming
+                    }
+                    is StreamEvent.ContentDelta -> {
+                        turnText.append(event.text)
+                        onEvent(mapOf("type" to "content", "content" to event.text))
+                    }
+                    is StreamEvent.ToolUseStart -> {
+                        currentToolId = event.id
+                        currentToolName = event.name
+                        currentToolInputJson = StringBuilder()
+                        onEvent(mapOf(
+                            "type" to "tool_use_start",
+                            "toolCallId" to event.id,
+                            "toolName" to event.name
+                        ))
+                    }
+                    is StreamEvent.ToolInputDelta -> {
+                        currentToolInputJson.append(event.partialJson)
+                    }
+                    is StreamEvent.ToolUseEnd -> {
+                        val inputStr = currentToolInputJson.toString()
+                        val input = parseToolInput(inputStr)
+                        currentToolUses.add(PendingToolUse(
+                            id = currentToolId,
+                            name = currentToolName,
+                            input = input
+                        ))
+                        onEvent(mapOf(
+                            "type" to "tool_use",
+                            "toolCallId" to currentToolId,
+                            "toolName" to currentToolName,
+                            "toolInput" to input
+                        ))
+                    }
+                    is StreamEvent.MessageDelta -> {
+                        stopReason = event.stopReason
+                    }
+                    is StreamEvent.MessageStop -> {
+                        // Turn complete
+                    }
+                    is StreamEvent.Error -> {
+                        onEvent(mapOf("type" to "error", "content" to event.message))
+                    }
+                }
+            }
+
+            finalContent = turnText.toString()
+
+            // If tool_use stop reason, execute tools and loop
+            if (stopReason == StopReason.TOOL_USE && currentToolUses.isNotEmpty()) {
+                // Build assistant message with tool uses
+                val assistantMsg = Message(
+                    role = Message.Role.ASSISTANT,
+                    content = finalContent,
+                    toolUses = currentToolUses.map { ToolUse(it.id, it.name, it.input) }
+                )
+                currentMessages.add(assistantMsg)
+
+                // Execute each tool and collect results
+                val toolResults = mutableListOf<ToolResult>()
+                for (toolUse in currentToolUses) {
+                    val startMs = System.currentTimeMillis()
+                    val result = try {
+                        val mcpResult = mcpProxyService.callTool(toolUse.name, toolUse.input)
+                        val output = McpProxyService.formatResult(mcpResult)
+                        val status = if (mcpResult.isError) "error" else "complete"
+                        val durationMs = System.currentTimeMillis() - startMs
+
+                        allToolCalls.add(ToolCallRecord(
+                            id = toolUse.id,
+                            name = toolUse.name,
+                            input = toolUse.input,
+                            output = output,
+                            status = status
+                        ))
+
+                        onEvent(mapOf(
+                            "type" to "tool_result",
+                            "toolCallId" to toolUse.id,
+                            "content" to output,
+                            "durationMs" to durationMs
+                        ))
+
+                        ToolResult(toolUseId = toolUse.id, content = output, isError = mcpResult.isError)
+                    } catch (e: Exception) {
+                        val errorOutput = "Error executing tool: ${e.message}"
+                        val durationMs = System.currentTimeMillis() - startMs
+
+                        allToolCalls.add(ToolCallRecord(
+                            id = toolUse.id,
+                            name = toolUse.name,
+                            input = toolUse.input,
+                            output = errorOutput,
+                            status = "error"
+                        ))
+
+                        onEvent(mapOf(
+                            "type" to "tool_result",
+                            "toolCallId" to toolUse.id,
+                            "content" to errorOutput,
+                            "durationMs" to durationMs
+                        ))
+
+                        ToolResult(toolUseId = toolUse.id, content = errorOutput, isError = true)
+                    }
+                    toolResults.add(result)
+                }
+
+                // Add tool results as a TOOL message
+                val toolMsg = Message(
+                    role = Message.Role.TOOL,
+                    content = "",
+                    toolResults = toolResults
+                )
+                currentMessages.add(toolMsg)
+
+                // Continue to next turn
+                continue
+            }
+
+            // No more tool calls — we're done
+            break
+        }
+
+        return AgenticResult(content = finalContent, toolCalls = allToolCalls)
+    }
+
+    // ---- Persistence helpers ----
+
+    private fun loadConversationHistory(sessionId: String): List<Message> {
+        return try {
+            chatMessageRepository.findBySessionIdOrderByCreatedAt(sessionId).map { entity ->
+                Message(
+                    role = when (entity.role) {
+                        "user" -> Message.Role.USER
+                        "assistant" -> Message.Role.ASSISTANT
+                        "tool" -> Message.Role.TOOL
+                        else -> Message.Role.USER
+                    },
+                    content = entity.content
+                )
+            }
+        } catch (e: Exception) {
+            logger.debug("Could not load history for session $sessionId: ${e.message}")
+            emptyList()
+        }
+    }
+
+    private fun persistMessage(
+        sessionId: String,
+        role: Message.Role,
+        content: String,
+        toolCalls: List<ToolCallRecord> = emptyList()
+    ) {
+        try {
+            val entity = ChatMessageEntity(
+                id = UUID.randomUUID().toString(),
+                sessionId = sessionId,
+                role = when (role) {
+                    Message.Role.USER -> "user"
+                    Message.Role.ASSISTANT -> "assistant"
+                    Message.Role.TOOL -> "tool"
+                    Message.Role.SYSTEM -> "system"
+                },
+                content = content,
+                createdAt = Instant.now()
+            )
+
+            val savedMessage = chatMessageRepository.save(entity)
+
+            // Persist tool calls
+            if (toolCalls.isNotEmpty()) {
+                for (tc in toolCalls) {
+                    val toolCallEntity = ToolCallEntity(
+                        id = UUID.randomUUID().toString(),
+                        messageId = savedMessage.id,
+                        toolName = tc.name,
+                        input = tc.input.toString(),
+                        output = tc.output,
+                        status = tc.status
+                    )
+                    // Tool call entities are saved via cascade or separate repo
+                    savedMessage.toolCalls.add(toolCallEntity)
+                }
+                chatMessageRepository.save(savedMessage)
+            }
+        } catch (e: Exception) {
+            logger.warn("Failed to persist message for session $sessionId: ${e.message}")
+        }
+    }
+
+    // ---- Utility methods ----
 
     private fun buildContextualMessage(
         message: String,
@@ -190,57 +424,16 @@ class ClaudeAgentService(
         """.trimMargin()
     }
 
-    private fun buildRequestBody(
-        history: List<Map<String, Any>>,
-        tools: List<McpTool>
-    ): Map<String, Any> {
-        val body = mutableMapOf<String, Any>(
-            "model" to model,
-            "max_tokens" to 4096,
-            "messages" to history,
-            "system" to SYSTEM_PROMPT
-        )
-
-        if (tools.isNotEmpty()) {
-            body["tools"] = tools.map { tool ->
-                mapOf(
-                    "name" to tool.name,
-                    "description" to tool.description,
-                    "input_schema" to tool.inputSchema
-                )
-            }
+    @Suppress("UNCHECKED_CAST")
+    private fun parseToolInput(jsonStr: String): Map<String, Any?> {
+        return try {
+            if (jsonStr.isBlank()) return emptyMap()
+            val gson = com.google.gson.Gson()
+            gson.fromJson(jsonStr, Map::class.java) as? Map<String, Any?> ?: emptyMap()
+        } catch (e: Exception) {
+            logger.warn("Failed to parse tool input JSON: $jsonStr")
+            mapOf("raw" to jsonStr)
         }
-
-        return body
-    }
-
-    @Suppress("UNCHECKED_CAST")
-    private fun extractContent(response: Map<*, *>?): String {
-        if (response == null) return "No response received."
-
-        val content = response["content"] as? List<Map<String, Any>> ?: return "No content in response."
-
-        return content
-            .filter { it["type"] == "text" }
-            .mapNotNull { it["text"] as? String }
-            .joinToString("\n")
-    }
-
-    @Suppress("UNCHECKED_CAST")
-    private fun extractToolCalls(response: Map<*, *>?): List<ToolCallRecord> {
-        if (response == null) return emptyList()
-
-        val content = response["content"] as? List<Map<String, Any>> ?: return emptyList()
-
-        return content
-            .filter { it["type"] == "tool_use" }
-            .map { block ->
-                ToolCallRecord(
-                    id = block["id"] as? String ?: "",
-                    name = block["name"] as? String ?: "",
-                    input = block["input"] as? Map<String, Any?> ?: emptyMap()
-                )
-            }
     }
 
     private fun generateFallbackResponse(
@@ -268,24 +461,33 @@ class ClaudeAgentService(
         """.trimMargin()
     }
 
-    companion object {
-        private const val SYSTEM_PROMPT = """You are Forge AI, an intelligent development assistant embedded in the Forge Web IDE.
+    private fun collectStreamResult(events: List<StreamEvent>): AgenticResult {
+        val text = StringBuilder()
+        val toolCalls = mutableListOf<ToolCallRecord>()
 
-You help developers with:
-- Understanding and explaining code
-- Answering questions about the codebase and architecture
-- Suggesting improvements and best practices
-- Debugging issues
-- Writing and modifying code
-- Navigating the knowledge base
+        for (event in events) {
+            when (event) {
+                is StreamEvent.ContentDelta -> text.append(event.text)
+                else -> {} // handled by agentic loop
+            }
+        }
 
-When provided with file context, analyze the code carefully and provide specific, actionable advice.
-When using MCP tools, explain what you're doing and why.
-Always be concise but thorough in your responses."""
+        return AgenticResult(content = text.toString(), toolCalls = toolCalls)
     }
 }
 
 data class ChatMessageResponse(
     val content: String,
     val toolCalls: List<ToolCallRecord>
+)
+
+private data class AgenticResult(
+    val content: String,
+    val toolCalls: List<ToolCallRecord>
+)
+
+private data class PendingToolUse(
+    val id: String,
+    val name: String,
+    val input: Map<String, Any?>
 )

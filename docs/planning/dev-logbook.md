@@ -437,3 +437,119 @@ git commit  # 02e003c
 4. **Explore Agent 误判**: 评估结果需要手动 double-check，不能完全信任（如报告 3 个 baseline 缺失，实际全部存在）
 5. **手动兜底**: 对于 Agent 失败的关键模块，手动写入是可靠的兜底方案
 6. **安全意识**: 模板代码中的 `setAllowedOrigins("*")` 需要及时修复为可配置值
+
+---
+
+## Session 4 — 2026-02-17：Phase 1 实施（Week 1-5）
+
+> 从 Session 3 的 Phase 1 计划开始执行。发现 Week 1-3 代码已由前一个 session 实现。
+
+### 4.1 Phase 1 现状评估
+
+**时间**: 2026-02-17
+
+**动作**: 逐文件验证 Phase 1 Week 1-3 的实现状态。
+
+**发现**: Week 1-3 全部代码已在前一个 context window 中实现（Session 3 末尾），但未记录在 logbook 中。
+
+| Week | 范围 | 状态 | 已实现文件 |
+|------|------|------|-----------|
+| Week 1 (真流式) | ModelAdapter + ClaudeAdapter + 集成 | ✅ 完成 | Models.kt, StreamEvent.kt, ModelAdapter.kt, ClaudeAdapter.kt, ClaudeConfig.kt |
+| Week 2 (Agentic Loop) | agenticStream + MCP修复 + McpController | ✅ 完成 | ClaudeAgentService.kt, ChatWebSocketHandler.kt, McpProxyService.kt, McpController.kt |
+| Week 3 (DB持久化) | JPA实体 + Repository + Flyway + 配置 | ✅ 完成 | 3个Entity, 2个Repository, V1__migration.sql, application.yml |
+
+### 4.2 构建环境修复
+
+**动作**: 安装 JDK 21 + 修复 Gradle 构建问题
+
+**问题1**: 系统只有 JDK 8 → `brew install openjdk@21` 解决
+**问题2**: Kotlin 版本冲突 — root 声明 1.9.25 但子模块声明 1.9.22
+**修复**:
+- Root `build.gradle.kts` 添加 `kotlin("plugin.serialization")` 和 `kotlin("plugin.jpa")` 的 `apply false` 声明
+- 所有 MCP Server 子模块：移除 `kotlin("jvm") version "1.9.22"`，改为版本无关的 `kotlin("plugin.serialization")`
+- `web-ide/backend`：移除所有显式 Kotlin 版本和 Spring Boot 版本（由 root 统一管理）
+- 影响文件：8 个 `build.gradle.kts`
+
+### 4.3 Week 4: Skills 内容深化
+
+**动作**: 增强 4 个 Foundation Skills + 创建 business-rule-extraction Skill
+
+| Skill | 新增内容 | 行数增加 |
+|-------|---------|---------|
+| `spring-boot-patterns` | +Async (@Async + CompletableFuture), +Caching (@Cacheable + Caffeine), +Event Publishing (ApplicationEvent + @TransactionalEventListener), +Advanced @ConfigurationProperties | ~180 行 |
+| `api-design` | +API 契约对比 (OpenAPI diff, breaking vs non-breaking), +跨栈迁移 API 映射 (ASP.NET ↔ Spring Boot ↔ FastAPI ↔ Go gin) | ~120 行 |
+| `database-patterns` | +多数据源配置 (Primary + Legacy JPA Config), +Entity Framework → JPA 完整映射 (DbContext/DbSet/Fluent API/Migrations) | ~140 行 |
+| `error-handling` | +Saga Pattern (编排式补偿事务), +Outbox Pattern (可靠事件发布), +DLQ 处理, +.NET Exception → Java Exception 完整映射 | ~200 行 |
+| `business-rule-extraction` (新建) | 从任意语言源码提取业务规则、边界条件、异常处理策略；含输出模板、HITL审批检查清单、质量标准 | ~200 行 |
+
+**注**: `codebase-profiler` 的 .NET/Python/Go 支持已由前一个 session 实现。
+
+### 4.4 Week 5: 测试编写与修复
+
+**动作**: 创建 5 个测试文件 + 修复测试失败
+
+**测试文件**:
+| 文件 | 测试数 | 覆盖范围 |
+|------|--------|---------|
+| `ClaudeAdapterToolCallingTest.kt` | 9 | SSE 解析 (text + tool_use + error), HTTP 错误 (401/429/500), Request body 构建, tool_use/tool_result 序列化 |
+| `ClaudeAgentServiceTest.kt` | 7 | 同步/流式消息, Agentic Loop (2 轮), Tool 执行失败降级, Context 注入, 历史加载 |
+| `McpProxyServiceTest.kt` | 10 | Default tools, 各 tool handler, Cache 操作, formatResult (text/error/image/resource) |
+| `McpControllerTest.kt` | 3 | GET /api/mcp/tools, POST /tools/call, POST /cache/invalidate |
+| `ChatRepositoryTest.kt` | 8 | Session CRUD, Message 排序, ToolCall cascade, 组合查询 |
+
+**测试修复**:
+1. **JPA `@Lob` vs H2 `TEXT` 类型不匹配**: `ChatMessageEntity.content` 和 `ToolCallEntity.input/output` 的 `@Lob` 注解在 H2 中映射为 CLOB，但 Flyway 创建的是 TEXT (VARCHAR)。修复：移除 `@Lob`，改用 `@Column(length = 1_000_000)`
+2. **Spring Security 拦截 @WebMvcTest**: `McpControllerTest` 的所有请求被 401。修复：添加 `@AutoConfigureMockMvc(addFilters = false)` 禁用安全过滤器
+
+**最终结果**: `./gradlew :adapters:model-adapter:test :web-ide:backend:test` → **BUILD SUCCESSFUL** (37 tests, 0 failures)
+
+### 4.5 Phase 1 计划输出
+
+**动作**: 将 Phase 1 实施计划保存为项目文档
+
+**产出**: `docs/planning/phase1-implementation-plan.md` — 完整的 5 周实施计划，含进度标记 (Week 1-4 ✅, Week 5 ✅)
+
+### 4.6 Session 4 总结
+
+**用时**: ~2 小时
+**代码变更**:
+- 新建文件 7 个（5 测试 + 1 Skill + 1 Plan doc）
+- 修改文件 13 个（4 Skills 深化 + 8 build.gradle.kts 版本修复 + 1 entity 修复）
+
+**Phase 1 验收标准进度**:
+
+| # | 验收标准 | 状态 |
+|---|---------|------|
+| 1 | Web IDE → Claude API 真实 streaming | ✅ 代码完成（ClaudeAdapter.streamWithTools + ClaudeAgentService.agenticStream） |
+| 2 | Tool calling agentic loop（最多 5 轮） | ✅ 代码完成 + 测试通过 |
+| 3 | codebase-profiler .NET 项目画像 | ✅ Skill 内容完成（.NET/.csproj/EF 全覆盖） |
+| 4 | 聊天历史数据库持久化 | ✅ 代码完成 + 测试通过（JPA + Flyway + H2） |
+| 5 | MCP 工具端到端 | ✅ 代码完成（McpController + McpProxyService 端点修复） |
+| 6 | business-rule-extraction Skill | ✅ 创建完成（含 HITL 审批 + 质量标准） |
+| 7 | 全部单元/集成测试 | ✅ 37 tests passing |
+| 8 | 编译通过 | ✅ `./gradlew :adapters:model-adapter:build :web-ide:backend:build` SUCCESSFUL |
+
+**Phase 1 代码层面验收: 8/8 完成 (100%)**
+
+---
+
+### Git 提交记录（更新）
+
+| Commit | 说明 | 文件数 | 插入行数 |
+|--------|------|--------|---------|
+| `02e003c` | feat: Initialize Forge platform | 227 | 37,179 |
+| `93b6ef7` | fix: Complete Phase 0 acceptance criteria | 19 | 1,421 |
+| `0ce24a5` | docs: Update dev logbook | - | - |
+| (pending) | feat: Phase 1 — real streaming, agentic loop, DB persistence, skills, tests | ~20 | ~2,500 |
+
+### docs/planning/ 文档清单（更新）
+
+| 文件 | 内容 | 创建时间 |
+|------|------|---------|
+| `baseline-v1.0.md` | 规划基线文档 | Session 1 |
+| `forge-vs-claude-code-analysis.md` | Forge vs Claude Code 理论对比 | Session 1 |
+| `dev-logbook.md` | 开发日志（本文件） | Session 2 |
+| `simulation-dotnet-to-java-migration.md` | .NET→Java 迁移模拟验证 | Session 3 |
+| `analysis-current-vs-forge.md` | 当前开发过程 vs Forge 实际优劣 | Session 3 |
+| `analysis-claude-code-independence.md` | Claude Code 独立性分析 | Session 3 |
+| `phase1-implementation-plan.md` | Phase 1 五周实施计划 | Session 4 |

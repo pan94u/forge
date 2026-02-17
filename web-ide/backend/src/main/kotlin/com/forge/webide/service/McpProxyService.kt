@@ -45,7 +45,7 @@ class McpProxyService {
 
                 val client = getOrCreateClient(serverUrl)
                 val response = client.post()
-                    .uri("/tools/list")
+                    .uri("/mcp/tools/list")
                     .retrieve()
                     .bodyToMono(Map::class.java)
                     .block()
@@ -115,7 +115,7 @@ class McpProxyService {
 
         try {
             val response = client.post()
-                .uri("/tools/call")
+                .uri("/mcp/tools/call")
                 .bodyValue(mapOf(
                     "name" to toolName,
                     "arguments" to arguments

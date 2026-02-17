@@ -16,7 +16,8 @@ import java.util.concurrent.ConcurrentHashMap
  *
  * Manages WebSocket sessions for chat, receives user messages,
  * and streams AI responses back in real-time with support for
- * thinking indicators, content chunks, and tool call events.
+ * content chunks, tool_use events, tool_result events, and
+ * multi-turn agentic loop progress.
  */
 @Component
 class ChatWebSocketHandler(
@@ -104,20 +105,25 @@ class ChatWebSocketHandler(
 
         logger.debug("Chat message received: session=$chatSessionId, length=${content.length}")
 
-        // Stream the response back
+        // Stream the response back via the agentic loop
         claudeAgentService.streamMessage(
             sessionId = chatSessionId,
             message = content,
             contexts = contexts,
-            workspaceId = "", // Will be resolved from session
+            workspaceId = "",
             onEvent = { event ->
+                // Forward all event types: content, tool_use_start, tool_use, tool_result, error
                 if (wsSession.isOpen) {
                     sendMessage(wsSession, event)
                 }
             },
             onComplete = { assistantMessage ->
+                // Send the final "done" event only after all agentic turns are finished
                 if (wsSession.isOpen) {
-                    sendMessage(wsSession, mapOf("type" to "done"))
+                    sendMessage(wsSession, mapOf(
+                        "type" to "done",
+                        "messageId" to assistantMessage.id
+                    ))
                 }
             },
             onError = { error ->
@@ -145,7 +151,6 @@ class ChatWebSocketHandler(
     }
 
     private fun extractSessionId(session: WebSocketSession): String {
-        // Extract chat session ID from the WebSocket URI path
         val path = session.uri?.path ?: ""
         val segments = path.split("/").filter { it.isNotEmpty() }
         return segments.lastOrNull() ?: session.id
