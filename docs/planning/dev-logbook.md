@@ -553,3 +553,147 @@ git commit  # 02e003c
 | `analysis-current-vs-forge.md` | 当前开发过程 vs Forge 实际优劣 | Session 3 |
 | `analysis-claude-code-independence.md` | Claude Code 独立性分析 | Session 3 |
 | `phase1-implementation-plan.md` | Phase 1 五周实施计划 | Session 4 |
+
+---
+
+## Session 5 — 2026-02-17：Phase 1.5 — Docker 一键部署（内部试用）
+
+> Phase 1 代码完成（commit `0381e91`，37 测试通过），但从未做过端到端真实运行验证。本 session 目标：让 3-5 名内部成员通过 `docker compose up` 一键试用 Web IDE。
+
+### 5.1 问题分析与规划
+
+**时间**: 2026-02-17
+
+**动作**: 进入 Plan Mode，识别阻塞端到端运行的 5 个问题：
+
+| 问题 | 位置 | 分析 |
+|------|------|------|
+| SSE/非流式请求体不匹配 | claude-client.ts:134,197 | 发送 `{ message }` 但后端 DTO 期望 `{ type, content }` |
+| WebSocket 无法通过 Next.js rewrite 代理 | next.config.ts:31-33 | Next.js rewrite 不支持 WS upgrade，需 Nginx |
+| 无 Dockerfile | 前后端均无 | 阻塞 Docker 部署 |
+| CORS origins 缺少环境变量映射 | SecurityConfig.kt, application.yml | `forge.security.enabled` 和 `forge.cors.allowed-origins` 未声明 |
+| ANTHROPIC_API_KEY 无 yml 映射 | ClaudeConfig.kt | 仅靠 System.getenv fallback |
+
+**产出**: 7 步实施计划
+
+---
+
+### 5.2 Bug 修复：前端请求体
+
+**文件**: `web-ide/frontend/src/lib/claude-client.ts`
+
+**修改**: 2 处 HTTP 请求体从 `{ message, contexts }` 修正为 `{ type: "message", content: message, contexts }`，与后端 DTO 对齐。WebSocket 路径（line 76-80）已正确，无需改动。
+
+---
+
+### 5.3 后端配置补齐
+
+**文件**: `web-ide/backend/src/main/resources/application.yml`
+
+在 `forge:` 节下新增 3 个缺失的配置映射：
+- `forge.security.enabled` → `${FORGE_SECURITY_ENABLED:false}`
+- `forge.cors.allowed-origins` → `${FORGE_CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:9000}`
+- `forge.claude.api-key` → `${ANTHROPIC_API_KEY:}`
+
+---
+
+### 5.4 Docker 化
+
+**新建文件**:
+
+| 文件 | 说明 |
+|------|------|
+| `web-ide/backend/Dockerfile` | 多阶段构建：JDK 21 builder → JRE Alpine runtime |
+| `web-ide/backend/.dockerignore` | 排除 `.gradle/`, `build/`, IDE 文件 |
+| `web-ide/frontend/Dockerfile` | 3 阶段构建：deps → builder → standalone runner |
+| `web-ide/frontend/.dockerignore` | 排除 `node_modules/`, `.next/`, env 文件 |
+
+**修改**: `web-ide/frontend/next.config.ts` 添加 `output: "standalone"` 支持 Docker standalone 模式。
+
+---
+
+### 5.5 Nginx 反向代理 + Docker Compose
+
+**新建文件**:
+
+| 文件 | 说明 |
+|------|------|
+| `infrastructure/docker/nginx-trial.conf` | 统一入口 `:9000`，支持 WS upgrade + SSE proxy_buffering off |
+| `infrastructure/docker/docker-compose.trial.yml` | 3 容器：backend + frontend + nginx（H2 数据库，无需 PostgreSQL） |
+| `infrastructure/docker/.env.trial.example` | 示例环境变量文件 |
+
+**路由规则**:
+| 路径 | 目标 | 说明 |
+|------|------|------|
+| `/api/` | `backend:8080` | REST API |
+| `/ws/` | `backend:8080` | WebSocket（含 Upgrade header） |
+| `/actuator/` | `backend:8080` | Health/metrics |
+| `/h2-console/` | `backend:8080` | H2 数据库控制台 |
+| `/` | `frontend:3000` | Next.js 前端（catch-all） |
+
+---
+
+### 5.6 试用引导文档
+
+**新建**: `docs/TRIAL-GUIDE.md` — 包含前置条件、一键启动命令、访问地址、功能验证步骤、已知限制、问题排查指南。
+
+---
+
+### 5.7 Session 5 总结
+
+**用时**: ~30 分钟
+**代码变更**:
+- 修改文件 3 个（claude-client.ts bug fix, application.yml 配置补齐, next.config.ts standalone）
+- 新建文件 8 个（2 Dockerfiles, 2 .dockerignore, nginx conf, docker-compose, .env example, trial guide）
+
+**Phase 1.5 文件清单**:
+
+| 操作 | 文件 |
+|------|------|
+| **修改** | `web-ide/frontend/src/lib/claude-client.ts` |
+| **修改** | `web-ide/frontend/next.config.ts` |
+| **修改** | `web-ide/backend/src/main/resources/application.yml` |
+| **新建** | `web-ide/backend/Dockerfile` |
+| **新建** | `web-ide/backend/.dockerignore` |
+| **新建** | `web-ide/frontend/Dockerfile` |
+| **新建** | `web-ide/frontend/.dockerignore` |
+| **新建** | `infrastructure/docker/docker-compose.trial.yml` |
+| **新建** | `infrastructure/docker/nginx-trial.conf` |
+| **新建** | `infrastructure/docker/.env.trial.example` |
+| **新建** | `docs/TRIAL-GUIDE.md` |
+
+**启动命令**:
+```bash
+cd infrastructure/docker
+cp .env.trial.example .env.trial  # 编辑填入 ANTHROPIC_API_KEY
+docker compose -f docker-compose.trial.yml --env-file .env.trial up --build
+# 访问 http://localhost:9000
+```
+
+---
+
+### Git 提交记录（更新）
+
+| Commit | 说明 | 文件数 | 插入行数 |
+|--------|------|--------|---------|
+| `02e003c` | feat: Initialize Forge platform | 227 | 37,179 |
+| `93b6ef7` | fix: Complete Phase 0 acceptance criteria | 19 | 1,421 |
+| `0ce24a5` | docs: Update dev logbook | - | - |
+| `35a8361` | docs: Add platform design validation analyses | - | - |
+| `495503d` | docs: Update planning baseline v1.0 → v1.1 | - | - |
+| `0381e91` | feat: Phase 1 — real streaming, agentic loop, DB persistence, skills, tests | ~20 | ~2,500 |
+| `7f10907` | docs: Update planning baseline v1.1 → v1.2 | - | - |
+| `97fd1a3` | feat: Phase 1.5 — Docker one-click deployment for internal trial | 11 | 259 |
+
+### docs/ 文档清单（更新）
+
+| 文件 | 内容 | 创建时间 |
+|------|------|---------|
+| `docs/planning/baseline-v1.0.md` | 规划基线文档 | Session 1 |
+| `docs/planning/forge-vs-claude-code-analysis.md` | Forge vs Claude Code 理论对比 | Session 1 |
+| `docs/planning/dev-logbook.md` | 开发日志（本文件） | Session 2 |
+| `docs/planning/simulation-dotnet-to-java-migration.md` | .NET→Java 迁移模拟验证 | Session 3 |
+| `docs/planning/analysis-current-vs-forge.md` | 当前开发过程 vs Forge 实际优劣 | Session 3 |
+| `docs/planning/analysis-claude-code-independence.md` | Claude Code 独立性分析 | Session 3 |
+| `docs/planning/phase1-implementation-plan.md` | Phase 1 五周实施计划 | Session 4 |
+| `docs/TRIAL-GUIDE.md` | Phase 1.5 内部试用引导 | Session 5 |
