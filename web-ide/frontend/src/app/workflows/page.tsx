@@ -267,8 +267,8 @@ export default function WorkflowsPage() {
                   }}
                 />
               </div>
-              {propertiesNode.data.config &&
-                typeof propertiesNode.data.config === "object" && (
+              {propertiesNode.data.config != null &&
+                typeof propertiesNode.data.config === "object" ? (
                   <div>
                     <label className="block text-xs font-medium text-muted-foreground">
                       Configuration
@@ -296,7 +296,7 @@ export default function WorkflowsPage() {
                       }}
                     />
                   </div>
-                )}
+                ) : null}
             </div>
           </div>
         )}

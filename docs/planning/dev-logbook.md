@@ -639,36 +639,128 @@ git commit  # 02e003c
 
 ---
 
-### 5.7 Session 5 总结
+### 5.7 构建与测试过程（端到端验证）
 
-**用时**: ~30 分钟
-**代码变更**:
-- 修改文件 3 个（claude-client.ts bug fix, application.yml 配置补齐, next.config.ts standalone）
-- 新建文件 8 个（2 Dockerfiles, 2 .dockerignore, nginx conf, docker-compose, .env example, trial guide）
+**时间**: 2026-02-18 ~04:50 - 06:25 CST
 
-**Phase 1.5 文件清单**:
+**目标**: 通过 `docker compose up` 端到端验证 3 个容器（backend + frontend + nginx）能启动并正确路由。
 
-| 操作 | 文件 |
-|------|------|
-| **修改** | `web-ide/frontend/src/lib/claude-client.ts` |
-| **修改** | `web-ide/frontend/next.config.ts` |
-| **修改** | `web-ide/backend/src/main/resources/application.yml` |
-| **新建** | `web-ide/backend/Dockerfile` |
-| **新建** | `web-ide/backend/.dockerignore` |
-| **新建** | `web-ide/frontend/Dockerfile` |
-| **新建** | `web-ide/frontend/.dockerignore` |
-| **新建** | `infrastructure/docker/docker-compose.trial.yml` |
-| **新建** | `infrastructure/docker/nginx-trial.conf` |
-| **新建** | `infrastructure/docker/.env.trial.example` |
-| **新建** | `docs/TRIAL-GUIDE.md` |
+#### 构建尝试时间线
 
-**启动命令**:
+| 尝试 | 时间 | 结果 | 问题 | 修复 |
+|------|------|------|------|------|
+| #1 | 04:52 | 失败 | Docker daemon 未运行 | 用户手动启动 Docker Desktop |
+| #2 | 04:55 | 部分成功 | Backend BUILD SUCCESSFUL (6m11s), Frontend `npm ci` 失败 | 缺少 `package-lock.json` |
+| #3 | 05:02 | 失败 | 生成 `package-lock.json` 后重试，Frontend build 报 Next.js rewrite 错误 | `ws://` 协议在 Next.js rewrite 中不合法 |
+| #4 | 05:05 | 失败 | Backend TLS handshake 失败（Docker 内网络问题） | 修复 `next.config.ts` ws rewrite，但 Backend 缓存失效重新构建失败 |
+| #5 | 05:15 | 失败 | 同样 TLS handshake 失败 | Docker Desktop 网络问题持续 |
+| 策略转换 | 05:25 | - | **决定放弃 Docker 内构建，改为本地构建 + Docker 只打包运行** | 重写 Dockerfile 为单阶段 COPY JAR/standalone |
+| #6 | 05:30 | Backend 成功 / Frontend 失败 | 本地 `./gradlew` 用 JDK 8 不兼容 Spring Boot 3 | 设置 `JAVA_HOME=/opt/homebrew/opt/openjdk@21` |
+| #7 | 05:35 | Backend 成功 / Frontend 失败 | TypeScript 编译错误 `workflows/page.tsx:270` (`unknown` 不是 `ReactNode`) | 将 `&&` 短路改为三元表达式 `? : null` |
+| #8 | 05:38 | Frontend 失败 | TypeScript 编译错误 `DocViewer.tsx:94` (`JSX` namespace 找不到) | 改为 `React.JSX.IntrinsicElements` |
+| #9 | 05:42 | 构建成功 / Docker 失败 | `.dockerignore` 排除了 `build/` 和 `.next/`，但现在 Dockerfile 需要它们 | 调整 `.dockerignore` 只排除不需要的子目录 |
+| #10 | 05:45 | Docker 失败 | Frontend `COPY public ./public` 失败——目录不存在 | 从 Dockerfile 中移除 `COPY public` |
+| #11 | 05:48 | 3 容器启动 / Backend unhealthy | Health check `wget /actuator/health` 返回 404 | Actuator 端点未注册（可能缺依赖），改用 `/api/knowledge/search` |
+| #12 | 05:50 | Backend 启动失败 | `KnowledgeController` 需要 `WebClient` bean 但没有配置 | 在 `ClaudeConfig.kt` 中添加 `@Bean fun webClient()` |
+| **#13** | **06:24** | **全部成功** | 3 容器 running, backend healthy, 前后端路由正确 | - |
+
+**总构建调试时间**: ~90 分钟（从首次尝试到全部成功）
+
+#### 发现的额外问题（计划未预料到）
+
+| # | 问题 | 根因 | 修复 |
+|---|------|------|------|
+| 1 | 缺少 `package-lock.json` | Phase 0 创建前端时未运行 `npm install` 生成 lockfile | 运行 `npm install --package-lock-only` |
+| 2 | Next.js rewrite 不支持 `ws://` 协议 | `destination` 必须以 `/`, `http://`, `https://` 开头 | 改为用 `BACKEND_URL` (http://) 代替 `BACKEND_WS_URL` (ws://) |
+| 3 | Docker 内 Gradle TLS 握手失败 | Docker Desktop macOS 网络层与 Maven Central / Gradle Plugin Portal 的 TLS 兼容问题 | **策略转换**：改为本地构建，Docker 只打包运行 |
+| 4 | 本地 JDK 8 不兼容 Spring Boot 3 | 系统默认 Java 是 1.8，虽然 JDK 21 已安装 | 显式设置 `JAVA_HOME=/opt/homebrew/opt/openjdk@21` |
+| 5 | TypeScript 编译错误 (2处) | Phase 0/1 代码从未做过 `npm run build`，只有 `npm run dev` | 修复类型错误（`unknown` as ReactNode, `JSX` namespace） |
+| 6 | 无 `public` 目录 | Next.js 项目没有静态资源 | 从 Dockerfile 中移除 `COPY public` |
+| 7 | WebClient bean 缺失 | `KnowledgeController` 注入了 `WebClient` 但没有 `@Bean` 配置 | 在 `ClaudeConfig.kt` 添加 `@Bean fun webClient()` |
+| 8 | Actuator 端点 404 | 可能缺少 `spring-boot-starter-actuator` 依赖或被 Security 拦截 | Health check 改用已知可用的 API 端点 |
+| 9 | `docker-compose.yml` `version` 字段过时 | Docker Compose v2 不再需要 `version` 字段 | 移除 |
+| 10 | `settings.gradle.kts` 缺少 `pluginManagement` | Docker 内构建无法解析 Spring 插件 | 添加 `pluginManagement { repositories { gradlePluginPortal(); mavenCentral() } }` |
+
+#### 最终验证结果
+
+```
+$ docker compose -f docker-compose.trial.yml ps
+NAME                STATUS                PORTS
+docker-backend-1    Up (healthy)          8080/tcp
+docker-frontend-1   Up                    3000/tcp
+docker-nginx-1      Up                    0.0.0.0:9000->9000/tcp
+
+$ curl -s -o /dev/null -w "HTTP %{http_code}" http://localhost:9000/
+HTTP 200
+
+$ curl -s http://localhost:9000/api/knowledge/search | head -c 50
+[{"id":"doc-5","title":"MCP Server Development Gui
+```
+
+#### 关键教训
+
+1. **永远不要跳过 `npm run build`**：Phase 0/1 只运行 `npm run dev`，TypeScript 错误在 dev 模式下不阻塞但在 build 时报错
+2. **Docker 内构建不可靠**：macOS Docker Desktop 的网络层经常出现 TLS 问题，本地构建 + Docker 只打包是更稳定的策略
+3. **`.dockerignore` 与 Dockerfile 策略耦合**：从多阶段构建切换到本地构建后，`.dockerignore` 需要同步调整
+4. **Spring bean 缺失只在运行时暴露**：编译通过 + 测试通过不等于启动成功，需要端到端验证
+5. **Health check 要用真实可达的端点**：不要假设 Actuator 一定可用
+
+---
+
+### 5.8 Session 5 总结
+
+**用时**: ~2 小时（编码 30 分钟 + 构建调试 90 分钟）
+
+**代码变更（最终）**:
+- 修改文件 8 个
+- 新建文件 8 个
+
+**所有修改文件清单**:
+
+| 操作 | 文件 | 变更内容 |
+|------|------|---------|
+| **修改** | `web-ide/frontend/src/lib/claude-client.ts` | 请求体 bug fix (2 处) |
+| **修改** | `web-ide/frontend/next.config.ts` | `output: "standalone"` + ws rewrite 修复 |
+| **修改** | `web-ide/backend/src/main/resources/application.yml` | 补齐 3 个配置映射 |
+| **修改** | `web-ide/frontend/src/app/workflows/page.tsx` | TypeScript 类型修复 |
+| **修改** | `web-ide/frontend/src/components/knowledge/DocViewer.tsx` | JSX namespace 修复 |
+| **修改** | `web-ide/backend/src/main/kotlin/.../config/ClaudeConfig.kt` | 添加 WebClient bean |
+| **修改** | `settings.gradle.kts` | 添加 pluginManagement 块 |
+| **修改** | `infrastructure/docker/docker-compose.trial.yml` | 移除 version, 修复 context + health check |
+| **新建** | `web-ide/backend/Dockerfile` | 单阶段：COPY JAR + JRE Alpine |
+| **新建** | `web-ide/backend/.dockerignore` | 排除非必要构建产物 |
+| **新建** | `web-ide/frontend/Dockerfile` | 单阶段：COPY standalone + static |
+| **新建** | `web-ide/frontend/.dockerignore` | 排除 cache + src |
+| **新建** | `web-ide/frontend/package-lock.json` | npm lockfile（`npm ci` 必需） |
+| **新建** | `infrastructure/docker/nginx-trial.conf` | Nginx 反向代理配置 |
+| **新建** | `infrastructure/docker/.env.trial.example` | 环境变量示例 |
+| **新建** | `docs/TRIAL-GUIDE.md` | 试用引导文档 |
+
+**启动命令（最终验证通过）**:
 ```bash
+# 1. 本地构建
+export JAVA_HOME=/opt/homebrew/opt/openjdk@21
+./gradlew :web-ide:backend:bootJar -x test --no-daemon
+cd web-ide/frontend && npm install && npm run build && cd ../..
+
+# 2. Docker 启动
 cd infrastructure/docker
 cp .env.trial.example .env.trial  # 编辑填入 ANTHROPIC_API_KEY
 docker compose -f docker-compose.trial.yml --env-file .env.trial up --build
 # 访问 http://localhost:9000
 ```
+
+**Phase 1.5 端到端验证状态**:
+
+| # | 验证项 | 状态 |
+|---|--------|------|
+| 1 | Docker 镜像构建 | ✅ 3 个镜像全部构建成功 |
+| 2 | 容器启动 | ✅ 3 容器 running, backend healthy |
+| 3 | Nginx 路由 | ✅ 前端 200, API 正常返回 |
+| 4 | 前端页面加载 | ✅ http://localhost:9000 返回 200 |
+| 5 | 后端 API | ✅ /api/knowledge/search 返回数据 |
+| 6 | AI Chat 流式响应 | ⏳ 待 API Key 配置后验证 |
+| 7 | Tool Call / Agentic Loop | ⏳ 待 API Key 配置后验证 |
 
 ---
 
@@ -684,6 +776,7 @@ docker compose -f docker-compose.trial.yml --env-file .env.trial up --build
 | `0381e91` | feat: Phase 1 — real streaming, agentic loop, DB persistence, skills, tests | ~20 | ~2,500 |
 | `7f10907` | docs: Update planning baseline v1.1 → v1.2 | - | - |
 | `97fd1a3` | feat: Phase 1.5 — Docker one-click deployment for internal trial | 11 | 259 |
+| `937d73d` | docs: Update dev logbook — Phase 1.5 Docker deployment session | 1 | 144 |
 
 ### docs/ 文档清单（更新）
 

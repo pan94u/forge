@@ -4,6 +4,7 @@ import com.forge.adapter.model.ClaudeAdapter
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
+import org.springframework.web.reactive.function.client.WebClient
 
 /**
  * Spring configuration for the Claude model adapter.
@@ -25,4 +26,7 @@ class ClaudeConfig {
         val key = apiKey.ifBlank { System.getenv("ANTHROPIC_API_KEY") ?: "" }
         return ClaudeAdapter(apiKey = key, baseUrl = apiUrl)
     }
+
+    @Bean
+    fun webClient(): WebClient = WebClient.builder().build()
 }

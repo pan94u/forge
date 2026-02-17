@@ -23,14 +23,18 @@ const nextConfig: NextConfig = {
     return config;
   },
   async rewrites() {
+    const backendUrl = process.env.BACKEND_URL || "http://localhost:8080";
     return [
       {
         source: "/api/:path*",
-        destination: `${process.env.BACKEND_URL || "http://localhost:8080"}/api/:path*`,
+        destination: `${backendUrl}/api/:path*`,
       },
+      // WebSocket /ws/ is proxied by Nginx in Docker, or directly by the browser in local dev.
+      // Next.js rewrites don't support ws:// protocol, so we proxy via http:// here
+      // (only used in local dev without Nginx).
       {
         source: "/ws/:path*",
-        destination: `${process.env.BACKEND_WS_URL || "ws://localhost:8080"}/ws/:path*`,
+        destination: `${backendUrl}/ws/:path*`,
       },
     ];
   },

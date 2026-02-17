@@ -91,7 +91,7 @@ function renderDocMarkdown(content: string): React.ReactNode {
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, "-")
         .replace(/^-|-$/g, "");
-      const Tag = `h${level}` as keyof JSX.IntrinsicElements;
+      const Tag = `h${level}` as keyof React.JSX.IntrinsicElements;
       const sizes: Record<number, string> = {
         1: "text-2xl font-bold mt-8 mb-4",
         2: "text-xl font-bold mt-6 mb-3",

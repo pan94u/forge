@@ -1,6 +1,9 @@
 .gradle/
-build/
+build/classes/
+build/generated/
+build/tmp/
 *.iml
 .idea/
 data/
 logs/
+src/

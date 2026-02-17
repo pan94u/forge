@@ -1,4 +1,5 @@
 node_modules/
-.next/
+.next/cache/
 out/
 .env*.local
+src/
