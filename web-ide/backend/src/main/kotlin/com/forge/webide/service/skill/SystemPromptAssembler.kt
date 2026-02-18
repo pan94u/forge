@@ -201,6 +201,39 @@ Always be concise but thorough in your responses."""
             for (tool in tools) {
                 sb.appendLine("- **${tool.name}**: ${tool.description}")
             }
+
+            // Add baseline tool usage guidance
+            val hasBaselineTool = tools.any { it.name == "run_baseline" }
+            if (hasBaselineTool) {
+                sb.appendLine()
+                sb.appendLine("### Baseline Quality Gates")
+                sb.appendLine()
+                sb.appendLine("After generating or modifying code, use the `run_baseline` tool to verify quality.")
+                sb.appendLine("This runs automated quality gate scripts that check code style, security, test coverage,")
+                sb.appendLine("API contracts, and architecture constraints.")
+                sb.appendLine()
+                sb.appendLine("**Workflow**:")
+                sb.appendLine("1. Generate or modify code (Act phase)")
+                sb.appendLine("2. Call `run_baseline` with relevant baselines (e.g. `[\"code-style-baseline\", \"security-baseline\"]`)")
+                sb.appendLine("3. If any baseline fails, analyze the failure output and fix the issues")
+                sb.appendLine("4. Re-run baselines to confirm the fix")
+                sb.appendLine("5. Only present the final result to the user after all baselines pass")
+                sb.appendLine()
+                sb.appendLine("Use `list_baselines` to see all available baseline scripts.")
+            }
+
+            // Add knowledge search guidance
+            val hasKnowledgeTool = tools.any { it.name == "search_knowledge" }
+            if (hasKnowledgeTool) {
+                sb.appendLine()
+                sb.appendLine("### Knowledge Base")
+                sb.appendLine()
+                sb.appendLine("Use `search_knowledge` to find relevant documentation before making decisions.")
+                sb.appendLine("The knowledge base contains ADRs (Architecture Decision Records), runbooks,")
+                sb.appendLine("coding conventions, and API documentation.")
+                sb.appendLine("Use `read_file` to read the full content of a specific knowledge document.")
+            }
+
             sb.toString().trim()
         } catch (e: Exception) {
             logger.debug("Could not load MCP tools for prompt: {}", e.message)

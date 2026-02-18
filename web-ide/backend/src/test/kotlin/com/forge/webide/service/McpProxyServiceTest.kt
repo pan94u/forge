@@ -2,18 +2,36 @@ package com.forge.webide.service
 
 import com.forge.webide.model.McpContent
 import com.forge.webide.model.McpToolCallResponse
+import io.mockk.every
+import io.mockk.mockk
 import org.assertj.core.api.Assertions.assertThat
+import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.io.TempDir
+import java.io.File
+import java.nio.file.Path
+import javax.sql.DataSource
 
 /**
  * Tests for McpProxyService.
  *
- * Focuses on default tool handling, cache behavior, and result formatting
- * since MCP server integration requires a running server.
+ * Focuses on built-in tool handling, cache behavior, and result formatting.
+ * Uses mock BaselineService and DataSource since the focus is on tool dispatch.
  */
 class McpProxyServiceTest {
 
-    private val service = McpProxyService()
+    private val baselineService = mockk<BaselineService>(relaxed = true)
+    private val dataSource = mockk<DataSource>(relaxed = true)
+
+    private lateinit var service: McpProxyService
+
+    @TempDir
+    lateinit var tempDir: Path
+
+    @BeforeEach
+    fun setup() {
+        service = McpProxyService(baselineService, dataSource)
+    }
 
     // --- Default Tool Tests ---
 
@@ -21,11 +39,14 @@ class McpProxyServiceTest {
     fun `listTools returns default tools when no servers configured`() {
         val tools = service.listTools()
 
-        assertThat(tools).hasSize(3)
-        assertThat(tools.map { it.name }).containsExactlyInAnyOrder(
+        assertThat(tools).hasSizeGreaterThanOrEqualTo(6)
+        assertThat(tools.map { it.name }).contains(
             "search_knowledge",
             "read_file",
-            "get_service_info"
+            "get_service_info",
+            "run_baseline",
+            "query_schema",
+            "list_baselines"
         )
     }
 
@@ -45,29 +66,22 @@ class McpProxyServiceTest {
     }
 
     @Test
-    fun `callTool handles search_knowledge default tool`() {
-        val result = service.callTool("search_knowledge", mapOf("query" to "spring boot"))
+    fun `callTool handles get_service_info for all services`() {
+        val result = service.callTool("get_service_info", mapOf("service" to ""))
 
         assertThat(result.isError).isFalse()
-        assertThat(result.content).hasSize(1)
-        assertThat(result.content[0].type).isEqualTo("text")
-        assertThat(result.content[0].text).contains("spring boot")
+        assertThat(result.content[0].text).contains("backend")
+        assertThat(result.content[0].text).contains("frontend")
+        assertThat(result.content[0].text).contains("nginx")
     }
 
     @Test
-    fun `callTool handles read_file default tool`() {
-        val result = service.callTool("read_file", mapOf("path" to "src/main/App.kt"))
+    fun `callTool handles get_service_info for specific service`() {
+        val result = service.callTool("get_service_info", mapOf("service" to "backend"))
 
         assertThat(result.isError).isFalse()
-        assertThat(result.content[0].text).contains("src/main/App.kt")
-    }
-
-    @Test
-    fun `callTool handles get_service_info default tool`() {
-        val result = service.callTool("get_service_info", mapOf("service" to "order-service"))
-
-        assertThat(result.isError).isFalse()
-        assertThat(result.content[0].text).contains("order-service")
+        assertThat(result.content[0].text).contains("Spring Boot")
+        assertThat(result.content[0].text).contains("8080")
     }
 
     @Test
@@ -78,19 +92,100 @@ class McpProxyServiceTest {
         assertThat(result.content[0].text).contains("Unknown tool")
     }
 
+    @Test
+    fun `callTool run_baseline delegates to BaselineService`() {
+        every { baselineService.runBaselines(any(), any()) } returns BaselineService.BaselineReport(
+            results = listOf(
+                BaselineService.BaselineResult(
+                    name = "code-style-baseline",
+                    status = "PASS",
+                    durationMs = 500,
+                    output = "All checks passed",
+                    errorOutput = "",
+                    exitCode = 0
+                )
+            ),
+            totalDurationMs = 500,
+            timestamp = "2026-02-18T10:00:00Z",
+            allPassed = true,
+            summary = "Baseline Report: 1 passed, 0 failed\n  [PASS] code-style-baseline (500ms)"
+        )
+
+        val result = service.callTool("run_baseline", mapOf(
+            "baselines" to listOf("code-style-baseline")
+        ))
+
+        assertThat(result.isError).isFalse()
+        assertThat(result.content[0].text).contains("PASS")
+    }
+
+    @Test
+    fun `callTool run_baseline reports failure correctly`() {
+        every { baselineService.runBaselines(any(), any()) } returns BaselineService.BaselineReport(
+            results = listOf(
+                BaselineService.BaselineResult(
+                    name = "security-baseline",
+                    status = "FAIL",
+                    durationMs = 1200,
+                    output = "Found hardcoded credentials in Config.kt",
+                    errorOutput = "",
+                    exitCode = 1
+                )
+            ),
+            totalDurationMs = 1200,
+            timestamp = "2026-02-18T10:00:00Z",
+            allPassed = false,
+            summary = "Baseline Report: 0 passed, 1 failed\n  [FAIL] security-baseline (1200ms)"
+        )
+
+        val result = service.callTool("run_baseline", mapOf(
+            "baselines" to listOf("security-baseline")
+        ))
+
+        assertThat(result.isError).isTrue()
+        assertThat(result.content[0].text).contains("FAIL")
+    }
+
+    @Test
+    fun `callTool list_baselines delegates to BaselineService`() {
+        every { baselineService.listBaselines() } returns listOf(
+            "code-style-baseline",
+            "security-baseline",
+            "test-coverage-baseline"
+        )
+
+        val result = service.callTool("list_baselines", emptyMap())
+
+        assertThat(result.isError).isFalse()
+        assertThat(result.content[0].text).contains("code-style-baseline")
+        assertThat(result.content[0].text).contains("3")
+    }
+
+    @Test
+    fun `callTool search_knowledge requires query param`() {
+        val result = service.callTool("search_knowledge", mapOf("query" to ""))
+
+        assertThat(result.isError).isTrue()
+        assertThat(result.content[0].text).contains("required")
+    }
+
+    @Test
+    fun `callTool read_file prevents path traversal`() {
+        val result = service.callTool("read_file", mapOf("path" to "../../../etc/passwd"))
+
+        assertThat(result.isError).isTrue()
+        assertThat(result.content[0].text).contains("path traversal")
+    }
+
     // --- Cache Tests ---
 
     @Test
     fun `invalidateCache clears the tool cache`() {
-        // First call populates default tools
         service.listTools()
-
-        // Invalidate
         service.invalidateCache()
 
-        // Should still return defaults (no servers configured)
         val tools = service.listTools()
-        assertThat(tools).hasSize(3)
+        assertThat(tools).hasSizeGreaterThanOrEqualTo(6)
     }
 
     // --- formatResult Tests ---

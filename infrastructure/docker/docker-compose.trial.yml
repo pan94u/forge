@@ -12,6 +12,7 @@ services:
       FORGE_PLUGINS_PATH: /plugins
     volumes:
       - ../../plugins:/plugins:ro
+      - ../../knowledge-base:/knowledge-base:ro
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/api/knowledge/search"]
       interval: 15s

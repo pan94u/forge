@@ -62,17 +62,17 @@ class ClaudeAdapterToolCallingTest {
             tools = emptyList()
         ).toList()
 
-        assertThat(events).hasSize(6)
+        // content_block_stop for text blocks does NOT emit ToolUseEnd (only tool_use blocks do)
+        assertThat(events).hasSize(5)
         assertThat(events[0]).isInstanceOf(StreamEvent.MessageStart::class.java)
         assertThat((events[0] as StreamEvent.MessageStart).messageId).isEqualTo("msg_123")
 
         assertThat(events[1]).isEqualTo(StreamEvent.ContentDelta("Hello"))
         assertThat(events[2]).isEqualTo(StreamEvent.ContentDelta(" world"))
 
-        assertThat(events[3]).isInstanceOf(StreamEvent.ToolUseEnd::class.java) // content_block_stop
-        assertThat(events[4]).isInstanceOf(StreamEvent.MessageDelta::class.java)
-        assertThat((events[4] as StreamEvent.MessageDelta).stopReason).isEqualTo(StopReason.END_TURN)
-        assertThat(events[5]).isEqualTo(StreamEvent.MessageStop)
+        assertThat(events[3]).isInstanceOf(StreamEvent.MessageDelta::class.java)
+        assertThat((events[3] as StreamEvent.MessageDelta).stopReason).isEqualTo(StopReason.END_TURN)
+        assertThat(events[4]).isEqualTo(StreamEvent.MessageStop)
     }
 
     @Test
