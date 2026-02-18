@@ -176,9 +176,7 @@ forge:
   # ---------------------------------------------------------------------------
   websocket:
     endpoint: /ws
-    allowed-origins:
-      - ${FORGE_FRONTEND_URL:http://localhost:3000}
-      - ${FORGE_FRONTEND_URL_ALT:http://localhost:5173}
+    allowed-origins: ${FORGE_WEBSOCKET_ORIGINS:http://localhost:3000,http://localhost:5173,http://localhost:9000}
     heartbeat-interval-seconds: 25
     max-sessions-per-user: 5
     message-buffer-size: 8192

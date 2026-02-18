@@ -170,7 +170,9 @@ class ClaudeAdapter(
         val request = buildHttpRequest(requestBody)
 
         return flow {
+            logger.debug("Calling Claude API: model=$model, messages=${messages.size}, tools=${tools.size}")
             val response = client.newCall(request).execute()
+            logger.debug("Claude API response: status=${response.code}")
 
             if (!response.isSuccessful) {
                 val body = response.body?.string() ?: "Unknown error"
@@ -183,6 +185,7 @@ class ClaudeAdapter(
 
             try {
                 var contentBlockIndex = 0
+                val toolUseBlockIndices = mutableSetOf<Int>()
                 var line: String?
 
                 while (reader.readLine().also { line = it } != null) {
@@ -209,6 +212,7 @@ class ClaudeAdapter(
                                 val blockType = contentBlock?.get("type")?.asString
 
                                 if (blockType == "tool_use") {
+                                    toolUseBlockIndices.add(contentBlockIndex)
                                     val toolId = contentBlock.get("id")?.asString ?: ""
                                     val toolName = contentBlock.get("name")?.asString ?: ""
                                     emit(StreamEvent.ToolUseStart(contentBlockIndex, toolId, toolName))
@@ -238,7 +242,10 @@ class ClaudeAdapter(
 
                             "content_block_stop" -> {
                                 val blockIndex = event.get("index")?.asInt ?: contentBlockIndex
-                                emit(StreamEvent.ToolUseEnd(blockIndex))
+                                // Only emit ToolUseEnd for tool_use blocks, not text blocks
+                                if (blockIndex in toolUseBlockIndices) {
+                                    emit(StreamEvent.ToolUseEnd(blockIndex))
+                                }
                             }
 
                             "message_delta" -> {

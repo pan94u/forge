@@ -1,10 +1,18 @@
 "use client";
 
 import React, { useState, useRef, useEffect, useCallback } from "react";
-import { Send, Paperclip, RotateCcw, StopCircle } from "lucide-react";
+import { Send, Paperclip, RotateCcw, StopCircle, Eye, Compass, Brain, Zap, CheckCircle2 } from "lucide-react";
 import { ChatMessage, type Message } from "@/components/chat/ChatMessage";
 import { ContextPicker, type ContextItem } from "@/components/chat/ContextPicker";
-import { claudeClient, type StreamEvent } from "@/lib/claude-client";
+import { claudeClient, type StreamEvent, type OodaPhase } from "@/lib/claude-client";
+
+const OODA_PHASES: { key: OodaPhase; label: string; icon: React.ElementType }[] = [
+  { key: "observe", label: "Observe", icon: Eye },
+  { key: "orient", label: "Orient", icon: Compass },
+  { key: "decide", label: "Decide", icon: Brain },
+  { key: "act", label: "Act", icon: Zap },
+  { key: "complete", label: "Done", icon: CheckCircle2 },
+];
 
 interface AiChatSidebarProps {
   workspaceId: string;
@@ -28,7 +36,9 @@ export function AiChatSidebar({
     name: string;
     skills: string[];
     reason: string;
+    confidence: number;
   } | null>(null);
+  const [oodaPhase, setOodaPhase] = useState<OodaPhase | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -149,11 +159,15 @@ export function AiChatSidebar({
         contexts,
         (event: StreamEvent) => {
           switch (event.type) {
+            case "ooda_phase":
+              setOodaPhase(event.phase ?? null);
+              break;
             case "profile_active":
               setActiveProfile({
                 name: event.activeProfile ?? "unknown",
                 skills: event.loadedSkills ?? [],
                 reason: event.routingReason ?? "",
+                confidence: event.confidence ?? 0,
               });
               break;
             case "thinking":
@@ -258,6 +272,7 @@ export function AiChatSidebar({
     } finally {
       setIsStreaming(false);
       setThinkingText("");
+      setOodaPhase(null);
       abortRef.current = null;
     }
   };
@@ -266,6 +281,7 @@ export function AiChatSidebar({
     abortRef.current?.abort();
     setIsStreaming(false);
     setThinkingText("");
+    setOodaPhase(null);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -319,16 +335,67 @@ export function AiChatSidebar({
         {messages.map((message) => (
           <ChatMessage key={message.id} message={message} />
         ))}
-        {activeProfile && isStreaming && (
-          <div className="flex items-center gap-1.5 text-xs text-muted-foreground border border-border rounded-md px-2 py-1 bg-muted/50">
-            <span className="font-medium text-primary">
-              {activeProfile.name.replace("-profile", "")}
-            </span>
-            <span className="text-border">|</span>
-            <span className="truncate">
-              {activeProfile.skills.slice(0, 3).join(", ")}
-              {activeProfile.skills.length > 3 && ` +${activeProfile.skills.length - 3}`}
-            </span>
+        {isStreaming && (activeProfile || oodaPhase) && (
+          <div className="space-y-1.5 mx-1">
+            {/* OODA Phase Indicator */}
+            {oodaPhase && (
+              <div className="flex items-center gap-0.5">
+                {OODA_PHASES.map((p) => {
+                  const isActive = p.key === oodaPhase;
+                  const phaseIdx = OODA_PHASES.findIndex(x => x.key === oodaPhase);
+                  const thisIdx = OODA_PHASES.findIndex(x => x.key === p.key);
+                  const isPast = thisIdx < phaseIdx;
+                  const Icon = p.icon;
+                  return (
+                    <div
+                      key={p.key}
+                      className={`flex items-center gap-0.5 rounded px-1.5 py-0.5 text-xs transition-colors ${
+                        isActive
+                          ? "bg-primary/15 text-primary font-medium"
+                          : isPast
+                            ? "text-green-400"
+                            : "text-muted-foreground/40"
+                      }`}
+                      title={p.label}
+                    >
+                      <Icon className="h-3 w-3" />
+                      {isActive && <span>{p.label}</span>}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            {/* Profile Badge */}
+            {activeProfile && (
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground border border-border rounded-md px-2 py-1 bg-muted/50">
+                {/* Confidence dot */}
+                <span
+                  className={`h-1.5 w-1.5 rounded-full flex-shrink-0 ${
+                    activeProfile.confidence >= 0.8
+                      ? "bg-green-400"
+                      : activeProfile.confidence >= 0.5
+                        ? "bg-yellow-400"
+                        : "bg-muted-foreground"
+                  }`}
+                  title={`Confidence: ${Math.round(activeProfile.confidence * 100)}%`}
+                />
+                <span className="font-medium text-primary">
+                  {activeProfile.name.replace("-profile", "")}
+                </span>
+                <span className="text-border">|</span>
+                <span className="truncate">
+                  {activeProfile.skills.slice(0, 3).join(", ")}
+                  {activeProfile.skills.length > 3 && ` +${activeProfile.skills.length - 3}`}
+                </span>
+                {/* Routing reason */}
+                {activeProfile.reason && (
+                  <>
+                    <span className="text-border">|</span>
+                    <span className="truncate italic">{activeProfile.reason}</span>
+                  </>
+                )}
+              </div>
+            )}
           </div>
         )}
         {thinkingText && (

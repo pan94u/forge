@@ -24,6 +24,7 @@ Thumbs.db
 # Environment
 .env
 .env.local
+.env.trial
 *.local
 
 # Node (Web IDE frontend)
@@ -33,6 +34,13 @@ web-ide/frontend/out/
 
 # Docker
 docker-compose.override.yml
+
+# Logs
+**/logs/
+
+# Build artifacts
+web-ide/frontend/next-env.d.ts
+web-ide/frontend/tsconfig.tsbuildinfo
 
 # Secrets
 *.pem

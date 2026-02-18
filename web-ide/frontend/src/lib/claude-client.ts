@@ -1,3 +1,5 @@
+export type OodaPhase = "observe" | "orient" | "decide" | "act" | "complete";
+
 export interface StreamEvent {
   type:
     | "thinking"
@@ -6,7 +8,8 @@ export interface StreamEvent {
     | "tool_result"
     | "error"
     | "done"
-    | "profile_active";
+    | "profile_active"
+    | "ooda_phase";
   content?: string;
   toolCallId?: string;
   toolName?: string;
@@ -15,6 +18,7 @@ export interface StreamEvent {
   loadedSkills?: string[];
   routingReason?: string;
   confidence?: number;
+  phase?: OodaPhase;
 }
 
 export interface ChatContext {
@@ -164,11 +168,17 @@ class ClaudeClient {
         buffer = lines.pop() ?? "";
 
         for (const line of lines) {
-          if (line.startsWith("data: ")) {
-            const data = line.slice(6).trim();
-            if (data === "[DONE]") {
-              onEvent({ type: "done" });
-              return;
+          // Handle both "data:" and "data: " (Spring SSE omits the space)
+          if (line.startsWith("data:")) {
+            const data = line.startsWith("data: ")
+              ? line.slice(6).trim()
+              : line.slice(5).trim();
+            if (!data || data === "[DONE]") {
+              if (data === "[DONE]") {
+                onEvent({ type: "done" });
+                return;
+              }
+              continue;
             }
             try {
               const parsed = JSON.parse(data) as StreamEvent;

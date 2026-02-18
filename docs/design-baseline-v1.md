@@ -1,8 +1,10 @@
-# Forge Web IDE — 设计基线 v1
+# Forge Web IDE — 设计基线 v2
 
-> 基线日期: 2026-02-18 | Phase 1.5 E2E 验证通过后冻结
+> 基线日期: 2026-02-18 | Phase 2 E2E 验证通过后更新（v1 → v2）
 > 本文档冻结当前已验证的 UI/API/数据模型/架构设计细节，作为未来修改的对照基准。
 > 任何对本文档覆盖范围的修改，必须先意识到偏离、再决定是否接受。
+>
+> **v2 变更摘要**: 新增 Skill-Aware OODA Loop 架构（SkillLoader + ProfileRouter + SystemPromptAssembler）、Profile Badge UI、Prompt Caching、`/api/chat/skills` 和 `/api/chat/profiles` 端点、`profile_active` StreamEvent 类型。
 
 ---
 
@@ -35,12 +37,36 @@
 │          │   - 25+ 语言语法高亮              │   - @ 提及附加上下文    │
 │ (可折叠)  │   - Minimap + 括号匹配           │   - 流式响应展示       │
 │          │   - "AI Explain" 按钮             │   - Tool Call 展开    │
-│          ├──────────────────────────────────┤   - 会话管理          │
-│          │ Terminal Panel (可折叠底部)        │                       │
-│          │   - WebSocket 终端连接            │ (可折叠)               │
-│          │   - 彩色输出                      │                       │
+│          ├──────────────────────────────────┤   - Profile Badge     │
+│          │ Terminal Panel (可折叠底部)        │   - 会话管理          │
+│          │   - WebSocket 终端连接            │                       │
+│          │   - 彩色输出                      │ (可折叠)               │
 └──────────┴──────────────────────────────────┴───────────────────────┘
 ```
+
+#### AI Chat Sidebar Profile Badge（Phase 2 新增）
+
+流式响应期间，在消息列表底部显示当前 active profile 信息：
+
+```
+┌──────────────────────────────────────────┐
+│ development | kotlin-conventions, +3     │  ← Profile Badge
+└──────────────────────────────────────────┘
+```
+
+**Profile Badge 设计规范**：
+- 位置：消息列表底部，`thinkingText` 指示器上方
+- 仅在 `isStreaming && activeProfile` 时显示
+- 样式：`border border-border rounded-md px-2 py-1 bg-muted/50`
+- 布局：`flex items-center gap-1.5 text-xs text-muted-foreground`
+- Profile 名称：`font-medium text-primary`，去除 `-profile` 后缀
+- Skills 列表：最多显示 3 个，超出部分显示 `+N`
+- Profile 名和 Skills 之间用 `|` 分隔
+
+**Thinking 指示器设计规范**：
+- 三个圆点动画：`h-1.5 w-1.5 rounded-full bg-primary animate-thinking-dot`
+- 动画延迟：0ms / 200ms / 400ms
+- 旁边显示 `italic text-xs "Thinking..."`
 
 #### Knowledge Base（`/knowledge`）— 四标签页
 
@@ -61,7 +87,13 @@ Dashboard → 创建/选择 Workspace → 编辑文件（Monaco）
                                       ├→ AI 对话（AiChatSidebar）
                                       │    ├→ WebSocket 优先连接
                                       │    ├→ 发送消息 + @ 附加上下文
+                                      │    ├→ Profile 自动路由（profile_active 事件）
+                                      │    │    ├→ 显式标签（@规划/@设计/@开发/@测试/@运维）
+                                      │    │    ├→ 中英文关键词检测
+                                      │    │    ├→ 分支名模式匹配
+                                      │    │    └→ 默认 development
                                       │    ├→ 流式接收 thinking/content/tool_use 事件
+                                      │    ├→ Profile Badge 实时显示当前角色
                                       │    └→ Tool Call 展示输入/输出
                                       │
                                       ├→ 知识浏览（Knowledge）
@@ -77,6 +109,7 @@ Dashboard → 创建/选择 Workspace → 编辑文件（Monaco）
 
 **组件间通信**：
 - MonacoEditor → AiChatSidebar: 通过 `window.dispatchEvent(new CustomEvent('forge:ai-explain'))` 发送代码解释请求
+- Backend → AiChatSidebar: 通过 `profile_active` StreamEvent 传递路由决策（activeProfile / loadedSkills / routingReason / confidence）
 
 ### 1.4 样式系统
 
@@ -88,8 +121,12 @@ Dashboard → 创建/选择 Workspace → 编辑文件（Monaco）
 | 品牌色 | `forge` 色阶 (50-950) | 蓝色渐变 |
 | 正文字体 | Inter, system-ui | 无衬线 |
 | 等宽字体 | JetBrains Mono, Fira Code | 代码编辑器 + 终端 |
-| 自定义动画 | `animate-thinking-dot` | AI 思考指示器 (1.4s 循环) |
-| 图标库 | lucide-react 0.460+ | 全局统一图标 |
+| 自定义动画 | `animate-thinking-dot` | AI 思考指示器 (1.4s 循环，三点依次闪烁) |
+| 图标库 | lucide-react 0.460+ | 全局统一图标（Send, Paperclip, RotateCcw, StopCircle, User, Bot, Wrench, CheckCircle, Loader2, AlertCircle, Copy, Check 等） |
+| 尺寸约定 | 图标 `h-3.5 w-3.5` ~ `h-4 w-4` | 小图标 3.5，正常 4，避免更大 |
+| 间距约定 | `gap-1.5` / `gap-2` / `px-2 py-1` | 紧凑但不拥挤，text-xs 为主 |
+| 交互反馈 | `hover:bg-accent` / `hover:text-foreground` | 统一使用 accent 色作为 hover 背景 |
+| 状态色 | green-400(成功), primary(进行中), destructive(错误) | Tool Call 和操作状态一致 |
 
 ### 1.5 关键前端依赖
 
@@ -117,6 +154,8 @@ Dashboard → 创建/选择 Workspace → 编辑文件（Monaco）
 | GET | `/api/chat/sessions/{sessionId}/messages` | — | `List<ChatMessage>` | 获取历史消息 |
 | POST | `/api/chat/sessions/{sessionId}/messages` | `ChatStreamMessage { type, content, contexts? }` | `ChatMessage` | 同步发送消息（非流式） |
 | POST | `/api/chat/sessions/{sessionId}/stream` | `ChatStreamMessage { type, content, contexts? }` | SSE stream | 流式发送消息 |
+| GET | `/api/chat/skills` | — | `List<SkillInfo { name, description, tags, trigger }>` | 列出所有加载的 Skills（Phase 2 新增） |
+| GET | `/api/chat/profiles` | — | `List<ProfileInfo { name, description, skills, baselines }>` | 列出所有加载的 Profiles（Phase 2 新增） |
 
 #### Workspace API (`WorkspaceController` → `/api/workspaces`)
 
@@ -182,13 +221,23 @@ SSE 端点: `POST /api/chat/sessions/{sessionId}/stream`
 
 ```typescript
 type StreamEvent =
-  | { type: "thinking", content?: string }        // AI 思考过程
-  | { type: "content", content?: string }          // 文本输出增量
+  | { type: "profile_active",                       // Profile 路由结果（Phase 2 新增，Agentic Loop 开始前发送）
+      activeProfile?: string,                       //   路由到的 profile 名称
+      loadedSkills?: string[],                      //   加载的 skill 列表
+      routingReason?: string,                       //   路由原因（如 "keyword '接口' (score=1, conf=0.6)"）
+      confidence?: number }                         //   置信度 0.0-1.0
+  | { type: "thinking", content?: string }          // AI 思考过程
+  | { type: "content", content?: string }           // 文本输出增量
   | { type: "tool_use_start", toolCallId?: string, toolName?: string }  // Tool 调用开始
   | { type: "tool_use", toolCallId?: string, toolName?: string, toolInput?: object }  // Tool 调用完整
   | { type: "tool_result", toolCallId?: string, content?: string, durationMs?: number }  // Tool 执行结果
-  | { type: "error", content?: string }            // 错误
-  | { type: "done" }                               // 流结束
+  | { type: "error", content?: string }             // 错误
+  | { type: "done" }                                // 流结束
+```
+
+**事件发送顺序**:
+```
+profile_active → [thinking →] content* → [tool_use → tool_result →]* → content* → done
 ```
 
 **传输方式**:
@@ -393,17 +442,51 @@ docker compose -f docker-compose.trial.yml up --build
          └─ 等待完整响应返回
 ```
 
-### 4.5 后端 Agentic Loop
+### 4.5 后端 Skill-Aware Agentic Loop（Phase 2 重构）
 
-源文件: `web-ide/backend/src/main/kotlin/com/forge/webide/service/ClaudeAgentService.kt`
+**核心组件**（`com.forge.webide.service.skill` 包）：
+
+| 组件 | 源文件 | 职责 |
+|------|--------|------|
+| `SkillModels.kt` | 35 行 | 领域模型：`SkillDefinition`, `ProfileDefinition`, `ProfileRoutingResult` |
+| `SkillLoader.kt` | 266 行 | 扫描 `plugins/` 目录，解析 YAML frontmatter (Jackson YAML)，`ConcurrentHashMap` 缓存，`@PostConstruct` 初始化 |
+| `ProfileRouter.kt` | 197 行 | 4 级优先路由：显式标签 → 中英文关键词 → 分支名模式 → 默认 development |
+| `SystemPromptAssembler.kt` | 238 行 | 6 段式动态 system prompt 组装 |
+
+**完整 Agentic Loop 流程**:
 
 ```
-用户消息 → 构建上下文 (contextual message + history)
+用户消息
     │
     ▼
-agenticStream() — 最多 MAX_AGENTIC_TURNS 轮
+ProfileRouter.route(message) → ProfileRoutingResult {profile, confidence, reason}
+    │   ├─ L1: 显式标签 @规划/@设计/@开发/@测试/@运维 (confidence=1.0)
+    │   ├─ L2: 中英文关键词匹配 (confidence=0.6-0.8)
+    │   ├─ L3: 分支名模式 feature/*/hotfix/*/release/* (confidence=0.5)
+    │   └─ L4: 默认 development-profile (confidence=0.3)
     │
-    ├─ 每轮: ClaudeAdapter.streamWithTools() → 实时发送事件到客户端
+    ▼
+SkillLoader.loadSkillsForProfile(profile) → List<SkillDefinition>
+    │   (展开 "foundation-skills-all" → 所有 foundation skills)
+    │   (跳过 "domain-skills-contextual" → 运行时依赖)
+    │
+    ▼
+SystemPromptAssembler.assemble(profile, skills) → String
+    │   [1] SuperAgent 角色定义 (CLAUDE.md, 排除 routing/loading 段)
+    │   [2] Active Profile OODA 指导
+    │   [3] 每个 Skill 内容作为独立 section
+    │   [4] Baseline 执行规则
+    │   [5] HITL 检查点
+    │   [6] Available MCP 工具
+    │
+    ▼
+emit profile_active 事件 → 前端显示 Profile Badge
+    │
+    ▼
+agenticStream() — 最多 MAX_AGENTIC_TURNS(5) 轮
+    │
+    ├─ 每轮: ClaudeAdapter.streamWithTools(systemPrompt=动态prompt)
+    │   └─ Prompt Caching: system prompt 以 content block + cache_control 发送
     │
     ├─ 如果 stop_reason == TOOL_USE:
     │    ├─ 执行工具 (McpProxyService.callTool)
@@ -415,6 +498,24 @@ agenticStream() — 最多 MAX_AGENTIC_TURNS 轮
          ├─ 知识空白检测 (KnowledgeGapDetectorService)
          └─ 发送 done 事件
 ```
+
+**Prompt Caching 实现**:
+
+| 状态 | system prompt 发送格式 | 费用（以 development 24K tokens 为例） |
+|------|----------------------|--------------------------------------|
+| 无缓存 | `"system": "..."` | $0.072/次 |
+| 缓存写入 | `"system": [{"type":"text","text":"...","cache_control":{"type":"ephemeral"}}]` + `anthropic-beta: prompt-caching-2024-07-31` header | $0.090/次 (+25%) |
+| 缓存命中 | 同上（5 分钟窗口内自动命中） | **$0.0072/次 (-90%)** |
+
+**各 Profile System Prompt 规模**:
+
+| Profile | 字符数 | ~Input Tokens | 加载 Skills 数 |
+|---------|--------|---------------|---------------|
+| development | 96,165 | ~24,000 | 17 |
+| design | 43,248 | ~10,800 | 3 |
+| testing | 38,504 | ~9,600 | 3 |
+| ops | 32,234 | ~8,000 | 3 |
+| planning | 29,595 | ~7,400 | 2 |
 
 ### 4.6 Spring Security 配置
 
@@ -437,14 +538,15 @@ agenticStream() — 最多 MAX_AGENTIC_TURNS 轮
 | 数据库迁移 | Flyway | (Spring Boot managed) |
 | HTTP 客户端 | Spring WebFlux (WebClient) | (Spring Boot managed) |
 | 安全 | Spring Security + OAuth2 Resource Server | (试用阶段禁用) |
+| YAML 解析 | Jackson Dataformat YAML | Skill/Profile frontmatter 解析 |
 | 序列化 | Jackson + Kotlin Module | (Spring Boot managed) |
-| 测试 | JUnit 5 + MockK 1.13 + AssertJ | 37 tests passing |
+| 测试 | JUnit 5 + MockK 1.13 + AssertJ | 92 tests passing |
 
 ---
 
 ## 五、验证状态
 
-> Phase 1.5 E2E 验证结果 (2026-02-18)
+> Phase 2 E2E 验证结果 (2026-02-18) — 22/24 测试路径通过
 
 | # | 验证项 | 状态 | 说明 |
 |---|--------|------|------|
@@ -452,22 +554,124 @@ agenticStream() — 最多 MAX_AGENTIC_TURNS 轮
 | 2 | 容器启动 | ✅ | 3 容器 running, backend healthy |
 | 3 | Nginx 路由 | ✅ | 前端 200, API 正常返回 |
 | 4 | 前端页面加载 | ✅ | `http://localhost:9000` 返回 200 |
-| 5 | 后端 API | ✅ | `/api/knowledge/search` 返回数据 |
-| 6 | AI Chat 流式响应 | ⏳ | 待 API Key 配置后验证 |
-| 7 | Tool Call / Agentic Loop | ⏳ | 待 API Key 配置后验证 |
+| 5 | 后端 API | ✅ | `/api/knowledge/search` + `/api/chat/skills`(29) + `/api/chat/profiles`(5) |
+| 6 | AI Chat 流式响应 | ✅ | 真实 Claude API Key 验证通过 |
+| 7 | Profile 路由（显式标签） | ✅ | 5/5 — @规划/@设计/@开发/@测试/@运维 全部正确，confidence=1.0 |
+| 8 | Profile 路由（关键词） | ✅ | 5/5 — 中英文关键词检测正确 |
+| 9 | Profile 路由（默认回退） | ✅ | 1/1 — 无关消息回退到 development |
+| 10 | Profile 路由（标签覆盖） | ✅ | 1/1 — 标签优先级高于关键词 |
+| 11 | Prompt Caching | ✅ | 缓存命中后 system prompt 费用降 90% |
+| 12 | 降级与容错 | ⏳ | 2/2 未测试 |
+
+**单元测试**: 92 tests, 0 failures（`./gradlew :web-ide:backend:build`）
+
+| 测试文件 | 测试数 | 覆盖范围 |
+|---------|--------|---------|
+| `SkillLoaderTest.kt` | 11 | frontmatter 解析、缓存、降级、reload |
+| `ProfileRouterTest.kt` | 14 | 5 标签 + 中英文关键词 + 分支名 + 优先级链 |
+| `SystemPromptAssemblerTest.kt` | 13 | 6 段组装 + MCP 降级 + 空集 + prompt 大小 |
+| `SkillLoaderIntegrationTest.kt` | 7 | 真实 plugins/ 目录集成验证 |
+| `ClaudeAdapterToolCallingTest.kt` | 9 | SSE 解析 + HTTP 错误 + tool_use 序列化 |
+| `ClaudeAgentServiceTest.kt` | 7 | 同步/流式 + Agentic Loop + 降级 |
+| `McpProxyServiceTest.kt` | 10 | Tool handlers + Cache + formatResult |
+| `McpControllerTest.kt` | 3 | REST 端点 |
+| `ChatRepositoryTest.kt` | 8 | JPA CRUD + 排序 + cascade |
+
+**Skill 加载验证**: 29 skills, 5 profiles（Docker 日志确认）
 
 ---
 
-## 六、变更规则
+## 六、前端设计规范（开发参考）
+
+> Phase 2 及后续开发必须延续以下设计风格，保持 UI 一致性。
+
+### 6.1 组件结构模式
+
+```typescript
+// 标准组件结构
+"use client";
+import React, { useState, useRef, useEffect, useCallback } from "react";
+import { IconName } from "lucide-react";  // 统一图标来源
+
+interface ComponentProps { /* typed props */ }
+
+export function ComponentName({ prop1, prop2 }: ComponentProps) {
+  // State → Refs → Effects → Handlers → Return JSX
+}
+```
+
+### 6.2 布局与间距
+
+| 场景 | 样式 | 示例 |
+|------|------|------|
+| 容器布局 | `flex h-full flex-col` | AiChatSidebar 根容器 |
+| Header 区域 | `flex items-center justify-between border-b border-border px-4 py-2` | 面板标题栏 |
+| 滚动区域 | `flex-1 overflow-auto p-4 space-y-4` | 消息列表 |
+| 输入区域 | `border-t border-border p-3` | 底部输入框 |
+| 信息标签 | `flex items-center gap-1.5 text-xs text-muted-foreground` | Profile Badge, 状态标签 |
+| 芯片/Chip | `rounded-full bg-primary/10 px-2 py-0.5 text-xs text-primary` | Context chips, @标签 |
+
+### 6.3 交互模式
+
+| 模式 | 实现方式 |
+|------|---------|
+| 按钮 hover | `hover:bg-accent` (背景) 或 `hover:text-foreground` (文字) |
+| 禁用状态 | `disabled:opacity-50` |
+| 危险操作 | `bg-destructive text-destructive-foreground hover:bg-destructive/90` |
+| 主要操作 | `bg-primary text-primary-foreground hover:bg-primary/90` |
+| 可折叠/展开 | 用 state toggle + 条件渲染（不用 CSS transition） |
+| 加载骨架 | `animate-pulse rounded bg-muted`（如 ContextPicker 的 loading） |
+| 流式内容 | 增量追加到 state，使用 `prev.map(m => m.id === id ? {...m, content} : m)` 更新 |
+
+### 6.4 消息气泡设计
+
+| 角色 | 样式 |
+|------|------|
+| 用户消息 | `bg-primary text-primary-foreground`，头像 `bg-primary` + `User` 图标，右对齐 |
+| AI 消息 | `bg-card border border-border`，头像 `bg-forge-600` + `Bot` 图标，左对齐 |
+| 头像 | `h-7 w-7 rounded-full flex-shrink-0` |
+| 最大宽度 | `max-w-[85%]` |
+| 时间戳 | `text-xs text-muted-foreground`，显示 `toLocaleTimeString()` |
+
+### 6.5 Tool Call 展示
+
+- 折叠式卡片：`rounded-md border border-border bg-card text-xs`
+- 标题行：工具图标 (`Wrench h-3 w-3`) + 工具名 (`font-mono font-medium`) + 状态图标
+- 状态图标：`Loader2 animate-spin text-primary`(运行中) / `CheckCircle text-green-400`(完成) / `AlertCircle text-destructive`(错误)
+- 展开详情：`border-t border-border px-3 py-2`，Input/Output 用 `pre font-mono bg-muted p-2`
+
+### 6.6 StreamEvent 处理模式
+
+前端处理 SSE/WebSocket 事件的标准 switch 结构：
+
+```typescript
+(event: StreamEvent) => {
+  switch (event.type) {
+    case "profile_active":  // 更新 Profile Badge state
+    case "thinking":        // 更新 thinkingText state
+    case "content":         // 增量追加到 fullContent，更新消息列表
+    case "tool_use":        // push 到 toolCalls 数组，更新消息
+    case "tool_result":     // 更新对应 toolCall 的 output + status
+    case "error":           // 追加错误信息到消息内容
+    case "done":            // 流结束，清理状态
+  }
+}
+```
+
+---
+
+## 七、变更规则
 
 1. **修改前**：查阅本文档对应基线节，确认当前设计
 2. **评估影响**：判断变更是否为"非预期退化"还是"有意演进"
 3. **有意演进**：更新本文档对应节 + 更新 `design-regression-baseline.sh` 快照
 4. **非预期退化**：回退变更，或经 Review 后接受并更新基线
 5. **新增设计**：在对应维度添加新节，标注引入日期和原因
+6. **前端新增组件**：必须遵循第六节设计规范，保持视觉和交互一致性
 
 ---
 
-> 基线版本: v1
-> 冻结日期: 2026-02-18
-> 下次评审: Phase 2 开始前
+> 基线版本: v2
+> 初始冻结日期: 2026-02-18 (v1, Phase 1.5)
+> 本次更新日期: 2026-02-18 (v2, Phase 2 E2E 验证后)
+> 下次评审: Phase 2 Sprint 2A 完成后

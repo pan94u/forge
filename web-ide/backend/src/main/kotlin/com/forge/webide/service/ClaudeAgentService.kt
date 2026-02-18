@@ -157,6 +157,9 @@ class ClaudeAgentService(
                     )
                 }
 
+                // OODA: Observe — understanding user intent
+                onEvent(mapOf("type" to "ooda_phase", "phase" to "observe"))
+
                 val promptResult = buildDynamicSystemPrompt(message)
                 logger.info("Stream profile: {}, Skills: {}", promptResult.activeProfile, promptResult.loadedSkills)
 
@@ -165,6 +168,9 @@ class ClaudeAgentService(
                     maxTokens = 4096,
                     systemPrompt = promptResult.systemPrompt
                 )
+
+                // OODA: Orient — profile routed, context analyzed
+                onEvent(mapOf("type" to "ooda_phase", "phase" to "orient"))
 
                 // Emit profile routing info
                 onEvent(mapOf(
@@ -178,6 +184,9 @@ class ClaudeAgentService(
                 // Persist the user message
                 persistMessage(sessionId, Message.Role.USER, fullMessage)
 
+                // OODA: Decide — Claude formulating response
+                onEvent(mapOf("type" to "ooda_phase", "phase" to "decide"))
+
                 // Run the agentic loop
                 val result = runBlocking {
                     agenticStream(
@@ -187,6 +196,9 @@ class ClaudeAgentService(
                         onEvent = onEvent
                     )
                 }
+
+                // OODA: Complete — response delivered
+                onEvent(mapOf("type" to "ooda_phase", "phase" to "complete"))
 
                 // Persist the final assistant response
                 persistMessage(sessionId, Message.Role.ASSISTANT, result.content, result.toolCalls)
@@ -237,9 +249,15 @@ class ClaudeAgentService(
             var stopReason: StopReason? = null
             var currentToolId = ""
             var currentToolName = ""
+            var firstEventReceived = false
+            val turnStartMs = System.currentTimeMillis()
 
             // Stream and emit events in real-time
             claudeAdapter.streamWithTools(currentMessages, options, tools).collect { event ->
+                if (!firstEventReceived) {
+                    firstEventReceived = true
+                    logger.debug("First event received for turn $turn in ${System.currentTimeMillis() - turnStartMs}ms: ${event::class.simpleName}")
+                }
                 when (event) {
                     is StreamEvent.MessageStart -> {
                         // no-op for the client; they already know we're streaming
@@ -262,19 +280,25 @@ class ClaudeAgentService(
                         currentToolInputJson.append(event.partialJson)
                     }
                     is StreamEvent.ToolUseEnd -> {
-                        val inputStr = currentToolInputJson.toString()
-                        val input = parseToolInput(inputStr)
-                        currentToolUses.add(PendingToolUse(
-                            id = currentToolId,
-                            name = currentToolName,
-                            input = input
-                        ))
-                        onEvent(mapOf(
-                            "type" to "tool_use",
-                            "toolCallId" to currentToolId,
-                            "toolName" to currentToolName,
-                            "toolInput" to input
-                        ))
+                        // Only process if we have a valid tool use in progress
+                        if (currentToolId.isNotBlank()) {
+                            val inputStr = currentToolInputJson.toString()
+                            val input = parseToolInput(inputStr)
+                            currentToolUses.add(PendingToolUse(
+                                id = currentToolId,
+                                name = currentToolName,
+                                input = input
+                            ))
+                            onEvent(mapOf(
+                                "type" to "tool_use",
+                                "toolCallId" to currentToolId,
+                                "toolName" to currentToolName,
+                                "toolInput" to input
+                            ))
+                            // Reset for next tool use
+                            currentToolId = ""
+                            currentToolName = ""
+                        }
                     }
                     is StreamEvent.MessageDelta -> {
                         stopReason = event.stopReason
@@ -288,10 +312,16 @@ class ClaudeAgentService(
                 }
             }
 
+            val turnDurationMs = System.currentTimeMillis() - turnStartMs
+            logger.debug("Turn $turn completed in ${turnDurationMs}ms, stopReason=$stopReason, tools=${currentToolUses.size}, textLength=${turnText.length}")
+
             finalContent = turnText.toString()
 
             // If tool_use stop reason, execute tools and loop
             if (stopReason == StopReason.TOOL_USE && currentToolUses.isNotEmpty()) {
+                // OODA: Act — executing tools
+                onEvent(mapOf("type" to "ooda_phase", "phase" to "act"))
+
                 // Build assistant message with tool uses
                 val assistantMsg = Message(
                     role = Message.Role.ASSISTANT,
