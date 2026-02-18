@@ -1,10 +1,12 @@
-# Forge Web IDE — 设计基线 v4
+# Forge Web IDE — 设计基线 v5
 
-> 基线日期: 2026-02-19 | Phase 2 全部完成后更新（v3 → v4）
+> 基线日期: 2026-02-19 | Phase 2.5 全部完成后更新（v4 → v5）
 > 本文档冻结当前已验证的 UI/API/数据模型/架构设计细节，作为未来修改的对照基准。
 > 任何对本文档覆盖范围的修改，必须先意识到偏离、再决定是否接受。
 >
-> **v4 变更摘要**: MCP 实连（McpProxyService → 真实 HTTP 调用 6 个 MCP 工具）、MetricsService（Micrometer 自定义指标 + Actuator/Prometheus 暴露）、agent-eval 真实模型调用（5 种断言类型）、BaselineService 底线集成、32 Skills / 5 Profiles、跨栈迁移 PoC（100% 业务规则覆盖）。
+> **v5 变更摘要**: AI → Workspace 交付闭环（3 个 workspace 工具 + file_changed 事件 + System Prompt 交付指导）、Keycloak SSO（OIDC PKCE 登录/回调/JWT/登出、4 容器部署）、代码块 Apply 按钮、Context Picker 实连（/api/context/search 4 类别）、FileExplorer CRUD（新建/重命名/删除）、未保存标记 + 5 秒自动保存、知识库 12+ 文档（+5 新增）、MCP 工具 6 → 9。
+>
+> v4 变更摘要: MCP 实连（McpProxyService → 真实 HTTP 调用 6 个 MCP 工具）、MetricsService（Micrometer 自定义指标 + Actuator/Prometheus 暴露）、agent-eval 真实模型调用（5 种断言类型）、BaselineService 底线集成、32 Skills / 5 Profiles、跨栈迁移 PoC（100% 业务规则覆盖）。
 >
 > v3 变更摘要: 新增 OODA 阶段指示器 UI（5 图标流转）、Profile Badge 增强（confidence 圆点 + 路由原因）、`ooda_phase` StreamEvent 类型、SSE 格式兼容规范、WebSocket CORS 配置修复、ClaudeAdapter `content_block_stop` 修复。
 >
@@ -22,11 +24,15 @@
 | `/workspace/[id]` | IDE Workspace | `src/app/workspace/[id]/page.tsx` | 三面板 IDE：文件树 + 编辑器 + AI 聊天 |
 | `/knowledge` | Knowledge Base | `src/app/knowledge/page.tsx` | 四标签页：Docs / Architecture / Services / APIs |
 | `/workflows` | Workflow Editor | `src/app/workflows/page.tsx` | ReactFlow 可视化工作流编辑器 |
+| `/login` | Login | `src/app/login/page.tsx` | Keycloak SSO 登录入口（v5 新增） |
+| `/auth/callback` | Auth Callback | `src/app/auth/callback/page.tsx` | OIDC PKCE 回调处理（v5 新增） |
 
 **根布局** (`src/app/layout.tsx`):
 - `QueryClientProvider` (React Query 服务端状态)
 - 全局 Header + 可折叠 Sidebar
 - 默认暗色主题 (`<html className="dark">`)
+- Auth Guard：非公开页面检查 `isAuthenticated()`，未认证 → `/login`（v5 新增）
+- 公开页面（`/login`, `/auth/callback`）直接渲染，无 shell（v5 新增）
 
 ### 1.2 关键组件布局
 
@@ -34,17 +40,19 @@
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│ Header (全局)                                                       │
+│ Header (全局) — 角色切换 + 用户菜单(含 Sign out) + 命令面板(Cmd+K)   │
 ├──────────┬──────────────────────────────────┬───────────────────────┤
 │ File     │ Monaco Editor                    │ AI Chat Sidebar       │
 │ Explorer │   - 多标签页文件编辑               │   - 消息列表 + 自动滚动 │
 │          │   - 25+ 语言语法高亮              │   - @ 提及附加上下文    │
 │ (可折叠)  │   - Minimap + 括号匹配           │   - 流式响应展示       │
-│          │   - "AI Explain" 按钮             │   - Tool Call 展开    │
-│          ├──────────────────────────────────┤   - Profile Badge     │
-│          │ Terminal Panel (可折叠底部)        │   - 会话管理          │
-│          │   - WebSocket 终端连接            │                       │
-│          │   - 彩色输出                      │ (可折叠)               │
+│  CRUD:   │   - "AI Explain" 按钮             │   - Tool Call 展开    │
+│  +新建   │   - 未保存蓝色圆点 (v5)           │   - Profile Badge     │
+│  +重命名 │   - 5 秒自动保存 (v5)            │   - 代码块 Apply (v5)  │
+│  +删除   ├──────────────────────────────────┤   - 会话管理          │
+│  (v5)    │ Terminal Panel (可折叠底部)        │                       │
+│          │   - WebSocket 终端连接            │ (可折叠)               │
+│          │   - 彩色输出                      │                       │
 └──────────┴──────────────────────────────────┴───────────────────────┘
 ```
 
@@ -130,6 +138,9 @@ Dashboard → 创建/选择 Workspace → 编辑文件（Monaco）
 **组件间通信**：
 - MonacoEditor → AiChatSidebar: 通过 `window.dispatchEvent(new CustomEvent('forge:ai-explain'))` 发送代码解释请求
 - Backend → AiChatSidebar: 通过 `profile_active` StreamEvent 传递路由决策（activeProfile / loadedSkills / routingReason / confidence）
+- Backend → AiChatSidebar → WorkspacePage: `file_changed` SSE 事件 → `forge:file-changed` DOM CustomEvent → 刷新文件树 + 自动打开文件（v5 新增）
+- ChatMessage Apply 按钮 → WorkspacePage: `forge:file-changed` DOM CustomEvent → 刷新文件树（v5 新增）
+- FileExplorer CRUD → WorkspacePage: `onFileTreeChanged` callback → `queryClient.invalidateQueries`（v5 新增）
 
 ### 1.4 样式系统
 
@@ -142,7 +153,7 @@ Dashboard → 创建/选择 Workspace → 编辑文件（Monaco）
 | 正文字体 | Inter, system-ui | 无衬线 |
 | 等宽字体 | JetBrains Mono, Fira Code | 代码编辑器 + 终端 |
 | 自定义动画 | `animate-thinking-dot` | AI 思考指示器 (1.4s 循环，三点依次闪烁) |
-| 图标库 | lucide-react 0.460+ | 全局统一图标（Send, Paperclip, RotateCcw, StopCircle, User, Bot, Wrench, CheckCircle, Loader2, AlertCircle, Copy, Check, Eye, Compass, Brain, Zap, CheckCircle2 等） |
+| 图标库 | lucide-react 0.460+ | 全局统一图标（Send, Paperclip, RotateCcw, StopCircle, User, Bot, Wrench, CheckCircle, Loader2, AlertCircle, Copy, Check, Eye, Compass, Brain, Zap, CheckCircle2, FileDown, FilePlus, FolderPlus, Pencil, Trash2, LogOut 等） |
 | 尺寸约定 | 图标 `h-3.5 w-3.5` ~ `h-4 w-4` | 小图标 3.5，正常 4，避免更大 |
 | 间距约定 | `gap-1.5` / `gap-2` / `px-2 py-1` | 紧凑但不拥挤，text-xs 为主 |
 | 交互反馈 | `hover:bg-accent` / `hover:text-foreground` | 统一使用 accent 色作为 hover 背景 |
@@ -159,6 +170,90 @@ Dashboard → 创建/选择 Workspace → 编辑文件（Monaco）
 | @xyflow/react | 12.3+ | 工作流画布 + 服务依赖图 |
 | mermaid | 11.4+ | 架构图渲染 |
 | zustand | 5.0+ | 客户端状态管理 |
+
+### 1.6 FileExplorer CRUD 交互规范（v5 新增）
+
+**右键菜单** (`FileExplorer.tsx`):
+
+| 菜单项 | 图标 | 作用 | 交互方式 |
+|--------|------|------|---------|
+| New File | `FilePlus` | 在当前位置创建文件 | `window.prompt()` → `workspaceApi.createFile()` → 刷新树 + 打开文件 |
+| New Folder | `FolderPlus` | 在当前位置创建文件夹 | `window.prompt()` → 创建 `{folder}/.gitkeep` 占位 |
+| Copy Path | `Copy` | 复制文件路径 | `navigator.clipboard.writeText()` |
+| Rename | `Pencil` | 重命名文件 | `window.prompt()` → 读旧文件 → 创建新文件 → 删除旧文件 |
+| AI Explain | `Wand2` | AI 解释文件 | `forge:ai-explain` 自定义事件 |
+| Delete | `Trash2` | 删除文件 | `window.confirm()` → `workspaceApi.deleteFile()` |
+
+- 菜单分隔线：New File/New Folder → 分隔 → Copy Path/Rename/AI Explain → 分隔 → Delete
+- Delete 使用 `text-destructive` 红色文字
+- 顶部工具栏新增 FilePlus / FolderPlus 快捷按钮
+
+### 1.7 未保存标记 + 自动保存（v5 新增）
+
+**未保存指示器**:
+- 位置：文件 tab 中文件名左侧
+- 样式：`h-2 w-2 rounded-full bg-primary flex-shrink-0`（蓝色圆点）
+- 显示条件：`unsavedFiles.has(filePath)` 为 true
+- title: `"Unsaved changes"`
+
+**自动保存机制**:
+- 触发条件：编辑器 `onChange` 回调
+- Debounce：5000ms（每次编辑重置计时器）
+- 执行：`workspaceApi.saveFile(workspaceId, activeFile, content)`
+- 保存后：从 `unsavedFiles` Set 中移除 → 蓝色圆点消失
+- 手动保存：Cmd+S / Ctrl+S，立即保存并清除标记
+
+### 1.8 代码块 Apply 按钮（v5 新增）
+
+**按钮位置**: 代码块右上角 header 区域，Copy 按钮左侧
+
+**按钮样式**: 与 Copy 按钮一致 — `rounded p-0.5 text-muted-foreground opacity-0 group-hover:opacity-100`
+
+**图标**: `FileDown`（默认）/ `Loader2 animate-spin`（applying）/ `Check text-green-400`（applied, 3 秒后重置）
+
+**交互流程**:
+1. 仅在 workspace 内的 AI 回复中显示（用户消息不显示）
+2. 点击 → `window.prompt("Save as:", suggestedName)` 输入文件名
+3. suggestedName 基于代码块语言自动推断（20+ 语言映射）
+4. 确认 → `workspaceApi.createFile(workspaceId, fileName, code)`
+5. 写入成功 → dispatch `forge:file-changed` → 文件树刷新 + 自动打开
+
+### 1.9 Keycloak SSO 交互流程（v5 新增）
+
+**登录流程**:
+```
+用户访问 http://localhost:9000
+    │
+    ▼
+layout.tsx Auth Guard: isAuthenticated()?
+    │
+    ├─ Yes → 正常渲染页面
+    │
+    └─ No → fetch /api/auth/me
+              │
+              ├─ 200 → 安全模式未开启，正常渲染
+              │
+              └─ 401 → window.location.href = "/login"
+                         │
+                         ▼
+                    /login 页面 → auth.login()
+                    → 生成 PKCE code_verifier + code_challenge
+                    → 重定向到 Keycloak authorize 端点
+                         │
+                         ▼
+                    Keycloak 登录页面（用户输入凭证）
+                         │
+                         ▼
+                    回调到 /auth/callback?code=xxx
+                    → auth.handleCallback()
+                    → POST token 端点交换 access_token
+                    → 存储到 localStorage("forge_access_token")
+                    → window.location.href = "/"
+```
+
+**登出流程**: Header Sign out → `auth.logout()` → 清除 localStorage → 重定向 Keycloak end_session 端点
+
+**Token 传递**: `workspace-api.ts` 所有 fetch 调用自动附加 `Authorization: Bearer <token>` header
 
 ---
 
@@ -212,16 +307,45 @@ Dashboard → 创建/选择 Workspace → 编辑文件（Monaco）
 | POST | `/api/mcp/tools/call` | `McpToolCallRequest { name, arguments }` | `McpToolCallResponse` | 调用工具 |
 | POST | `/api/mcp/tools/cache/invalidate` | — | `{ status: "cache_invalidated" }` | 清除工具缓存 |
 
-**MCP 工具清单**（v4 新增，McpProxyService 实连）:
+**MCP 工具清单**（v4 创建，v5 更新：6 → 9 工具）:
 
 | 工具 | MCP Server | 说明 |
 |------|-----------|------|
+| `workspace_write_file` | backend (local) | 写入文件到 workspace（v5 新增） |
+| `workspace_read_file` | backend (local) | 读取 workspace 文件内容（v5 新增） |
+| `workspace_list_files` | backend (local) | 列出 workspace 文件树（v5 新增） |
 | `search_knowledge` | knowledge-mcp | 搜索知识库文档 |
 | `read_file` | knowledge-mcp | 读取知识库文件内容 |
 | `query_schema` | database-mcp | 查询数据库 schema |
 | `run_baseline` | backend (local) | 执行底线检查脚本 |
 | `list_baselines` | backend (local) | 列出可用底线脚本 |
 | `get_service_info` | service-graph-mcp | 获取服务信息 |
+
+**Workspace 工具安全规则**（v5 新增）:
+- 路径遍历检查：包含 `..` 的路径一律拒绝（`isError: true`）
+- workspaceId 必需：workspace 工具需要 workspaceId 参数，无 workspaceId 回退到常规工具分发
+- `callTool(name, args, workspaceId)` 三参数重载处理 workspace 工具
+
+#### Auth API（v5 新增，`AuthController` → `/api/auth`）
+
+| 方法 | 路径 | 响应体 | 说明 |
+|------|------|--------|------|
+| GET | `/api/auth/config` | `{ realm, clientId, authServerUrl }` | 返回 Keycloak OIDC 配置 |
+| GET | `/api/auth/me` | `{ username, email, roles }` 或 401 | 返回当前用户信息 |
+
+#### Context Search API（v5 新增，`ContextController` → `/api/context`）
+
+| 方法 | 路径 | 参数 | 响应体 | 说明 |
+|------|------|------|--------|------|
+| GET | `/api/context/search` | `category`(files/knowledge/schema/services), `workspaceId?`, `query?` | `List<ContextItem>` | 按类别搜索上下文 |
+
+**4 个类别说明**:
+| category | 数据来源 | 需要 workspaceId |
+|----------|---------|-----------------|
+| `files` | WorkspaceService.getFileTree() | 是 |
+| `knowledge` | KnowledgeController 知识库 | 否 |
+| `schema` | 数据库 schema 信息 | 否 |
+| `services` | 服务依赖图信息 | 否 |
 
 #### Actuator / Metrics API（v4 新增）
 
@@ -287,6 +411,9 @@ type StreamEvent =
   | { type: "tool_use_start", toolCallId?: string, toolName?: string }  // Tool 调用开始
   | { type: "tool_use", toolCallId?: string, toolName?: string, toolInput?: object }  // Tool 调用完整
   | { type: "tool_result", toolCallId?: string, content?: string, durationMs?: number }  // Tool 执行结果
+  | { type: "file_changed",                         // 文件变更通知（v5 新增）
+      path?: string,                                //   变更的文件路径
+      action?: string }                             //   "created" | "modified"
   | { type: "error", content?: string }             // 错误
   | { type: "done" }                                // 流结束
 ```
@@ -303,9 +430,10 @@ complete — agenticStream 结束后，持久化消息前
 **事件发送顺序**:
 ```
 ooda_phase(observe) → ooda_phase(orient) → profile_active → ooda_phase(decide)
-  → [thinking →] content* → [ooda_phase(act) → tool_use → tool_result →]* → content*
+  → [thinking →] content* → [ooda_phase(act) → tool_use → tool_result → [file_changed →]]* → content*
   → ooda_phase(complete) → done
 ```
+> `file_changed` 仅在 `workspace_write_file` 工具成功执行后发送（v5 新增）
 
 **传输方式**:
 - SSE: Spring SseEmitter 输出 `data:{JSON}\n\n` 格式（**注意：冒号后无空格**），`data:[DONE]` 结束
@@ -448,19 +576,22 @@ chat_sessions (1) ──→ (N) chat_messages (1) ──→ (N) tool_calls
 │  /ws/*       → backend:8080    (WebSocket Upgrade)   │
 │  /actuator/* → backend:8080    (健康检查)             │
 │  /h2-console/* → backend:8080  (数据库控制台)         │
+│  /auth/*     → keycloak:8080   (SSO 认证)  (v5 新增)  │
 │  /*          → frontend:3000   (Next.js, catch-all)  │
-└─────────┬──────────────────────┬────────────────────┘
-          │                      │
-┌─────────▼──────────┐ ┌────────▼──────────┐
-│ Backend (:8080)    │ │ Frontend (:3000)  │
-│ Spring Boot 3      │ │ Next.js 15        │
-│ Kotlin + JDK 21    │ │ standalone mode   │
-│ H2 / PostgreSQL    │ │ React 19          │
-│ WebSocket + SSE    │ │ Monaco Editor     │
-└────────────────────┘ └───────────────────┘
+└───┬──────────────┬──────────────┬────────────────────┘
+    │              │              │
+┌───▼────────┐ ┌──▼───────────┐ ┌▼─────────────────┐
+│ Backend    │ │ Frontend     │ │ Keycloak (v5)    │
+│ (:8080)    │ │ (:3000)      │ │ (:8180→8080)     │
+│ Spring 3   │ │ Next.js 15   │ │ Keycloak 24.0    │
+│ Kotlin     │ │ standalone   │ │ forge realm      │
+│ JDK 21     │ │ React 19     │ │ OIDC PKCE        │
+│ H2/PG      │ │ Monaco       │ │ realm-export.json│
+│ WS + SSE   │ │ Auth Guard   │ │                  │
+└────────────┘ └──────────────┘ └──────────────────┘
 ```
 
-### 4.2 Nginx 路由规则（5 条）
+### 4.2 Nginx 路由规则（6 条）
 
 源文件: `infrastructure/docker/nginx-trial.conf`
 
@@ -470,7 +601,8 @@ chat_sessions (1) ──→ (N) chat_messages (1) ──→ (N) tool_calls
 | 2 | `/ws/` | `backend:8080` | `proxy_http_version 1.1`, `Upgrade` + `Connection` headers |
 | 3 | `/actuator/` | `backend:8080` | 标准代理 |
 | 4 | `/h2-console/` | `backend:8080` | 标准代理 |
-| 5 | `/` (catch-all) | `frontend:3000` | 标准代理 |
+| 5 | `/auth/` | `keycloak:8080` | `proxy_buffer_size 128k`, `proxy_buffers 4 256k`（v5 新增） |
+| 6 | `/` (catch-all) | `frontend:3000` | 标准代理 |
 
 ### 4.3 Docker 部署策略
 
@@ -488,12 +620,15 @@ cd web-ide/frontend && npm install && npm run build
 docker compose -f docker-compose.trial.yml up --build
 ```
 
-**三容器**:
-- `backend`: Spring Boot JAR on JRE Alpine
-- `frontend`: Next.js standalone on Node 20
-- `nginx`: Alpine, 挂载 nginx-trial.conf
+**四容器**（v5 更新：3 → 4）:
+- `keycloak`: Keycloak 24.0, `start-dev --import-realm`, realm-export.json 自动导入（v5 新增）
+- `backend`: Spring Boot JAR on JRE Alpine, `depends_on: keycloak(healthy)`
+- `frontend`: Next.js standalone on Node 20, Keycloak 环境变量注入
+- `nginx`: Alpine, 挂载 nginx-trial.conf（含 `/auth/` proxy）
 
-**健康检查**: `wget --spider http://localhost:8080/api/knowledge/search` (15s 间隔, 5 次重试, 30s 启动等待)
+**健康检查**:
+- backend: `wget --spider http://localhost:8080/api/knowledge/search` (15s 间隔, 5 次重试, 30s 启动等待)
+- keycloak: `exec 3<>/dev/tcp/localhost/8080` (10s 间隔, 15 次重试, 30s 启动等待)（v5 新增）
 
 ### 4.4 前后端通信方式
 
@@ -554,6 +689,7 @@ SystemPromptAssembler.assemble(profile, skills) → String
     │   [4] Baseline 执行规则
     │   [5] HITL 检查点
     │   [6] Available MCP 工具
+    │   [7] Delivery Behavior 交付指导（v5 新增，当 workspace 工具可用时注入）
     │
     ▼
 emit ooda_phase("orient") + metricsService.recordOodaPhase("orient")
@@ -592,7 +728,10 @@ agenticStream() — 最多 MAX_AGENTIC_TURNS(5) 轮
 ClaudeAgentService
     │
     ▼
-McpProxyService.callTool(name, args)
+McpProxyService.callTool(name, args, workspaceId?)
+    │   ├─ workspace_write_file → WorkspaceService.createFile()   (local, v5 新增)
+    │   ├─ workspace_read_file  → WorkspaceService.getFileContent() (local, v5 新增)
+    │   ├─ workspace_list_files → WorkspaceService.getFileTree()   (local, v5 新增)
     │   ├─ search_knowledge → WebClient POST → knowledge-mcp:8081
     │   ├─ read_file         → WebClient POST → knowledge-mcp:8081
     │   ├─ query_schema      → WebClient POST → database-mcp:8082
@@ -638,13 +777,30 @@ MCP Server URL 从 `application.yml` 的 `forge.mcp.*` 配置读取。
 
 ### 4.6 Spring Security 配置
 
-**当前状态**: 试用阶段安全功能已禁用
+**当前状态**: 支持安全模式开关（v5 更新）
 
-- `forge.security.enabled: false` (环境变量 `FORGE_SECURITY_ENABLED`)
-- 所有端点无需认证即可访问
+- `forge.security.enabled: ${FORGE_SECURITY_ENABLED:-false}` — 环境变量控制
+- **安全模式关闭**（默认）: 所有端点无需认证即可访问
+- **安全模式开启**: OAuth2 Resource Server + JWT 验证
+  - 公开端点（permitAll）: `/actuator/health`, `/actuator/info`, `/ws/**`, `/api/auth/**`, `/h2-console/**`, OPTIONS 请求
+  - 其他端点需要有效 JWT Bearer Token
+  - JWT issuer-uri: `http://localhost:8180/realms/forge`（Keycloak）
+  - JWT audience: `forge-web-ide`
 - CORS 允许来源: `http://localhost:3000,http://localhost:9000` (可配置)
-- **WebSocket CORS**: `forge.websocket.allowed-origins` 必须为逗号分隔字符串（非 YAML list），默认 `http://localhost:3000,http://localhost:5173,http://localhost:9000`。`@Value` 注解不能解析 YAML list 类型，会静默回退默认值。
-- OAuth2 Resource Server 依赖已引入，待激活
+- **WebSocket CORS**: `forge.websocket.allowed-origins` 必须为逗号分隔字符串（非 YAML list），默认 `http://localhost:3000,http://localhost:5173,http://localhost:9000`
+- frameOptions: `sameOrigin`（H2 console 需要）
+
+**Keycloak 配置**（v5 新增）:
+
+| 配置项 | 值 |
+|--------|-----|
+| Realm | `forge` |
+| Client ID | `forge-web-ide` |
+| Access Type | public |
+| Auth Flow | OIDC Authorization Code + PKCE |
+| Valid Redirect URIs | `http://localhost:9000/*` |
+| Token Endpoint | `http://keycloak:8080/realms/forge/protocol/openid-connect/token` |
+| 预置用户 | admin/admin (管理员), demo/demo (测试用户) |
 
 ### 4.7 后端技术栈
 
@@ -662,21 +818,21 @@ MCP Server URL 从 `application.yml` 的 `forge.mcp.*` 配置读取。
 | 指标导出 | micrometer-registry-prometheus | /actuator/prometheus 端点（v4 新增） |
 | YAML 解析 | Jackson Dataformat YAML | Skill/Profile frontmatter 解析 |
 | 序列化 | Jackson + Kotlin Module | (Spring Boot managed) |
-| 测试 | JUnit 5 + MockK 1.13 + AssertJ | 128+ tests passing |
+| 测试 | JUnit 5 + MockK 1.13 + AssertJ | 130+ tests passing |
 
 ---
 
 ## 五、验证状态
 
-> Phase 2 全部完成后验证结果 (2026-02-19) — v4 更新
+> Phase 2.5 全部完成后验证结果 (2026-02-19) — v5 更新
 
 | # | 验证项 | 状态 | 说明 |
 |---|--------|------|------|
-| 1 | Docker 镜像构建 | ✅ | 3 个镜像全部构建成功 |
-| 2 | 容器启动 | ✅ | 3 容器 running, backend healthy |
-| 3 | Nginx 路由 | ✅ | 前端 200, API 正常返回 |
+| 1 | Docker 镜像构建 | ✅ | 4 个镜像全部构建成功（v5: +keycloak） |
+| 2 | 容器启动 | ✅ | 4 容器 running, backend+keycloak healthy（v5: 3→4） |
+| 3 | Nginx 路由 | ✅ | 前端 200, API 正常, /auth/ proxy 正常（v5: +keycloak 代理） |
 | 4 | 前端页面加载 | ✅ | `http://localhost:9000` 返回 200 |
-| 5 | 后端 API | ✅ | `/api/chat/skills`(32) + `/api/chat/profiles`(5) |
+| 5 | 后端 API | ✅ | `/api/chat/skills`(32) + `/api/chat/profiles`(5) + `/api/mcp/tools`(9) |
 | 6 | AI Chat 流式响应 | ✅ | WebSocket + SSE 双通道均正常 |
 | 7 | OODA 阶段指示器 | ✅ | Observe→Orient→Decide→[Act→]Complete 流转正常 |
 | 8 | Profile Badge + Confidence | ✅ | 名称、skills 列表、confidence 圆点、路由原因均显示 |
@@ -685,15 +841,22 @@ MCP Server URL 从 `application.yml` 的 `forge.mcp.*` 配置读取。
 | 11 | Profile 路由（默认回退） | ✅ | 1/1 — 无关消息回退到 development |
 | 12 | Prompt Caching | ✅ | 缓存命中后 system prompt 费用降 90% |
 | 13 | Agentic Loop 多轮 Tool Calling | ✅ | Turn 1 tool_use + Turn 2 content 正常 |
-| 14 | MCP 实连 | ✅ | 6 工具真实 HTTP 调用 MCP Server（v4 新增） |
-| 15 | BaselineService 底线集成 | ✅ | run_baseline / list_baselines 工具可用（v4 新增） |
-| 16 | MetricsService 指标采集 | ✅ | 7 个 forge.* 自定义指标注册（v4 新增） |
-| 17 | Actuator/Prometheus 端点 | ✅ | `/actuator/metrics/forge.*` + `/actuator/prometheus`（v4 新增） |
-| 18 | agent-eval 真实模型调用 | ✅ | ANTHROPIC_API_KEY 有则调 Claude，无则结构验证（v4 新增） |
-| 19 | 跨栈迁移 PoC | ✅ | .NET → Java, 11 条业务规则 100% 覆盖（v4 新增） |
-| 20 | 降级与容错 | ⏳ | 未测试 |
+| 14 | MCP 实连 | ✅ | 9 工具注册（v5: 6→9, +3 workspace 工具） |
+| 15 | BaselineService 底线集成 | ✅ | run_baseline / list_baselines 工具可用 |
+| 16 | MetricsService 指标采集 | ✅ | 7 个 forge.* 自定义指标注册 |
+| 17 | Actuator/Prometheus 端点 | ✅ | `/actuator/metrics/forge.*` + `/actuator/prometheus` |
+| 18 | agent-eval 真实模型调用 | ✅ | ANTHROPIC_API_KEY 有则调 Claude，无则结构验证 |
+| 19 | 跨栈迁移 PoC | ✅ | .NET → Java, 11 条业务规则 100% 覆盖 |
+| 20 | AI → Workspace 交付闭环 | ✅ | workspace_write_file/read_file/list_files + file_changed 事件（v5 新增） |
+| 21 | Keycloak SSO | ✅ | OIDC PKCE 登录/回调/JWT/登出（v5 新增） |
+| 22 | Context Picker 实连 | ✅ | /api/context/search 4 类别（v5 新增） |
+| 23 | FileExplorer CRUD | ✅ | 新建/重命名/删除（v5 新增） |
+| 24 | 未保存标记 + 自动保存 | ✅ | 蓝色圆点 + 5 秒自动保存（v5 新增） |
+| 25 | 代码块 Apply 按钮 | ✅ | 代码块 → workspace 文件（v5 新增） |
+| 26 | 知识库 12+ 文档 | ✅ | +5 新增文档可搜索（v5 新增） |
+| 27 | 降级与容错 | ⏳ | 未测试 |
 
-### Phase 2 验收标准达成（v4）
+### Phase 2.5 验收标准达成（v5）
 
 | # | 标准 | 状态 |
 |---|------|------|
@@ -702,10 +865,18 @@ MCP Server URL 从 `application.yml` 的 `forge.mcp.*` 配置读取。
 | 3 | 跨栈迁移 PoC：.NET → Java，业务规则覆盖率 ≥ 90% | ✅ (100%) |
 | 4 | Web IDE 可访问：知识搜索 → AI 对话 → Skill 感知 → 工具调用 | ✅ |
 | 5 | agent-eval 可运行真实评估场景 | ✅ |
+| 6 | AI → Workspace 交付闭环：代码写入文件树 | ✅ |
+| 7 | Keycloak SSO：OIDC PKCE 登录/登出 | ✅ |
+| 8 | Context Picker 实连 4 类别 | ✅ |
+| 9 | FileExplorer CRUD 完整 | ✅ |
+| 10 | 未保存标记 + 5 秒自动保存 | ✅ |
+| 11 | 知识库 12+ 文档 | ✅ |
+| 12 | MCP 9 工具注册（+3 workspace） | ✅ |
+| 13 | Docker 4 容器部署健康 | ✅ |
 
 ### 单元测试
 
-**总计**: 128+ tests, 0 failures
+**总计**: 130+ tests, 0 failures
 
 | 测试文件 | 测试数 | 覆盖范围 |
 |---------|--------|---------|
@@ -715,14 +886,16 @@ MCP Server URL 从 `application.yml` 的 `forge.mcp.*` 配置读取。
 | `SkillLoaderIntegrationTest.kt` | 7 | 真实 plugins/ 目录集成验证 |
 | `ClaudeAdapterToolCallingTest.kt` | 9 | SSE 解析 + HTTP 错误 + tool_use 序列化 |
 | `ClaudeAgentServiceTest.kt` | 8 | 同步/流式 + Agentic Loop + 降级 + MetricsService |
-| `McpProxyServiceTest.kt` | 10+ | Tool dispatch + HTTP 调用 + formatResult |
+| `McpProxyServiceTest.kt` | 19+ | Tool dispatch + HTTP 调用 + formatResult + workspace tools（v5: +9） |
 | `McpControllerTest.kt` | 3 | REST 端点 |
 | `ChatRepositoryTest.kt` | 8 | JPA CRUD + 排序 + cascade |
-| `MetricsServiceTest.kt` | 7 | Counter tags + Timer recording（v4 新增） |
-| `EvalRunnerTest.kt` | 18 | 5 断言类型 + 有/无 adapter + profile/tag 过滤（v4 新增） |
+| `MetricsServiceTest.kt` | 7 | Counter tags + Timer recording |
+| `ContextControllerTest.kt` | 新建 | /api/context/search 4 类别搜索（v5 新增） |
+| `EvalRunnerTest.kt` | 18 | 5 断言类型 + 有/无 adapter + profile/tag 过滤 |
 | model-adapter tests | 11 | ClaudeAdapter + StreamEvent + tool calling |
 
 **Skill 加载验证**: 32 skills, 5 profiles
+**MCP 工具验证**: 9 tools（6 实连 + 3 workspace）
 
 ---
 
@@ -798,6 +971,7 @@ export function ComponentName({ prop1, prop2 }: ComponentProps) {
     case "content":         // 增量追加到 fullContent，更新消息列表
     case "tool_use":        // push 到 toolCalls 数组，更新消息
     case "tool_result":     // 更新对应 toolCall 的 output + status
+    case "file_changed":    // dispatch forge:file-changed DOM 事件 → 刷新文件树 + 自动打开文件（v5 新增）
     case "error":           // 追加错误信息到消息内容
     case "done":            // 流结束，清理状态
   }
@@ -824,9 +998,10 @@ const [oodaPhase, setOodaPhase] = useState<OodaPhase | null>(null);
 
 ---
 
-> 基线版本: v4
+> 基线版本: v5
 > 初始冻结日期: 2026-02-18 (v1, Phase 1.5)
 > v2 更新日期: 2026-02-18 (Phase 2 E2E 验证后)
 > v3 更新日期: 2026-02-18 (Sprint 2A 验收通过后)
 > v4 更新日期: 2026-02-19 (Phase 2 全部完成 — Sprint 2B + 2C)
+> v5 更新日期: 2026-02-19 (Phase 2.5 全部完成 — AI 交付闭环 + Keycloak SSO + 编辑器增强)
 > 下次评审: Phase 3 启动前
