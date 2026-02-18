@@ -9,6 +9,9 @@ services:
       FORGE_CORS_ALLOWED_ORIGINS: "http://localhost:9000"
       FORGE_FRONTEND_URL: "http://localhost:9000"
       SPRING_JPA_HIBERNATE_DDL_AUTO: update
+      FORGE_PLUGINS_PATH: /plugins
+    volumes:
+      - ../../plugins:/plugins:ro
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/api/knowledge/search"]
       interval: 15s
