@@ -31,6 +31,7 @@ class ClaudeAgentServiceTest {
     private lateinit var profileRouter: ProfileRouter
     private lateinit var skillLoader: SkillLoader
     private lateinit var systemPromptAssembler: SystemPromptAssembler
+    private lateinit var metricsService: MetricsService
     private lateinit var service: ClaudeAgentService
 
     private val defaultProfile = ProfileDefinition(
@@ -53,6 +54,7 @@ class ClaudeAgentServiceTest {
         profileRouter = mockk()
         skillLoader = mockk()
         systemPromptAssembler = mockk()
+        metricsService = mockk(relaxed = true)
 
         // Default routing: always route to development profile
         every { profileRouter.route(any(), any()) } returns ProfileRoutingResult(
@@ -72,7 +74,8 @@ class ClaudeAgentServiceTest {
             chatMessageRepository = chatMessageRepository,
             profileRouter = profileRouter,
             skillLoader = skillLoader,
-            systemPromptAssembler = systemPromptAssembler
+            systemPromptAssembler = systemPromptAssembler,
+            metricsService = metricsService
         )
 
         // Default: no conversation history

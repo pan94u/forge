@@ -35,7 +35,8 @@ class ClaudeAgentService(
     private val chatMessageRepository: ChatMessageRepository,
     private val profileRouter: ProfileRouter,
     private val skillLoader: SkillLoader,
-    private val systemPromptAssembler: SystemPromptAssembler
+    private val systemPromptAssembler: SystemPromptAssembler,
+    private val metricsService: MetricsService
 ) {
     private val logger = LoggerFactory.getLogger(ClaudeAgentService::class.java)
     private val executor = Executors.newFixedThreadPool(10)
@@ -56,6 +57,7 @@ class ClaudeAgentService(
             val routing = profileRouter.route(message)
             val skills = skillLoader.loadSkillsForProfile(routing.profile)
             val systemPrompt = systemPromptAssembler.assemble(routing.profile, skills)
+            metricsService.recordProfileRoute(routing.profile.name, routing.reason)
             DynamicPromptResult(
                 systemPrompt = systemPrompt,
                 activeProfile = routing.profile.name,
@@ -146,6 +148,7 @@ class ClaudeAgentService(
     ) {
         executor.submit {
             try {
+                val messageStartMs = System.currentTimeMillis()
                 val fullMessage = buildContextualMessage(message, contexts)
                 val history = loadConversationHistory(sessionId)
 
@@ -159,6 +162,7 @@ class ClaudeAgentService(
 
                 // OODA: Observe — understanding user intent
                 onEvent(mapOf("type" to "ooda_phase", "phase" to "observe"))
+                metricsService.recordOodaPhase("observe")
 
                 val promptResult = buildDynamicSystemPrompt(message)
                 logger.info("Stream profile: {}, Skills: {}", promptResult.activeProfile, promptResult.loadedSkills)
@@ -171,6 +175,7 @@ class ClaudeAgentService(
 
                 // OODA: Orient — profile routed, context analyzed
                 onEvent(mapOf("type" to "ooda_phase", "phase" to "orient"))
+                metricsService.recordOodaPhase("orient")
 
                 // Emit profile routing info
                 onEvent(mapOf(
@@ -186,6 +191,7 @@ class ClaudeAgentService(
 
                 // OODA: Decide — Claude formulating response
                 onEvent(mapOf("type" to "ooda_phase", "phase" to "decide"))
+                metricsService.recordOodaPhase("decide")
 
                 // Run the agentic loop
                 val result = runBlocking {
@@ -199,6 +205,11 @@ class ClaudeAgentService(
 
                 // OODA: Complete — response delivered
                 onEvent(mapOf("type" to "ooda_phase", "phase" to "complete"))
+                metricsService.recordOodaPhase("complete")
+
+                // Record total message duration
+                val messageDurationMs = System.currentTimeMillis() - messageStartMs
+                metricsService.recordMessageDuration(messageDurationMs)
 
                 // Persist the final assistant response
                 persistMessage(sessionId, Message.Role.ASSISTANT, result.content, result.toolCalls)
@@ -314,6 +325,7 @@ class ClaudeAgentService(
 
             val turnDurationMs = System.currentTimeMillis() - turnStartMs
             logger.debug("Turn $turn completed in ${turnDurationMs}ms, stopReason=$stopReason, tools=${currentToolUses.size}, textLength=${turnText.length}")
+            metricsService.recordTurnDuration(turn, turnDurationMs)
 
             finalContent = turnText.toString()
 
@@ -321,6 +333,7 @@ class ClaudeAgentService(
             if (stopReason == StopReason.TOOL_USE && currentToolUses.isNotEmpty()) {
                 // OODA: Act — executing tools
                 onEvent(mapOf("type" to "ooda_phase", "phase" to "act"))
+                metricsService.recordOodaPhase("act")
 
                 // Build assistant message with tool uses
                 val assistantMsg = Message(
@@ -339,6 +352,9 @@ class ClaudeAgentService(
                         val output = McpProxyService.formatResult(mcpResult)
                         val status = if (mcpResult.isError) "error" else "complete"
                         val durationMs = System.currentTimeMillis() - startMs
+
+                        metricsService.recordToolCall(toolUse.name, !mcpResult.isError)
+                        metricsService.recordToolDuration(toolUse.name, durationMs)
 
                         allToolCalls.add(ToolCallRecord(
                             id = toolUse.id,
@@ -359,6 +375,9 @@ class ClaudeAgentService(
                     } catch (e: Exception) {
                         val errorOutput = "Error executing tool: ${e.message}"
                         val durationMs = System.currentTimeMillis() - startMs
+
+                        metricsService.recordToolCall(toolUse.name, false)
+                        metricsService.recordToolDuration(toolUse.name, durationMs)
 
                         allToolCalls.add(ToolCallRecord(
                             id = toolUse.id,
