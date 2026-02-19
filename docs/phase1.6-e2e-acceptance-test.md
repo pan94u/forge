@@ -4,9 +4,9 @@
 > 访问地址：http://localhost:9000
 > Keycloak 管理后台：http://localhost:8180
 > 测试人：人工验收
-> 覆盖范围：Phase 2 全部功能 + Phase 1.6 新增功能
+> 覆盖范围：Phase 0~1.5 全部功能 + Phase 1.6 新增功能
 >
-> 本文档在 `phase2-e2e-acceptance-test.md`（59 个用例）基础上扩展，新增 Phase 1.6 专属功能验收用例。
+> 本文档在 Phase 0~1.5 验收用例（59 个）基础上扩展，新增 Phase 1.6 专属功能验收用例。
 > Phase 1.6 新增功能：Keycloak SSO、AI → Workspace 交付闭环、Context Picker 实连、代码块 Apply 按钮、FileExplorer CRUD、未保存标记 + 自动保存、System Prompt 交付指导、知识库 5 篇新文档。
 
 ---
@@ -32,8 +32,12 @@
 
 **预期**：
 - [ ] Dashboard → `/` — 回到首页
+- [ ] Workspaces → 进入工作区列表页面
 - [ ] Knowledge → `/knowledge` — 进入知识库页面
-- [ ] Workflows → `/workflows` — 进入工作流页面
+- [ ] Workflows → `/workflows` — 进入工作流页面（Developer 角色可见）
+- [ ] AI Chat → 进入 AI 对话页面
+- [ ] Integrations → 进入集成页面（Developer 角色可见）
+- [ ] Infrastructure → 进入基础设施页面（Developer 角色可见）
 - [ ] 每个页面都能正常渲染，无白屏或 JS 报错（打开浏览器 Console 检查）
 
 ### TC-1.3 创建 Workspace 进入 IDE
@@ -130,7 +134,7 @@ deploy this service to kubernetes with rolling update strategy
 
 ## 场景 3：AI 工具调用 — MCP 实连验证
 
-> 验证 Claude 通过 MCP 工具获取真实数据的能力。Sprint 2B 核心功能。
+> 验证 Claude 通过 MCP 工具获取真实数据的能力。
 
 ### TC-3.1 触发知识搜索工具调用
 
@@ -446,9 +450,9 @@ class UserService(val userRepo: UserRepository) {
 
 **预期**：
 - [ ] 返回 JSON 数组
-- [ ] 包含 **32** 个 skills（Sprint 2B 从 29 增加到 32）
+- [ ] 包含 **32** 个 skills
 - [ ] 每个 skill 有 name, description 字段
-- [ ] 包含新增的 3 个 skill：`deployment-readiness-check`、`design-baseline-guardian`、`environment-parity`
+- [ ] 包含 3 个来自 Phase 1.5 的 skill：`deployment-readiness-check`、`design-baseline-guardian`、`environment-parity`
 
 ### TC-9.2 Profiles 加载（5 Profiles）
 
@@ -481,7 +485,7 @@ class UserService(val userRepo: UserRepository) {
 
 ## 场景 10：Actuator + 度量指标验证
 
-> 验证 Spring Boot Actuator 和 Forge 自定义 Micrometer 指标。Sprint 2C 核心功能。
+> 验证 Spring Boot Actuator 和 Forge 自定义 Micrometer 指标。
 
 ### TC-10.1 Actuator 健康端点
 
@@ -809,7 +813,7 @@ docker compose -f infrastructure/docker/docker-compose.trial.yml exec backend ls
 ### TC-A.2 SSO 登录流程（启用安全模式时）
 
 **操作**：
-1. 设置环境变量 `AUTH_ENABLED=true` 并重启服务
+1. 设置环境变量 `FORGE_SECURITY_ENABLED=true` 并重启服务
 2. 访问 http://localhost:9000
 
 **预期**：
@@ -834,7 +838,7 @@ curl -H "Authorization: Bearer <token>" http://localhost:9000/api/chat/skills
 - [ ] Local Storage 中有 `access_token` 或类似键名
 - [ ] Token 是标准 JWT 格式（三段 base64，以 `.` 分隔）
 - [ ] 携带 Token 的 API 请求返回 200
-- [ ] 不携带 Token 的请求返回 401（AUTH_ENABLED=true 时）
+- [ ] 不携带 Token 的请求返回 401（FORGE_SECURITY_ENABLED=true 时）
 
 ### TC-A.4 登出流程
 
@@ -1091,20 +1095,26 @@ curl "http://localhost:9000/api/knowledge/search?query=troubleshooting"
 
 > 验证 Phase 1.6 新增的 API 端点。
 
-### TC-G.1 MCP Tools 列表包含 9 个工具
+### TC-G.1 Workspace 工具 inputSchema 验证
+
+> 工具总数（9 个）已在 TC-9.3 验证，此处聚焦 Phase 1.6 新增的 3 个 workspace 工具 inputSchema 细节。
 
 **操作**：
 ```bash
-curl http://localhost:9000/api/mcp/tools | python3 -m json.tool
+curl http://localhost:9000/api/mcp/tools | python3 -c "
+import sys, json
+tools = json.load(sys.stdin)
+for t in tools:
+    if t['name'].startswith('workspace_'):
+        print(json.dumps(t, indent=2, ensure_ascii=False))
+"
 ```
 
 **预期**：
-- [ ] 返回 9 个工具（Phase 2 的 6 + Phase 1.6 新增 3）
-- [ ] 新增工具：
-  - [ ] `workspace_write_file`（写入文件到 workspace）
-  - [ ] `workspace_read_file`（读取 workspace 文件）
-  - [ ] `workspace_list_files`（列出 workspace 文件）
-- [ ] 每个 workspace 工具的 inputSchema 包含 `workspaceId` 必需参数
+- [ ] `workspace_write_file` 的 inputSchema 包含必需参数 `workspaceId`、`path`、`content`
+- [ ] `workspace_read_file` 的 inputSchema 包含必需参数 `workspaceId`、`path`
+- [ ] `workspace_list_files` 的 inputSchema 包含必需参数 `workspaceId`
+- [ ] 三个工具的 description 清晰描述了用途
 
 ### TC-G.2 Context Search API
 
@@ -1127,13 +1137,15 @@ curl "http://localhost:9000/api/context/search?category=services"
 
 **操作**：
 ```bash
-curl http://localhost:9000/api/auth/config
+curl http://localhost:9000/api/auth/me
+curl http://localhost:9000/api/auth/me/jwt
 ```
 
 **预期**：
-- [ ] 返回 JSON，包含 Keycloak 配置信息
-- [ ] 包含 `realm`、`clientId`、`authServerUrl` 等字段
-- [ ] `authServerUrl` 指向 http://localhost:8180
+- [ ] `/api/auth/me` 返回 JSON，包含 `authenticated`、`username`、`email`、`roles` 字段
+- [ ] 未登录时 `authenticated` 为 `false`，`username` 为 `"anonymous"`
+- [ ] `/api/auth/me/jwt` 返回 JSON，未携带 JWT 时 `authenticated` 为 `false`
+- [ ] 携带有效 JWT 时返回 `authenticated: true` + `preferred_username` + `email` + `roles`
 
 ---
 
@@ -1176,19 +1188,27 @@ curl http://localhost:9000/api/auth/config
 
 > 专门验证 Phase 1.6 的 4 容器架构完整性。
 
-### TC-I.1 4 个容器状态
+### TC-I.1 容器间网络连通性
+
+> 4 容器 running 状态已在 TC-15.1 验证，此处聚焦容器间通信。
 
 **操作**：
 ```bash
-docker compose -f infrastructure/docker/docker-compose.trial.yml ps --format "table {{.Name}}\t{{.Status}}\t{{.Ports}}"
+# backend → keycloak 连通
+docker compose -f infrastructure/docker/docker-compose.trial.yml exec backend curl -s http://keycloak:8080/realms/forge/.well-known/openid-configuration | head -5
+
+# nginx → backend 连通
+docker compose -f infrastructure/docker/docker-compose.trial.yml exec nginx curl -s http://backend:8080/actuator/health
+
+# nginx → frontend 连通
+docker compose -f infrastructure/docker/docker-compose.trial.yml exec nginx curl -s http://frontend:3000 | head -5
 ```
 
 **预期**：
-- [ ] `backend` 容器：running, healthy, 端口 8080
-- [ ] `frontend` 容器：running, 端口 3000
-- [ ] `nginx` 容器：running, 端口 9000→80
-- [ ] `keycloak` 容器：running, healthy, 端口 8180→8080
-- [ ] 所有 4 个容器 Up 且无 restart loop
+- [ ] backend 能访问 keycloak 的 OIDC 发现端点，返回 JSON
+- [ ] nginx 能访问 backend 的 health 端点，返回 `{"status":"UP"}`
+- [ ] nginx 能访问 frontend，返回 HTML
+- [ ] 无 DNS 解析失败或连接拒绝
 
 ### TC-I.2 Keycloak realm 导入
 
@@ -1202,18 +1222,33 @@ docker compose -f infrastructure/docker/docker-compose.trial.yml logs keycloak |
 - [ ] realm 包含预配置的 `forge-web-ide` 客户端
 - [ ] realm 包含至少一个测试用户（如 demo/demo）
 
-### TC-I.3 后端 Skills 加载 + workspace tools 注册
+### TC-I.3 Workspace 工具端到端验证（Docker 内）
+
+> Skills 加载日志已在 TC-15.2 验证，此处验证 workspace 工具在 Docker 环境中的端到端可用性。
 
 **操作**：
 ```bash
-docker compose -f infrastructure/docker/docker-compose.trial.yml logs backend | grep -E "(Skill|workspace|tool)"
+# 通过 nginx 反代调用 workspace_list_files
+curl -X POST http://localhost:9000/api/mcp/tools/call \
+  -H "Content-Type: application/json" \
+  -d '{"name":"workspace_list_files","arguments":{"workspaceId":"1"}}'
+
+# 通过 nginx 反代调用 workspace_write_file
+curl -X POST http://localhost:9000/api/mcp/tools/call \
+  -H "Content-Type: application/json" \
+  -d '{"name":"workspace_write_file","arguments":{"workspaceId":"1","path":"test-docker.txt","content":"hello from docker"}}'
+
+# 通过 nginx 反代调用 workspace_read_file
+curl -X POST http://localhost:9000/api/mcp/tools/call \
+  -H "Content-Type: application/json" \
+  -d '{"name":"workspace_read_file","arguments":{"workspaceId":"1","path":"test-docker.txt"}}'
 ```
 
 **预期**：
-- [ ] 日志包含 `Skill loading complete: 32 skills, 5 profiles`
-- [ ] 日志包含 workspace 工具注册信息
-- [ ] 日志包含 `9 MCP tools registered`（或类似表述）
-- [ ] 无工具注册失败的 ERROR 日志
+- [ ] `workspace_list_files` 返回文件列表（可能为空或包含之前创建的文件）
+- [ ] `workspace_write_file` 返回成功，`isError` 为 false
+- [ ] `workspace_read_file` 返回刚写入的内容 `"hello from docker"`
+- [ ] 三个工具在 Docker 环境中均正常工作，无路径权限问题
 
 ---
 
@@ -1223,20 +1258,20 @@ docker compose -f infrastructure/docker/docker-compose.trial.yml logs backend | 
 |------|--------|------|------|------|
 | 1. 新人入职 | 3 | /3 | /3 | |
 | 2. 开发日常 | 5 | /5 | /5 | |
-| 3. AI 工具调用 (MCP) | 4 | /4 | /4 | Sprint 2B |
+| 3. AI 工具调用 (MCP) | 4 | /4 | /4 | |
 | 4. 代码审查 | 2 | /2 | /2 | |
 | 5. 知识库探索 | 5 | /5 | /5 | |
 | 6. 对话高级功能 | 5 | /5 | /5 | |
 | 7. Profile 轮转 | 5 | /5 | /5 | |
 | 8. 边界异常 | 4 | /4 | /4 | |
-| 9. API 健康度 | 4 | /4 | /4 | MCP Tools 6→9 |
-| 10. Actuator 度量 | 7 | /7 | /7 | Sprint 2C |
-| 11. MCP 工具直接调用 | 5 | /5 | /5 | Sprint 2B |
+| 9. API 健康度 | 4 | /4 | /4 | MCP Tools 9 个 |
+| 10. Actuator 度量 | 7 | /7 | /7 | |
+| 11. MCP 工具直接调用 | 5 | /5 | /5 | |
 | 12. 工作流编辑器 | 3 | /3 | /3 | |
-| 13. agent-eval | 3 | /3 | /3 | Sprint 2C |
+| 13. agent-eval | 3 | /3 | /3 | |
 | 14. 全量单元测试 | 1 | /1 | /1 | 130+ tests |
 | 15. Docker 部署完整性 | 3 | /3 | /3 | 4 容器 |
-| **Phase 2 小计** | **59** | **/59** | **/59** | |
+| **Phase 0~1.5 小计** | **59** | **/59** | **/59** | |
 | A. Keycloak SSO | 4 | /4 | /4 | **Phase 1.6 新增** |
 | B. AI 交付闭环 | 5 | /5 | /5 | **Phase 1.6 核心** |
 | C. Context Picker 实连 | 3 | /3 | /3 | **Phase 1.6 新增** |
@@ -1275,33 +1310,47 @@ open http://localhost:8180           # Keycloak 管理后台（admin/admin）
 3. **Skills 是否体现在回复中**：development 回复应体现 Kotlin/Spring Boot 规范，不是通用建议
 4. **流式体验是否顺畅**：文字逐字出现，不是一大段突然出现
 5. **整体 UI 是否一致**：暗色主题，间距紧凑，图标统一
-6. **MCP 工具调用是否返回真实数据**：search_knowledge 返回知识库文档，不是 mock 数据（Sprint 2B）
-7. **工具调用在对话流中是否自然**：Tool Call 卡片展开/折叠、状态变化是否清晰（Sprint 2B）
-8. **度量指标是否正确记录**：每次交互后 forge.* 指标递增，Prometheus 端点可导出（Sprint 2C）
-9. **32 Skills 是否全部加载**：API 和 Docker 日志都确认 32 个（Sprint 2B 新增 3 个）
-10. **agent-eval 双模式是否工作**：无 key 降级为结构验证，有 key 调用真实模型（Sprint 2C）
+6. **MCP 工具调用是否返回真实数据**：search_knowledge 返回知识库文档，不是 mock 数据
+7. **工具调用在对话流中是否自然**：Tool Call 卡片展开/折叠、状态变化是否清晰
+8. **度量指标是否正确记录**：每次交互后 forge.* 指标递增，Prometheus 端点可导出
+9. **32 Skills 是否全部加载**：API 和 Docker 日志都确认 32 个
+10. **agent-eval 双模式是否工作**：无 key 降级为结构验证，有 key 调用真实模型
 11. **AI 是否写文件而非仅展示代码**：workspace_write_file 工具调用必须出现，代码交付到文件树（Phase 1.6 核心）
 12. **文件树是否自动刷新**：file_changed 事件驱动，无需手动刷新（Phase 1.6）
 13. **Keycloak SSO 流程是否顺畅**：OIDC PKCE 登录 → 回调 → JWT 存储 → 登出（Phase 1.6）
-14. **Context Picker 是否返回真实数据**：4 个类别都从后端 API 获取，不是 mock 数据（Phase 1.6）
+14. **Context Picker 是否返回真实数据**：4 个类别（files/knowledge/schema/services）都从后端 API 获取，不是 mock 数据（Phase 1.6）
 15. **自动保存是否可靠**：5 秒后蓝色圆点消失，内容持久化（Phase 1.6）
 
 ---
 
-## Phase 1.6 验收标准对照
+## 验收标准对照
+
+### Phase 1.6 验收标准
 
 | # | 验收标准 | 对应测试场景 |
 |---|---------|-------------|
-| 1 | SkillLoader 独立加载 Skill | TC-9.1, TC-9.2, TC-15.2 |
-| 2 | SuperAgent OODA 循环运转，底线一次通过率 ≥ 70% | TC-2.1, TC-3.1~3.3, TC-11.2~11.3 |
-| 3 | 跨栈迁移 PoC：.NET → Java，覆盖率 ≥ 90% | docs/cross-stack-poc-report.md（文档审阅） |
-| 4 | Web IDE 可访问：知识搜索 → AI 对话 → Skill 感知 → 工具调用 | TC-1~3, TC-5, TC-9 |
-| 5 | agent-eval 可运行真实评估场景 | TC-13.1~13.3 |
-| 6 | AI → Workspace 交付闭环：代码写入文件树 | TC-B.1~B.5（核心） |
-| 7 | Keycloak SSO：OIDC PKCE 登录/登出 | TC-A.1~A.4 |
-| 8 | Context Picker 实连 4 类别 | TC-C.1~C.3 |
-| 9 | FileExplorer CRUD 完整 | TC-D.1~D.4 |
-| 10 | 未保存标记 + 5 秒自动保存 | TC-E.1~E.3 |
-| 11 | 知识库 12+ 文档，新增 5 篇可搜索 | TC-F.1~F.2 |
-| 12 | MCP 9 工具注册（+3 workspace 工具） | TC-G.1, TC-9.3, TC-I.3 |
-| 13 | Docker 4 容器部署健康 | TC-I.1~I.3, TC-15.1~15.3 |
+| 1 | AI → Workspace 交付闭环：代码写入文件树 | TC-B.1~B.5（核心） |
+| 2 | Keycloak SSO：OIDC PKCE 登录/登出 | TC-A.1~A.4 |
+| 3 | Context Picker 实连 4 类别（files/knowledge/schema/services） | TC-C.1~C.3 |
+| 4 | FileExplorer CRUD 完整 | TC-D.1~D.4 |
+| 5 | 未保存标记 + 5 秒自动保存 | TC-E.1~E.3 |
+| 6 | 知识库 12+ 文档，新增 5 篇可搜索 | TC-F.1~F.2 |
+| 7 | MCP 9 工具注册（+3 workspace 工具） | TC-G.1, TC-9.3, TC-I.3 |
+| 8 | Docker 4 容器部署健康 | TC-I.1~I.3, TC-15.1~15.3 |
+
+### Phase 0~1.5 回归验收标准
+
+| # | 验收标准 | 对应测试场景 |
+|---|---------|-------------|
+| 1 | Web IDE 可访问：知识搜索 → AI 对话 → Skill 感知 → 工具调用 | TC-1~3, TC-5, TC-9 |
+| 2 | SkillLoader 加载 32 Skills + 5 Profiles | TC-9.1, TC-9.2, TC-15.2 |
+| 3 | agent-eval 可运行（结构验证模式） | TC-13.1~13.3 |
+| 4 | 130+ 单元/集成测试全部通过 | TC-14.1 |
+
+### Phase 2 前置验收标准（待 Phase 2 开始后验证）
+
+| # | 验收标准 | 说明 |
+|---|---------|------|
+| 1 | SuperAgent OODA 循环运转，底线一次通过率 ≥ 70% | Phase 2 目标 |
+| 2 | 跨栈迁移 PoC：.NET → Java，覆盖率 ≥ 90% | Phase 2 目标 |
+| 3 | 底线脚本 CI 集成 | Phase 2 目标 |

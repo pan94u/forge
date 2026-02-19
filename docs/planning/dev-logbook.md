@@ -1875,6 +1875,147 @@ Sprint 2C 是 Phase 2 最后一个 Sprint，目标是达成全部验收标准：
 
 ---
 
+## Session 13 — 2026-02-19：文档重构 + 质量校准 + 领导汇报 PPT
+
+> Phase 1.6 代码完成后的文档治理 session。目标：(1) 规划基线 v1.3→v1.4 升级；(2) Phase 2.5→1.6 全局重命名；(3) 基线文档重构（消除多次修改造成的格式混乱）；(4) 验收测试质量审查与修正；(5) 领导汇报 PPT 生成。
+
+### 13.1 规划基线升级 v1.3 → v1.4
+
+**动作**: 将 `baseline-v1.3.md` 升级为 `baseline-v1.4.md`，纳入 Phase 1.6 全部变更。
+
+**主要更新**:
+- 新增 Phase 1.6 阶段描述（AI 交付闭环 / Keycloak SSO / Context Picker / CRUD / Apply / 自动保存 / 知识库扩展）
+- 记录 MCP 工具聚合策略（5 MCP Server × 20 细粒度工具 → McpProxyService 9 聚合工具）
+- Docker 3→4 容器（+Keycloak）
+- 5 Skill Profile 全部提前完成
+- 更新进度基线（320+ 文件 / 45K+ 行 / 130+ 测试）
+- 标注 5 个已识别 Gap（底线 CI、Playwright、内部试用、AI Chat 流式、进化环）
+
+**文件**: `git mv docs/planning/baseline-v1.3.md docs/planning/baseline-v1.4.md`（825 行）
+
+---
+
+### 13.2 基线文档重构
+
+**问题**: 由于 v1.0→v1.4 多次增量修改，文档积累了 15 个格式/逻辑问题。
+
+**识别并修复的 15 个问题**:
+
+| # | 问题 | 修复 |
+|---|------|------|
+| 1 | §3.4 标题"四阶段"过时（已有 6 阶段） | 改为"演进路线"，增加状态列 |
+| 2 | "v1.3 新增"/"v1.4 新增"批注散落全文 | 全部删除，信息融入正文 |
+| 3 | 原则 11-12 加粗格式与 1-10 不一致 | 统一格式 |
+| 4 | 基线项 6-8 加粗格式与 1-5 不一致 | 统一格式 |
+| 5 | Phase 2/3 中大量删除线内容 | 清除，更新为当前状态 |
+| 6 | 各阶段表格列结构不一致 | 统一为相同列格式 |
+| 7 | ForgeNativeRuntime 信息在 §3.6 和 §4.7 重复 | 合并到 §3.6 |
+| 8 | "5 Profile done"重复出现 | 去重 |
+| 9 | Phase 1.5 标"完成"但有未勾选项 | 拆分为"已完成"+"遗留项" |
+| 10 | 版本特定的 section 标题 | 移除版本标注 |
+| 11 | 里程碑表排序混乱 | 按时间顺序排列 |
+| 12 | footer 在变更记录之前 | 调整顺序 |
+| 13 | MCP 偏离记录嵌套在引用块中 | 独立为两个子节 |
+| 14 | §4.5 Runtime 适配过时 | 更新当前状态 |
+| 15 | §4.7 与 §3.6 重复 | 合并删除 |
+
+**结果**: 825→815 行，结构清晰，格式统一。
+
+---
+
+### 13.3 Phase 2.5 → Phase 1.6 全局重命名
+
+**原因**: "Phase 2.5"编号混乱，实际是 Phase 1.5 与 Phase 2 之间的桥梁迭代，改为 Phase 1.6 更准确。
+
+**影响范围**:
+
+| 文件 | 替换数 |
+|------|--------|
+| `baseline-v1.4.md` | 20 处 |
+| `phase1.6-e2e-acceptance-test.md` | 35 处（含文件重命名） |
+| `dev-logbook.md` | 9 处 |
+| `design-baseline-v1.md` | 4 处 |
+| `ADR-004-web-ide-architecture.md` | 1 处 |
+| **总计** | **69 处**（66 文本 + 2 文件名 + 1 git mv） |
+
+**验证**: grep 确认 "Phase 2.5" 和 "phase2.5" 零残留。
+
+---
+
+### 13.4 领导汇报 PPT 生成
+
+**目标**: 基于 baseline-v1.4.md 生成成果展示 + 未来愿景 PPT。
+
+**迭代过程**:
+
+| 版本 | 风格 | 反馈 | 文件 |
+|------|------|------|------|
+| v1 | 技术总结（11 页） | "缺乏高级感，很难打动领导" | `generate-ppt.py` |
+| v2 | 叙事驱动（11 页） | "内容好，配色太花" | `generate-ppt-v2.py` |
+| v3 | Apple 发布会风格（14 页） | ✅ 采纳 | `generate-ppt-v3.py` |
+
+**v3 设计**: 纯黑背景 + 单一强调色 (#2997FF) + Forge Logo（铁砧+火花）+ 14 页叙事弧线（含两页核心架构：四层解耦 + 稳态/敏态隔离）
+
+**产出**: `docs/forge-platform-executive-v3.pptx`
+
+---
+
+### 13.5 验收测试质量审查与修正
+
+**方法**: 对照实际代码（McpProxyService、ContextController、AuthController、SecurityConfig、前端组件）逐项验证 89 个测试用例的预期。
+
+**发现并修正 16 个问题**:
+
+#### 严重（3 个 — 会导致测试必然失败）
+
+| 问题 | 修正 |
+|------|------|
+| TC-G.3 测试 `/api/auth/config`（不存在） | → `/api/auth/me` + `/api/auth/me/jwt`，修正预期字段 |
+| TC-A.2 环境变量 `AUTH_ENABLED` | → `FORGE_SECURITY_ENABLED`（与 application.yml 一致） |
+| 验收标准对照混入 Phase 2 目标 | 拆分为 Phase 1.6 / Phase 0~1.5 回归 / Phase 2 前置 |
+
+#### 中度（7 个 — 术语混乱）
+
+| 问题 | 修正 |
+|------|------|
+| "Phase 2 全部功能"/"Phase 2 小计" | → "Phase 0~1.5" |
+| 多处 "Sprint 2B"/"Sprint 2C" | 全部清除 |
+| TC-1.2 侧边栏仅 3 项 | 补全为 7 项 |
+| baseline §5.1 MCP 工具名与代码不符（6 处） | 修正为代码中的实际名称 |
+| baseline Context Picker 类别错误 | `skills/profiles` → `schema/services` |
+
+#### 轻度（6 个 — 去重 + 遗漏）
+
+| 问题 | 修正 |
+|------|------|
+| TC-G.1 ≈ TC-9.3 | G.1 改为 workspace 工具 inputSchema 验证 |
+| TC-I.1 ≈ TC-15.1 | I.1 改为容器间网络连通性验证 |
+| TC-I.3 ≈ TC-15.2 | I.3 改为 workspace 工具 Docker 内端到端验证 |
+
+---
+
+### 13.6 Session 13 总结
+
+**用时**: ~2 小时
+
+**文件变更**:
+
+| 操作 | 文件 | 说明 |
+|------|------|------|
+| 重命名+重构 | `baseline-v1.3.md` → `baseline-v1.4.md` | 815 行，修复 15 个格式问题 + MCP 工具名 + Context Picker 类别 |
+| 重命名+修正 | `phase2.5-*` → `phase1.6-e2e-acceptance-test.md` | 12 处修正（端点/环境变量/术语/去重/验收标准） |
+| 修改 | `design-baseline-v1.md` | Phase 2.5→1.6（4 处） |
+| 修改 | `dev-logbook.md` | Phase 2.5→1.6 + Session 13 |
+| 修改 | `ADR-004-web-ide-architecture.md` | Phase 2.5→1.6（1 处） |
+| 新建 | `generate-ppt*.py` × 3 + `.pptx` × 3 | PPT 生成脚本和产出 |
+
+**经验沉淀**（遵循原则 12）:
+- 文档在多次增量修改后必须做一次全量重构，消除格式/逻辑债务
+- 验收测试编写后必须对照代码做交叉验证，否则测试本身就是错的
+- 规划文档中的技术细节（工具名、API 端点、环境变量名）必须与代码保持同步
+
+---
+
 ### Git 提交记录（全量更新）
 
 | Commit | 说明 | 文件数 | 插入行数 |
@@ -1903,6 +2044,9 @@ Sprint 2C 是 Phase 2 最后一个 Sprint，目标是达成全部验收标准：
 | `f8edd6a` | docs: add Phase 2 E2E acceptance test design (15 scenarios, 59 test cases) | 1 | 851 |
 | `bf91bd3` | docs: add Phase 1.6 E2E acceptance test (24 scenarios, 89 test cases) | 1 | 1,307 |
 | `4759ee0` | feat: Phase 1.6 — Keycloak SSO, AI→Workspace delivery loop, Context Picker, FileExplorer CRUD, auto-save | 29 | 1,883 |
+| `5ae19b0` | docs: update design baseline v4 → v5 (Phase 1.6 complete) | - | - |
+| `abd58dd` | docs: update dev logbook — Session 12 (Phase 1.6) | - | - |
+| `c826a95` | docs: rename Phase 2.5 → Phase 1.6, restructure baseline v1.4, add executive PPT | 12 | 2,541 |
 
 ### docs/ 文档清单（全量更新）
 
@@ -1916,8 +2060,8 @@ Sprint 2C 是 Phase 2 最后一个 Sprint，目标是达成全部验收标准：
 | `docs/planning/analysis-claude-code-independence.md` | Claude Code 独立性分析 | Session 3 |
 | `docs/planning/phase1-implementation-plan.md` | Phase 1 五周实施计划 | Session 4 |
 | `docs/TRIAL-GUIDE.md` | Phase 1.5 内部试用引导 | Session 5 |
-| `docs/design-baseline-v1.md` | Web IDE 设计基线（**v4**, Phase 2 complete） | Session 5 创建, Session 11 升级 |
-| `docs/planning/baseline-v1.3.md` | 规划基线 v1.3（设计守护 + 平台能力提炼） | Session 5 |
+| `docs/design-baseline-v1.md` | Web IDE 设计基线（**v5**, Phase 1.6 complete） | Session 5 创建, Session 12 升级 |
+| `docs/planning/baseline-v1.4.md` | 规划基线 v1.4（Phase 1.6 + 文档重构 + 数据校准） | Session 5 创建, **Session 13 重构** |
 | `docs/planning/session5-design-retrospective.md` | Session 5 设计回顾 | Session 5 |
 | `docs/phase2-skill-aware-ooda-loop.md` | Phase 2 Skill-Aware OODA Loop 实施计划 | Session 6 |
 | `docs/phase2-feature-list-and-test-paths.md` | Phase 2 功能清单 + E2E 测试路径与结果 | Session 7 |
@@ -1926,24 +2070,26 @@ Sprint 2C 是 Phase 2 最后一个 Sprint，目标是达成全部验收标准：
 | `docs/sprint2a-acceptance-test.md` | Sprint 2A 验收测试（9 场景 / 36 用例） | Session 9 |
 | `docs/cross-stack-poc-report.md` | 跨栈迁移 PoC 报告（.NET → Java, 11 规则 100% 覆盖） | Session 11 |
 | `docs/phase2-e2e-acceptance-test.md` | Phase 2 E2E 验收测试（15 场景 / 59 用例） | **Session 12** |
-| `docs/phase1.6-e2e-acceptance-test.md` | Phase 1.6 E2E 验收测试（24 场景 / 89 用例） | **Session 12** |
+| `docs/phase1.6-e2e-acceptance-test.md` | Phase 1.6 E2E 验收测试（24 场景 / 89 用例） | Session 12, **Session 13 修正** |
+| `docs/generate-ppt-v3.py` | Apple 发布会风格 PPT 生成脚本 | **Session 13** |
+| `docs/forge-platform-executive-v3.pptx` | 领导汇报 PPT（14 页） | **Session 13** |
 
-### 项目统计快照（Session 12）
+### 项目统计快照（Session 13）
 
 | 指标 | 数值 |
 |------|------|
-| 总文件数 | ~295+ |
+| 总文件数 | ~320+ |
 | 总代码行数 | ~50,000+ |
-| Git Commits | 23 |
-| Sessions | 12 |
+| Git Commits | 26 |
+| Sessions | 13 |
 | 单元测试 | 130+ |
 | Skills 加载 | 32 (5 profiles) |
-| MCP 工具 | 9 (6 实连 + 3 workspace) |
+| MCP 工具 | 9 (search_knowledge, query_schema, get_service_info, read_file, run_baseline, list_baselines + 3 workspace) |
 | Docker 容器 | 4 (backend + frontend + nginx + keycloak) |
 | 知识库文档 | 12+ |
-| E2E 验收测试 | 89 用例 / 336 检查项 |
+| E2E 验收测试 | 89 用例 / 336 检查项（已交叉验证） |
 | Phase 0 | ✅ 完成 |
 | Phase 1 | ✅ 完成 |
 | Phase 1.5 | ✅ 完成 |
-| Phase 2 | ✅ 完成 |
-| **Phase 1.6** | **✅ 全部完成** |
+| Phase 1.6 | ✅ 完成 |
+| **文档治理** | **✅ Session 13 完成** |

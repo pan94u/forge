@@ -353,12 +353,12 @@ SuperAgent 下次执行时自动获得更好的知识和技能
 
 | # | Tool | 来源 | 说明 |
 |---|------|------|------|
-| 1 | `knowledge_search` | knowledge-mcp | 统一知识搜索 |
-| 2 | `database_query` | database-mcp | 数据库查询 |
-| 3 | `service_graph` | service-graph-mcp | 服务依赖查询 |
-| 4 | `artifact_search` | artifact-mcp | 制品搜索 |
-| 5 | `observability_query` | observability-mcp | 可观测性查询 |
-| 6 | `codebase_analysis` | 内置 | 代码库分析 |
+| 1 | `search_knowledge` | knowledge-mcp | 统一知识搜索 |
+| 2 | `query_schema` | database-mcp | 数据库 Schema 查询 |
+| 3 | `get_service_info` | service-graph-mcp | 服务信息查询 |
+| 4 | `read_file` | 内置 | 读取知识库/workspace/插件文件 |
+| 5 | `run_baseline` | 内置 | 执行底线检查脚本 |
+| 6 | `list_baselines` | 内置 | 列出可用底线脚本 |
 | 7 | `workspace_write_file` | 内置 | AI 写文件到 workspace |
 | 8 | `workspace_read_file` | 内置 | AI 读 workspace 文件 |
 | 9 | `workspace_list_files` | 内置 | AI 列出 workspace 文件 |
@@ -574,7 +574,7 @@ forge-platform/                          # Gradle Monorepo (Kotlin DSL)
 | 1 | AI→Workspace 交付闭环 | workspace_write_file / read_file / list_files 三个工具，AI 可直接读写 workspace 文件 |
 | 2 | file_changed 事件驱动 | AI 写文件后通过 SSE 推送 file_changed 事件 → 前端文件树自动刷新 + 编辑器自动打开 |
 | 3 | Keycloak SSO | OIDC PKCE 登录流程，4 容器部署（+keycloak），realm 自动导入，支持 FORGE_SECURITY_ENABLED 开关 |
-| 4 | Context Picker 实连 | /api/context/search 端点，4 个类别（files/knowledge/skills/profiles）实际数据 |
+| 4 | Context Picker 实连 | /api/context/search 端点，4 个类别（files/knowledge/schema/services）实际数据 |
 | 5 | 代码块 Apply 按钮 | 聊天中代码块可一键写入 workspace，20+ 语言→扩展名映射 |
 | 6 | FileExplorer CRUD | 右键菜单：新建文件/文件夹、重命名、删除 |
 | 7 | 未保存标记 + 自动保存 | 文件 tab 蓝色圆点标记 + 5 秒防抖自动保存 |
@@ -811,5 +811,6 @@ Phase 0       Phase 1          Phase 1.5         Phase 1.6            Phase 2   
 | v1.2 | 2026-02-17 | Phase 1 完成状态更新；新增 Phase 1.5 内部试用计划；统一路线图；更新进度基线和里程碑 |
 | v1.3 | 2026-02-18 | 设计守护体系：新增原则 11-12；新增 3 底线脚本 + 3 Foundation Skill；增强进化环；创建设计基线文档；新增 3 度量指标 |
 | v1.4 | 2026-02-19 | 文档重构 + Phase 1.6 纳入：新增 Phase 1.6 阶段（AI 交付闭环 / Keycloak SSO / Context Picker / CRUD / Apply / 自动保存 / 知识库扩展）；记录 MCP 工具聚合策略（20→9）；Docker 3→4 容器（+Keycloak）；5 Profile 全完成；更新进度基线（320+ 文件 / 45K+ 行 / 130+ 测试）；标注 5 个 Gap；消除散落的版本批注，统一格式 |
+| v1.4.1 | 2026-02-19 | 数据校准：修正 MCP 聚合工具名（与 McpProxyService 代码对齐：knowledge_search→search_knowledge 等 6 处）；修正 Context Picker 类别（skills/profiles→schema/services） |
 
 > 基线版本: v1.4 | 基线日期: 2026-02-19 | 下次评审: Phase 2 中期
