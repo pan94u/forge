@@ -214,13 +214,163 @@ SystemPromptAssembler 在组装 system prompt 时，根据当前 active profile 
 
 ---
 
-## 五、Sprint 2.3：内部试用 + 反馈闭环 — "让真人用起来"
+## 五、Sprint 2.3：多模型适配 — "让模型可选择"
 
 ### 5.1 目标
 
+完善 ModelAdapter 体系，支持 AWS Bedrock Claude、Google Gemini、阿里通义千问三大模型系列，实现前端模型选择器和工具调用能力差异化处理。
+
+### 5.2 现状分析
+
+| 适配器 | 文件 | 状态 | 工具调用 |
+|--------|------|------|---------|
+| ClaudeAdapter | `adapters/model-adapter/.../ClaudeAdapter.kt` | ✅ 完整 | ✅ 原生支持 |
+| LocalModelAdapter | `adapters/model-adapter/.../LocalModelAdapter.kt` | ✅ 完整 | ⚠️ 有限 |
+| BedrockAdapter | `adapters/model-adapter/.../BedrockAdapter.kt` | ⚠️ 骨架 | 待实现 |
+| GeminiAdapter | — | ❌ 未开始 | 待实现 |
+| QwenAdapter | — | ❌ 未开始 | 待实现 |
+
+**已有基础**：`ModelAdapter` 统一接口（`complete` / `streamComplete` / `streamWithTools` / `supportedModels` / `healthCheck`）+ `StreamEvent` 事件体系 + `ClaudeConfig` Spring 自动选择。
+
+### 5.3 交付物
+
+| # | 交付物 | 说明 | 优先级 |
+|---|--------|------|--------|
+| 1 | BedrockAdapter 完善 | AWS SDK 集成，支持 Bedrock 上的 Claude 模型（Converse API），流式 + 工具调用 | P0 |
+| 2 | GeminiAdapter 新建 | 对接 Google Gemini API（gemini-2.0-flash / gemini-2.5-pro），流式 + Function Calling | P0 |
+| 3 | QwenAdapter 新建 | 对接阿里 DashScope API（qwen-max / qwen-plus / qwen-turbo），流式 + 工具调用 | P0 |
+| 4 | ModelRegistry 模型注册中心 | 统一管理所有 Provider 的模型列表、能力矩阵、健康状态 | P1 |
+| 5 | ClaudeConfig 重构为 ModelConfig | 支持多 Provider 并存，运行时动态切换（非重启切换） | P1 |
+| 6 | 前端模型选择器 | Header 或 AI Chat Sidebar 中的模型下拉选择器，显示模型名 + Provider 标签 | P1 |
+| 7 | 工具调用兼容层 | 处理不同模型的工具调用格式差异（Claude 原生 vs Gemini Function Calling vs Qwen tools） | P0 |
+| 8 | 模型能力矩阵 | 记录每个模型的 context window、max output、工具调用支持级别，供 SystemPromptAssembler 参考 | P2 |
+
+### 5.4 关键文件
+
+| 操作 | 文件 | 说明 |
+|------|------|------|
+| 重写 | `adapters/model-adapter/.../BedrockAdapter.kt` | AWS SDK Bedrock Converse API |
+| 新建 | `adapters/model-adapter/.../GeminiAdapter.kt` | Google Gemini API 适配器 |
+| 新建 | `adapters/model-adapter/.../QwenAdapter.kt` | 阿里 DashScope API 适配器 |
+| 新建 | `adapters/model-adapter/.../ModelRegistry.kt` | 模型注册中心 |
+| 重构 | `web-ide/backend/.../config/ClaudeConfig.kt` → `ModelConfig.kt` | 多 Provider 配置 |
+| 新建 | `web-ide/backend/.../controller/ModelController.kt` | `/api/models` 端点 |
+| 修改 | `web-ide/backend/.../service/ClaudeAgentService.kt` | 支持动态模型选择 |
+| 新建 | `web-ide/frontend/src/components/common/ModelSelector.tsx` | 前端模型选择器 |
+| 修改 | `web-ide/frontend/src/components/chat/AiChatSidebar.tsx` | 集成模型选择器 |
+| 修改 | `adapters/model-adapter/build.gradle.kts` | 新增 AWS SDK / Google API 依赖 |
+
+### 5.5 技术方案要点
+
+**三大适配器对比**：
+
+| 维度 | AWS Bedrock Claude | Google Gemini | 阿里 Qwen |
+|------|-------------------|---------------|-----------|
+| API 端点 | AWS Bedrock Converse API | `generativelanguage.googleapis.com` | `dashscope.aliyuncs.com` |
+| 认证方式 | AWS IAM (AccessKey/Profile/Role) | Google API Key 或 OAuth2 | DashScope API Key |
+| 流式协议 | AWS EventStream | SSE | SSE（OpenAI 兼容格式） |
+| 工具调用 | Converse API ToolUse（与 Claude 类似） | Function Calling（`function_declarations`） | tools 参数（OpenAI 兼容） |
+| SDK | `software.amazon.awssdk:bedrockruntime` | OkHttp 直连（轻量） | OkHttp 直连（OpenAI 兼容） |
+| 主要模型 | claude-opus-4 / claude-sonnet-4 / claude-haiku-3.5 | gemini-2.5-pro / gemini-2.0-flash | qwen-max / qwen-plus / qwen-turbo |
+
+**ModelRegistry 设计**：
+
+```kotlin
+data class ModelInfo(
+    val id: String,                    // "claude-sonnet-4-20250514"
+    val provider: Provider,            // ANTHROPIC / BEDROCK / GEMINI / QWEN
+    val displayName: String,           // "Claude Sonnet 4"
+    val contextWindow: Int,            // 200000
+    val maxOutputTokens: Int,          // 16384
+    val toolCallSupport: ToolSupport,  // FULL / PARTIAL / NONE
+    val costTier: CostTier,            // HIGH / MEDIUM / LOW
+    val available: Boolean             // 健康检查结果
+)
+
+enum class Provider { ANTHROPIC, BEDROCK, GEMINI, QWEN, LOCAL }
+enum class ToolSupport { FULL, PARTIAL, NONE }
+```
+
+**前端模型选择流程**：
+
+```
+用户在 ModelSelector 选择模型
+    ↓
+POST /api/models/active { "modelId": "gemini-2.0-flash" }
+    ↓
+ModelConfig 更新当前 session 的 active adapter
+    ↓
+下次 streamMessage() 使用新模型
+    ↓
+SystemPromptAssembler 根据模型能力调整 prompt
+（如：工具调用能力弱的模型，减少工具注入数量）
+```
+
+**工具调用兼容层**：
+
+```
+ClaudeAgentService.agenticStream()
+    ↓
+modelAdapter.streamWithTools(messages, options, tools)
+    ↓
+┌─────────────────────────────────────────────────────┐
+│ 各适配器内部处理工具调用格式差异                          │
+│                                                     │
+│ ClaudeAdapter:  tools → Claude tools 格式            │
+│ BedrockAdapter: tools → Converse API toolConfig      │
+│ GeminiAdapter:  tools → function_declarations 格式   │
+│ QwenAdapter:    tools → OpenAI tools 格式            │
+│                                                     │
+│ 返回统一 StreamEvent（ToolUseStart / ToolInputDelta） │
+└─────────────────────────────────────────────────────┘
+```
+
+### 5.6 环境变量配置
+
+```yaml
+# application.yml 新增
+forge:
+  models:
+    # Anthropic 直连（已有）
+    anthropic:
+      api-key: ${ANTHROPIC_API_KEY:}
+
+    # AWS Bedrock
+    bedrock:
+      enabled: ${BEDROCK_ENABLED:false}
+      region: ${AWS_REGION:us-east-1}
+      # 认证：走 AWS 默认凭证链（环境变量 / ~/.aws/credentials / IAM Role）
+
+    # Google Gemini
+    gemini:
+      enabled: ${GEMINI_ENABLED:false}
+      api-key: ${GEMINI_API_KEY:}
+
+    # 阿里通义千问
+    qwen:
+      enabled: ${QWEN_ENABLED:false}
+      api-key: ${DASHSCOPE_API_KEY:}
+```
+
+### 5.7 验收标准
+
+- [ ] BedrockAdapter 通过 AWS Bedrock 调用 Claude 模型，流式 + 工具调用正常
+- [ ] GeminiAdapter 通过 Google API 调用 Gemini 模型，流式 + Function Calling 正常
+- [ ] QwenAdapter 通过 DashScope API 调用 Qwen 模型，流式 + 工具调用正常
+- [ ] 前端 ModelSelector 可切换模型，切换后下次对话使用新模型
+- [ ] 每个适配器有 ≥ 5 个单元测试（MockWebServer 模拟 API 响应）
+- [ ] 3 个适配器的 `healthCheck()` 均可用于监控
+- [ ] 工具调用能力弱的模型不会导致 agenticStream 异常（优雅降级）
+
+---
+
+## 六、Sprint 2.4：内部试用 + 反馈闭环 — "让真人用起来"
+
+### 6.1 目标
+
 组织 3-5 人内部试用 ≥ 3 天，收集结构化反馈，修复 Top 问题。
 
-### 5.2 交付物
+### 6.2 交付物
 
 | # | 交付物 | 说明 | 优先级 |
 |---|--------|------|--------|
@@ -231,7 +381,7 @@ SystemPromptAssembler 在组装 system prompt 时，根据当前 active profile 
 | 5 | Top 问题修复 | 根据反馈修复最高优先级的 3-5 个问题 | P0 |
 | 6 | 验收测试更新 | 基于试用发现的新场景更新验收测试文档 | P1 |
 
-### 5.3 试用场景设计
+### 6.3 试用场景设计
 
 | 场景 | 参与者 | 预期使用功能 |
 |------|--------|-------------|
@@ -239,8 +389,9 @@ SystemPromptAssembler 在组装 system prompt 时，根据当前 active profile 
 | 代码审查辅助 | 资深开发 | AI 对话 + @设计 Profile + 知识库搜索 |
 | 新人上手 | 新入职 | Dashboard + 知识浏览 + AI 问答 |
 | 测试用例编写 | 测试工程师 | AI 对话 + @测试 Profile + 代码生成 |
+| **多模型对比** | **全员** | **切换不同模型完成同一任务，对比质量和速度** |
 
-### 5.4 反馈收集维度
+### 6.4 反馈收集维度
 
 | 维度 | 评分 (1-5) | 开放问题 |
 |------|-----------|---------|
@@ -249,18 +400,20 @@ SystemPromptAssembler 在组装 system prompt 时，根据当前 active profile 
 | 代码生成准确性 | □□□□□ | 生成的代码可直接使用吗？ |
 | 操作流畅度 | □□□□□ | 有卡顿或不便吗？ |
 | 知识库有用性 | □□□□□ | 搜索到的内容是否相关？ |
+| **模型偏好** | □□□□□ | **最常用哪个模型？为什么？** |
 | 愿意继续使用 | □□□□□ | 改进建议？ |
 
-### 5.5 验收标准
+### 6.5 验收标准
 
 - [ ] ≥ 3 人完成 ≥ 3 天试用
 - [ ] 收到结构化反馈报告
 - [ ] Top 3 问题已修复
 - [ ] 用户整体满意度 ≥ 3.5/5
+- [ ] 收集到模型偏好数据（各模型使用占比）
 
 ---
 
-## 六、Phase 2 整体验收标准
+## 七、Phase 2 整体验收标准
 
 | # | 标准 | 来源 | 状态 |
 |---|------|------|------|
@@ -270,12 +423,14 @@ SystemPromptAssembler 在组装 system prompt 时，根据当前 active profile 
 | 4 | Skill frontmatter trigger 动态加载 | Sprint 2.2 | ⬜ |
 | 5 | knowledge-mcp + database-mcp 独立服务可用 | Sprint 2.2 | ⬜ |
 | 6 | McpProxyService 真实 HTTP 调用 MCP Server | Sprint 2.2 | ⬜ |
-| 7 | ≥ 3 人内部试用完成 + 反馈收集 | Sprint 2.3 | ⬜ |
-| 8 | 所有 Bug ≤ 1 个挂起 | 全局 | ⬜ |
+| 7 | Bedrock + Gemini + Qwen 三大模型适配器可用 | Sprint 2.3 | ⬜ |
+| 8 | 前端可切换模型，工具调用兼容 | Sprint 2.3 | ⬜ |
+| 9 | ≥ 3 人内部试用完成 + 反馈收集 | Sprint 2.4 | ⬜ |
+| 10 | 所有 Bug ≤ 1 个挂起 | 全局 | ⬜ |
 
 ---
 
-## 七、不在 Phase 2 范围
+## 八、不在 Phase 2 范围（更新）
 
 | 推迟项 | 目标阶段 | 理由 |
 |--------|---------|------|
@@ -288,18 +443,22 @@ SystemPromptAssembler 在组装 system prompt 时，根据当前 active profile 
 
 ---
 
-## 八、风险与缓解
+## 九、风险与缓解
 
 | 风险 | 影响 | 缓解措施 |
 |------|------|---------|
 | MCP Server 真实化工作量超预期 | Sprint 2.2 延期 | 先做 knowledge-mcp（逻辑简单），database-mcp 视情况简化 |
 | Playwright 环境配置复杂 | Sprint 2.1 延期 | 仅覆盖核心场景（20 个），非全量 87 个 |
-| 内部试用用户时间不足 | Sprint 2.3 无法达标 | 降低门槛：最少 2 人 × 2 天 |
+| 各模型工具调用格式差异大 | Sprint 2.3 延期 | QwenAdapter 可复用 OpenAI 兼容格式（与 LocalModelAdapter 类似），降低工作量 |
+| 模型 API Key 获取周期长 | Sprint 2.3 阻塞 | 先完成 BedrockAdapter（AWS 账号已有），Gemini/Qwen 用 MockWebServer 测试先行 |
+| Bedrock IAM 权限配置复杂 | Sprint 2.3 延期 | 提供最小权限 IAM Policy 模板，文档化配置步骤 |
+| 内部试用用户时间不足 | Sprint 2.4 无法达标 | 降低门槛：最少 2 人 × 2 天 |
 | BUG-016 根因复杂 | 修复耗时 | 如无法根治，实现兜底方案（safety net 输出） |
 | Docker 6 容器资源消耗 | 开发机器吃力 | 提供"精简模式"docker-compose（仅 4 核心容器） |
 
 ---
 
-> Phase 2 计划版本: v1.0 | 日期: 2026-02-20
-> 依据: 规划基线 v1.4 §7 + Phase 1.6 验收测试数据 + 18 Session 开发经验
+> Phase 2 计划版本: v1.1 | 日期: 2026-02-20
+> 变更: v1.0 → v1.1 新增 Sprint 2.3 多模型适配（Bedrock + Gemini + Qwen），原 Sprint 2.3 内部试用顺延为 Sprint 2.4
+> 依据: 规划基线 v1.5 §7 + Phase 1.6 验收测试数据 + 18 Session 开发经验
 > 下一步: 生成 Phase 1.6 Metrics 报告 → 启动 Sprint 2.1

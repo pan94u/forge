@@ -1,6 +1,6 @@
 # Forge — 面向 AI 时代的智能交付平台
 
-> 规划基线 v1.5 | 基线日期: 2026-02-20
+> 规划基线 v1.5.1 | 基线日期: 2026-02-20 | 变更: v1.5→v1.5.1 新增 Sprint 2.3 多模型适配，原 Sprint 2.3 内部试用顺延为 Sprint 2.4
 
 ---
 
@@ -142,7 +142,7 @@
 | Phase 1 | Web IDE 实连 + 跨栈基础 | ✅ | 真流式 + Agentic Loop + 跨栈画像 + 37 测试 | Claude Code |
 | Phase 1.5 | 设计守护 + Docker 部署 | ✅ | Docker 3 容器 + E2E 验证 + 设计基线冻结 + 设计守护底线 | Claude Code |
 | Phase 1.6 | AI 交付闭环 + SSO + UX 增强 | ✅ | AI→Workspace 写文件 + Keycloak SSO + Context Picker + CRUD + 自动保存 | Claude Code |
-| Phase 2 | 质量基础设施 + OODA 增强 + 内部试用 | 👈 下一阶段 | Sprint 2.1（CI/Playwright/Bug 修复）+ Sprint 2.2（SkillLoader/MCP 真实服务）+ Sprint 2.3（内部试用） | Claude Code |
+| Phase 2 | 质量基础设施 + OODA 增强 + 多模型 + 内部试用 | 👈 下一阶段 | Sprint 2.1（CI/Playwright/Bug 修复）+ Sprint 2.2（SkillLoader/MCP 真实服务）+ Sprint 2.3（多模型适配：Bedrock/Gemini/Qwen）+ Sprint 2.4（内部试用） | Claude Code |
 | Phase 3 | 方法论平台化 + 进化环闭合 | ⏳ | 方法论自动化（execution-logger / design-baseline-tracker / skill-feedback-analyzer） + ForgeNativeRuntime + RuntimeAdapter | Claude Code 或 ForgeNative（可选） |
 | Phase 4 | 全面上线 + 持续进化 | ⏳ | 多 Runtime 支持 + Skill 生态 + 进化环飞轮 + 垂域模型 | 任意 Runtime |
 
@@ -285,7 +285,7 @@ Phase 3:   + AgentLoop + HookEngine + ContextBuilder → 完整 ForgeNativeRunti
 
 | 适配维度 | 接口 | 当前实现 | 未来可切换 |
 |---------|------|---------|----------|
-| 模型适配 | `ModelAdapter.kt` | `ClaudeAdapter` (Opus/Sonnet/Haiku) | BedrockAdapter / LocalModelAdapter |
+| 模型适配 | `ModelAdapter.kt` | `ClaudeAdapter` (Opus/Sonnet/Haiku) + `LocalModelAdapter` (Ollama/OpenAI 兼容) | Sprint 2.3: `BedrockAdapter`(AWS) + `GeminiAdapter`(Google) + `QwenAdapter`(阿里) |
 | 资产格式适配 | `AssetFormatAdapter.kt` | SKILL.md v1 格式 | 未来格式版本迁移 |
 | Runtime 适配 | `RuntimeAdapter.kt` | 空壳接口（SkillLoader/ProfileRouter 基础版已独立实现） | Phase 3 ForgeNativeRuntime（方法论执行引擎） |
 
@@ -617,12 +617,12 @@ forge-platform/                          # Gradle Monorepo (Kotlin DSL)
 - Docker 从 3 容器 → 4 容器（+keycloak）
 - 5 个 Skill Profile 全部提前完成（原计划 planning-profile + ops-profile 在 Phase 3）
 
-### Phase 2：质量基础设施 + OODA 增强 + 内部试用 — 👈 下一阶段
+### Phase 2：质量基础设施 + OODA 增强 + 多模型适配 + 内部试用 — 👈 下一阶段
 
-> 详细实施计划：`docs/phase2-implementation-plan.md`
-> 关键决策：混合路线（Sprint 拆分）、ForgeNativeRuntime 推迟到 Phase 3、MCP 做 1-2 个真实服务、组织 3-5 人试用
+> 详细实施计划：`docs/phase2-implementation-plan.md`（v1.1）
+> 关键决策：混合路线（Sprint 拆分）、ForgeNativeRuntime 推迟到 Phase 3、MCP 做 1-2 个真实服务、多模型适配（Bedrock/Gemini/Qwen）、组织 3-5 人试用
 
-**目标**：建立自动化质量保障体系；增强 OODA 引擎智能性；让真人用起来并收集反馈。
+**目标**：建立自动化质量保障体系；增强 OODA 引擎智能性；支持多模型选择；让真人用起来并收集反馈。
 
 **前置条件**：
 
@@ -649,7 +649,8 @@ forge-platform/                          # Gradle Monorepo (Kotlin DSL)
 | 9 | 度量基线采集 | ⚠️ MetricsService | 已完成 metrics 报告 + Sprint 2.2 Dashboard |
 | 10 | 底线脚本 CI 集成 | ❌ 未开始 | Sprint 2.1 核心交付 |
 | 11 | Playwright E2E | ❌ 未开始 | Sprint 2.1 核心交付 |
-| 12 | 内部用户试用 | ❌ 未开始 | Sprint 2.3 核心交付 |
+| 12 | 内部用户试用 | ❌ 未开始 | Sprint 2.4 核心交付 |
+| 13 | 多模型适配（Bedrock/Gemini/Qwen） | ❌ 未开始 | Sprint 2.3 核心交付（新增） |
 
 **Sprint 2.1：质量基础设施 — "让系统可信赖"**
 
@@ -674,7 +675,19 @@ forge-platform/                          # Gradle Monorepo (Kotlin DSL)
 | 6 | Docker 扩容 4→6 容器（+knowledge-mcp + database-mcp） | P1 |
 | 7 | Metrics Dashboard（Grafana 或内置简易面板） | P2 |
 
-**Sprint 2.3：内部试用 + 反馈闭环 — "让真人用起来"**
+**Sprint 2.3：多模型适配 — "让模型可选择"**
+
+| # | 交付物 | 优先级 |
+|---|--------|--------|
+| 1 | BedrockAdapter 完善（AWS SDK Converse API，流式 + 工具调用） | P0 |
+| 2 | GeminiAdapter 新建（Google Gemini API + Function Calling） | P0 |
+| 3 | QwenAdapter 新建（阿里 DashScope API，OpenAI 兼容格式） | P0 |
+| 4 | 工具调用兼容层（不同模型的工具格式差异处理） | P0 |
+| 5 | ModelRegistry 模型注册中心（能力矩阵 + 健康状态） | P1 |
+| 6 | ClaudeConfig → ModelConfig 重构（多 Provider 并存，运行时切换） | P1 |
+| 7 | 前端模型选择器（下拉选择，按 Provider 分组） | P1 |
+
+**Sprint 2.4：内部试用 + 反馈闭环 — "让真人用起来"**
 
 | # | 交付物 | 优先级 |
 |---|--------|--------|
@@ -682,7 +695,7 @@ forge-platform/                          # Gradle Monorepo (Kotlin DSL)
 | 2 | 试用环境部署（稳定的共享/独立 Docker 环境） | P0 |
 | 3 | 试用执行（3-5 人，≥ 3 天） | P0 |
 | 4 | Top 问题修复（根据反馈修 Top 3-5 问题） | P0 |
-| 5 | 反馈收集机制（结构化反馈表） | P1 |
+| 5 | 反馈收集机制（结构化反馈表，含模型偏好维度） | P1 |
 | 6 | 验收测试更新（基于试用新场景扩展） | P1 |
 
 **验收标准**：
@@ -692,6 +705,8 @@ forge-platform/                          # Gradle Monorepo (Kotlin DSL)
 - [ ] Skill 按 frontmatter trigger 条件动态加载
 - [ ] knowledge-mcp + database-mcp 作为独立容器运行
 - [ ] McpProxyService 通过 HTTP 调用真实 MCP Server
+- [ ] Bedrock + Gemini + Qwen 三大模型适配器可用
+- [ ] 前端可切换模型，工具调用兼容
 - [ ] ≥ 3 人完成 ≥ 3 天试用 + 结构化反馈
 - [ ] 所有 Bug ≤ 1 个挂起
 
@@ -807,8 +822,8 @@ forge-platform/                          # Gradle Monorepo (Kotlin DSL)
 
 ```
 Phase 0       Phase 1          Phase 1.5         Phase 1.6            Phase 2                    Phase 3
-骨架搭建       实连+跨栈基础      设计守护+Docker    AI交付闭环+SSO        质量+OODA+试用              双环闭合
-244 files     37 tests         3容器+基线冻结      4容器+9工具+147测试   Sprint 2.1/2.2/2.3         ForgeNativeRuntime
+骨架搭建       实连+跨栈基础      设计守护+Docker    AI交付闭环+SSO        质量+OODA+多模型+试用        双环闭合
+244 files     37 tests         3容器+基线冻结      4容器+9工具+147测试   Sprint 2.1/2.2/2.3/2.4     ForgeNativeRuntime
 ──── ✅ ── ── ──── ✅ ── ── ── ──── ✅ ── ── ── ──── ✅ ── ── ── ──── 👈 下一阶段 ── ── ── ──────────
   W1-3          W4-8                                                     W9-14                     W15-20
 ```
@@ -823,7 +838,7 @@ Phase 0       Phase 1          Phase 1.5         Phase 1.6            Phase 2   
 | Phase 1.6 AI 交付闭环 + SSO | ✅ 完成（4 容器，9 工具，147 测试，87 验收用例 92% 通过） |
 | Phase 1.6 Metrics 报告 | ✅ 完成（7 个 Prometheus 指标已采集，度量报告已生成） |
 | Phase 1.6 交付方法论分析 | ✅ 完成（18 Session 全量分析，评分 4.4/5.0） |
-| Phase 2 质量+OODA+试用 | 👈 下一阶段（Sprint 2.1/2.2/2.3） |
+| Phase 2 质量+OODA+多模型+试用 | 👈 下一阶段（Sprint 2.1/2.2/2.3/2.4） |
 | Phase 3 双环闭合 | ⏳ 待开始 |
 | Phase 4 全面上线 | ⏳ 待开始 |
 
@@ -836,7 +851,8 @@ Phase 0       Phase 1          Phase 1.5         Phase 1.6            Phase 2   
 | BUG-016 | Agentic loop 耗尽后无文字输出（唯一挂起 Bug） | Phase 2 | Sprint 2.1 |
 | Cmd+K 命令面板 | Header.tsx 缺少键盘监听器（TC-14.2 挂起） | Phase 2 | Sprint 2.1 |
 | MCP Server 真实化 | 5 个 MCP Server 均为骨架代码，需真实化 knowledge + database | Phase 2 | Sprint 2.2 |
-| 内部用户试用 | 3-5 人实际使用 ≥ 3 天尚未开展 | Phase 2 | Sprint 2.3 |
+| 多模型适配 | BedrockAdapter 骨架待完善，GeminiAdapter/QwenAdapter 待新建 | Phase 2 | Sprint 2.3 |
+| 内部用户试用 | 3-5 人实际使用 ≥ 3 天尚未开展 | Phase 2 | Sprint 2.4 |
 | 进化环（环 2） | 全部组件待实现 | Phase 3 | — |
 | ForgeNativeRuntime | AgentLoop.kt / HookEngine.kt / ContextBuilder.kt 待实现 | Phase 3 | — |
 
@@ -973,4 +989,4 @@ Phase 4：飞轮效应
 | v1.4.1 | 2026-02-19 | 数据校准：修正 MCP 聚合工具名（与 McpProxyService 代码对齐：knowledge_search→search_knowledge 等 6 处）；修正 Context Picker 类别（skills/profiles→schema/services） |
 | v1.5 | 2026-02-20 | Phase 2 计划纳入 + 方法论升级 + 整体审视：Phase 2 从 12 交付物重构为 Sprint 2.1/2.2/2.3；新增设计原则 13-14（场景先行验收 + 本地验证优先）；新增 §11 交付方法论（四维记忆系统 + PDCA + 经验编码管道）；度量体系加入 Phase 1.6 实际数据（E2E 92%、Bug 修复率 95%、7 个 Prometheus 指标）；更新进度基线到 Session 18（325+ 文件 / 50K+ 行 / 147 测试 / 34 commits）；Gap 清单细化到 Sprint 级别；**整体审视**：§1.1 新增目标 6（方法论内化）；§1.3 新增核心判断（手动方法论→平台能力种子）；§3.6 ForgeNativeRuntime 增加手动实践映射列；§4.6 进化环增加方法论→平台组件映射表；Phase 3 重写为「交付方法论平台化 + 进化环闭合」（Sprint 3.1/3.2/3.3）；Phase 4 重写为表格格式（含飞轮验证标准）；§11.5 新增方法论平台化路径 |
 
-> 基线版本: v1.5 | 基线日期: 2026-02-20 | 下次评审: Sprint 2.1 完成后
+> 基线版本: v1.5.1 | 基线日期: 2026-02-20 | 下次评审: Sprint 2.1 完成后

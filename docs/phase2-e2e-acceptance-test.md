@@ -3,7 +3,7 @@
 > 测试前提：`docker compose -f docker-compose.trial.yml --env-file .env.trial up --build` 已启动
 > 访问地址：http://localhost:9000
 > 测试人：人工验收
-> 覆盖范围：Phase 2 全部功能（Sprint 2A + 2B + 2C）
+> 覆盖范围：Phase 2 全部功能（Sprint 2A + 2B + 2C + 2.3 多模型适配）
 >
 > 本文档在 `sprint2a-acceptance-test.md` 基础上扩展，新增 MCP 实连、底线集成、度量采集、agent-eval 等 Sprint 2B/2C 功能的验收用例。
 
@@ -785,6 +785,173 @@ docker compose -f infrastructure/docker/docker-compose.trial.yml exec backend ls
 
 ---
 
+## 场景 16：多模型适配 — 模型列表与切换
+
+> Sprint 2.3 核心功能。验证多模型注册、前端选择器、动态切换。
+
+### TC-16.1 模型列表 API
+
+**操作**：
+```bash
+curl http://localhost:9000/api/models
+```
+
+**预期**：
+- [ ] 返回 JSON 数组，包含所有已启用的模型
+- [ ] 每个模型有 id, provider, displayName, contextWindow, maxOutputTokens, toolCallSupport, available 字段
+- [ ] provider 包含 ANTHROPIC（默认启用）
+- [ ] 如果配置了 BEDROCK_ENABLED=true，包含 BEDROCK provider 的模型
+- [ ] 如果配置了 GEMINI_ENABLED=true，包含 GEMINI provider 的模型
+- [ ] 如果配置了 QWEN_ENABLED=true，包含 QWEN provider 的模型
+
+### TC-16.2 前端模型选择器可见
+
+**操作**：进入 Workspace IDE 页面，观察 AI Chat Sidebar 或 Header 区域
+
+**预期**：
+- [ ] 模型选择器下拉菜单可见
+- [ ] 显示当前活跃模型名称（默认 Claude Sonnet 4）
+- [ ] 下拉列表显示所有可用模型，按 provider 分组
+- [ ] 每个模型旁显示 provider 标签（如 Anthropic / Bedrock / Gemini / Qwen）
+
+### TC-16.3 切换模型
+
+**操作**：在模型选择器中切换到另一个模型（如从 Claude Sonnet 切到 Gemini Flash）
+
+**预期**：
+- [ ] 选择器显示更新为新模型名称
+- [ ] 不影响当前对话历史（消息保留）
+- [ ] 下一条消息使用新模型处理
+
+### TC-16.4 模型健康检查
+
+**操作**：
+```bash
+curl http://localhost:9000/api/models/health
+```
+
+**预期**：
+- [ ] 返回各模型的 available 状态
+- [ ] API Key 未配置的模型返回 available=false
+- [ ] API Key 正确的模型返回 available=true
+
+### TC-16.5 无效模型切换
+
+**操作**：尝试切换到一个 available=false 的模型后发送消息
+
+**预期**：
+- [ ] 给出明确的错误提示（如"该模型当前不可用，请检查 API Key 配置"）
+- [ ] 不导致页面崩溃或白屏
+- [ ] 自动回退到默认模型或提示用户切换
+
+---
+
+## 场景 17：多模型适配 — 各模型对话验证
+
+> 验证不同模型的流式对话和回复质量。需要对应的 API Key 已配置。
+
+### TC-17.1 Anthropic Claude 直连对话
+
+**操作**：选择 Claude Sonnet 4（Anthropic 直连），发送：`用 Kotlin 写一个快速排序`
+
+**预期**：
+- [ ] 流式输出正常（逐字出现）
+- [ ] 回复包含 Kotlin 代码块
+- [ ] OODA 指示器正常流转
+- [ ] Profile Badge 正常显示
+
+### TC-17.2 AWS Bedrock Claude 对话
+
+**操作**：选择 Claude Sonnet 4（Bedrock），发送相同问题
+
+**预期**：
+- [ ] 流式输出正常
+- [ ] 回复质量与 Anthropic 直连一致（同一模型，不同通道）
+- [ ] 无 AWS 认证报错
+
+### TC-17.3 Google Gemini 对话
+
+**操作**：选择 Gemini 2.0 Flash，发送：`用 Kotlin 写一个快速排序`
+
+**预期**：
+- [ ] 流式输出正常
+- [ ] 回复包含 Kotlin 代码块（Gemini 也理解 Kotlin）
+- [ ] OODA 指示器正常流转
+- [ ] Profile Badge 正常显示
+
+### TC-17.4 阿里 Qwen 对话
+
+**操作**：选择 Qwen Max，发送：`用 Kotlin 写一个快速排序`
+
+**预期**：
+- [ ] 流式输出正常
+- [ ] 回复包含 Kotlin 代码块
+- [ ] 中文交互质量良好（Qwen 中文优势）
+
+### TC-17.5 切换模型后会话连续性
+
+**操作**：
+1. 用 Claude 发送：`帮我设计一个用户管理模块`
+2. 切换到 Gemini
+3. 发送：`给上面的设计加上权限控制`
+
+**预期**：
+- [ ] Gemini 能读到之前 Claude 的对话历史
+- [ ] 回复基于之前的设计上下文（非重新开始）
+
+### TC-17.6 模型回复中显示模型标识
+
+**操作**：观察不同模型的回复气泡
+
+**预期**：
+- [ ] 每条 AI 回复标注当前使用的模型名称（如"Claude Sonnet 4"或"Gemini 2.0 Flash"）
+- [ ] 切换模型后的回复标注新的模型名称
+
+---
+
+## 场景 18：多模型适配 — 工具调用兼容
+
+> 验证不同模型的工具调用（Function Calling）能力差异处理。
+
+### TC-18.1 Claude 工具调用（基准）
+
+**操作**：选择 Claude 模型，发送：`帮我搜索知识库里关于 Spring Boot 的文档`
+
+**预期**：
+- [ ] 触发 search_knowledge 工具调用
+- [ ] Tool Call 卡片正常显示
+- [ ] 回复基于工具返回结果
+
+### TC-18.2 Gemini Function Calling
+
+**操作**：选择 Gemini 模型，发送相同问题
+
+**预期**：
+- [ ] Gemini 通过 Function Calling 触发 search_knowledge 工具
+- [ ] Tool Call 卡片正常显示（与 Claude 格式一致）
+- [ ] 回复基于工具返回结果
+
+### TC-18.3 Qwen 工具调用
+
+**操作**：选择 Qwen 模型，发送相同问题
+
+**预期**：
+- [ ] Qwen 通过 tools 参数触发工具调用
+- [ ] Tool Call 卡片正常显示
+- [ ] 如果 Qwen 工具调用能力有限，优雅降级（直接回复，不触发工具但不报错）
+
+### TC-18.4 工具调用能力弱的模型降级
+
+**操作**：选择一个 toolCallSupport=PARTIAL 或 NONE 的模型，发送需要工具调用的问题
+
+**预期**：
+- [ ] 不触发工具调用（或触发后正确处理）
+- [ ] 模型直接基于已有知识回复
+- [ ] 无异常或崩溃
+- [ ] 可选：UI 提示"当前模型不支持工具调用，回复基于模型内置知识"
+
+---
+
 ## 测试结果汇总模板
 
 | 场景 | 用例数 | 通过 | 失败 | 备注 |
@@ -804,7 +971,10 @@ docker compose -f infrastructure/docker/docker-compose.trial.yml exec backend ls
 | 13. agent-eval | 3 | /3 | /3 | Sprint 2C 新增 |
 | 14. 全量单元测试 | 1 | /1 | /1 | |
 | 15. Docker 部署完整性 | 3 | /3 | /3 | Sprint 2B 新增 |
-| **合计** | **59** | **/59** | **/59** | |
+| 16. 多模型适配 — 模型列表与切换 | 5 | /5 | /5 | Sprint 2.3 新增 |
+| 17. 多模型适配 — 各模型对话验证 | 6 | /6 | /6 | Sprint 2.3 新增 |
+| 18. 多模型适配 — 工具调用兼容 | 4 | /4 | /4 | Sprint 2.3 新增 |
+| **合计** | **74** | **/74** | **/74** | |
 
 ---
 
@@ -836,6 +1006,9 @@ open http://localhost:9000
 8. **度量指标是否正确记录**：每次交互后 forge.* 指标递增，Prometheus 端点可导出（Sprint 2C）
 9. **32 Skills 是否全部加载**：API 和 Docker 日志都确认 32 个（Sprint 2B 新增 3 个）
 10. **agent-eval 双模式是否工作**：无 key 降级为结构验证，有 key 调用真实模型（Sprint 2C）
+11. **多模型切换是否顺畅**：选择器切换后下一条消息使用新模型，无延迟或报错（Sprint 2.3）
+12. **不同模型的工具调用是否兼容**：Claude/Gemini/Qwen 的 Tool Call 卡片格式一致（Sprint 2.3）
+13. **工具调用能力弱的模型是否优雅降级**：不崩溃，给出合理回复或提示（Sprint 2.3）
 
 ---
 
@@ -848,3 +1021,5 @@ open http://localhost:9000
 | 3 | 跨栈迁移 PoC：.NET → Java，覆盖率 ≥ 90% | docs/cross-stack-poc-report.md（文档审阅） |
 | 4 | Web IDE 可访问：知识搜索 → AI 对话 → Skill 感知 → 工具调用 | TC-1~3, TC-5, TC-9 |
 | 5 | agent-eval 可运行真实评估场景 | TC-13.1~13.3 |
+| 6 | Bedrock + Gemini + Qwen 三大模型适配器可用 | TC-16.1, TC-17.1~17.4 |
+| 7 | 前端可切换模型，工具调用兼容 | TC-16.2~16.3, TC-18.1~18.4 |
