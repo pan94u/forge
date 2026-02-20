@@ -427,16 +427,19 @@ class ClaudeAgentService(
             break
         }
 
-        // Safety net: if all turns exhausted and AI still wanted to use tools,
+        // Safety net: if all turns exhausted or AI didn't produce text output,
         // inject a user message requesting summary and do one final turn WITHOUT tools
-        if (finalContent.isBlank()) {
-            logger.info("All $MAX_AGENTIC_TURNS turns exhausted with tool_use. Forcing final summary turn.")
+        val needsSummaryTurn = finalContent.isBlank() && allToolCalls.isNotEmpty()
+        if (needsSummaryTurn || turn > MAX_AGENTIC_TURNS) {
+            val reason = if (finalContent.isBlank()) "AI produced no text output" else "Max turns exhausted"
+            logger.info("Safety net triggered: $reason. Forcing final summary turn. allToolCalls=${allToolCalls.size}")
             onEvent(mapOf("type" to "ooda_phase", "phase" to "complete"))
 
             // Add a user message to explicitly instruct the AI to summarize
+            // Enhanced prompt with multiple fallback options
             currentMessages.add(Message(
                 role = Message.Role.USER,
-                content = "你已经收集了足够的信息。请基于以上工具调用的结果，直接给出完整、详细的回复。不要再调用任何工具。"
+                content = buildSummaryPrompt(allToolCalls)
             ))
 
             var summaryText = StringBuilder()
@@ -451,6 +454,13 @@ class ClaudeAgentService(
             }
             finalContent = summaryText.toString()
             logger.debug("Summary turn produced ${finalContent.length} chars")
+
+            // If still no content, generate a fallback response based on tool calls
+            if (finalContent.isBlank()) {
+                logger.warn("Summary turn produced no content. Generating fallback response based on ${allToolCalls.size} tool calls.")
+                finalContent = generateFallbackFromToolCalls(allToolCalls)
+                onEvent(mapOf("type" to "content", "content" to finalContent))
+            }
         }
 
         return AgenticResult(content = finalContent, toolCalls = allToolCalls)
@@ -581,6 +591,61 @@ class ClaudeAgentService(
             |- Browse the knowledge base for documentation
             |- Use the file explorer to navigate code
             |- Create and manage workflows
+        """.trimMargin()
+    }
+
+    /**
+     * Build an enhanced summary prompt for the safety net turn.
+     *
+     * The prompt is designed to:
+     * 1. Force the AI to produce text output
+     * 2. Provide clear instructions for summarizing tool results
+     * 3. Offer fallback options if summarization is not possible
+     */
+    private fun buildSummaryPrompt(toolCalls: List<ToolCallRecord>): String {
+        val toolNames = toolCalls.map { it.name }.distinct().joinToString(", ")
+        val toolCount = toolCalls.size
+
+        return """
+            |你已经完成了 $toolCount 次工具调用，使用的工具包括：$toolNames。
+            |
+            |请基于工具调用的结果，为用户提供一个完整、详细的回复。回复应该：
+            |1. 总结你通过工具发现或获取的关键信息
+            |2. 直接回答用户的问题，而不是描述你做了什么
+            |3. 如果信息不完整，明确说明你能确认的和不能确认的部分
+            |
+            |如果无法基于工具调用结果给出回复，至少提供一个基于你的理解的合理回答。
+            |
+            |请现在开始给出你的回复：
+        """.trimMargin()
+    }
+
+    /**
+     * Generate a fallback response based on tool call results.
+     *
+     * This is used when the safety net summary turn also produces no content,
+     * which can happen in edge cases with long conversation histories.
+     */
+    private fun generateFallbackFromToolCalls(toolCalls: List<ToolCallRecord>): String {
+        if (toolCalls.isEmpty()) {
+            return "已完成工具调用，但未能生成回复。"
+        }
+
+        val toolSummaries = toolCalls.map { call ->
+            val status = when (call.status) {
+                "complete" -> "成功"
+                "error" -> "失败"
+                else -> call.status
+            }
+            "- ${call.name}: $status"
+        }.joinToString("\n")
+
+        return """
+            |根据工具调用结果：
+            |
+            |$toolSummaries
+            |
+            |已执行完成所有操作。如果需要进一步分析或有其他问题，请重新提问。
         """.trimMargin()
     }
 

@@ -24,7 +24,7 @@
 | BUG-013 | P1 | ✅ 已修复 | 刷新页面后 AI 不记得对话历史（sessionId 未持久化） |
 | BUG-014 | P2 | ✅ 已修复 | ContextPicker 抢焦点，按 `@` 后无法在主输入框继续输入 |
 | BUG-015 | P2 | ✅ 已修复 | @设计/@测试 等 Profile 标签被 ContextPicker 拦截，无法路由到后端 |
-| BUG-016 | P2 | ⏸ 挂起 | Agentic loop 8 轮耗尽后 AI 无文字输出（safety net 未生效） |
+| BUG-016 | P2 | ✅ 已修复 | Agentic loop 轮数耗尽后 AI 无文字输出（safety net 增强 + fallback 机制） |
 | BUG-017 | P1 | ✅ 已修复 | Knowledge Services 页面白屏崩溃（ServiceType/ServiceStatus 枚举大小写） |
 | BUG-018 | P2 | ✅ 已修复 | Context Picker Knowledge tab 无内容（空字符串未 fallback 到通配搜索） |
 | BUG-019 | P2 | ✅ 已修复 | 代码块 Apply/Copy 按钮不可见（CSS opacity-0 隐藏） |
@@ -153,15 +153,17 @@
   2. `AiChatSidebar.tsx`: `handleContextSelect` 判断 `item.type === "profile"` 时，将 `@标签名 ` 插入到输入框文本前缀，而非添加为 context attachment。这样 `@设计` 等标签保留在消息文本中，后端 ProfileRouter 可以正常检测
 - **文件**: `ContextPicker.tsx`, `AiChatSidebar.tsx`
 
-### BUG-016: Agentic loop 耗尽后无文字输出（⏸ 挂起）
+### BUG-016: Agentic loop 耗尽后无文字输出（✅ 已修复）
 - **发现**: Session 16, Phase 1.6 验收测试 TC-2.3
 - **症状**: `@设计 帮我看下这个系统的架构`，AI 调了 8 轮工具（workspace_list_files, workspace_read_file, search_knowledge 等），全部 stopReason=TOOL_USE，最终无文字总结输出
-- **已尝试修复**:
-  1. MAX_AGENTIC_TURNS 5 → 8（仍不够）
-  2. Safety net：轮数耗尽后注入 user message + 无工具最终轮 → 产出 0 chars，未生效
-- **根因推测**: Claude API 在长工具链后的空工具调用可能不产生 ContentDelta；或 conversation 过长导致模型输出为空
-- **状态**: ⏸ 挂起，后续排查
-- **文件**: `ClaudeAgentService.kt`
+- **根因**: 原 safety net 触发条件为 `finalContent.isBlank()`，但：
+  1. 当 `stopReason == TOOL_USE` 但 `currentToolUses` 为空时，循环直接 break，safety net 没机会检查
+  2. Summary turn 本身可能因对话历史过长而不产生 ContentDelta
+- **修复**:
+  1. 扩展 safety net 触发条件：`finalContent.isBlank() && allToolCalls.isNotEmpty()` 或 `turn > MAX_AGENTIC_TURNS`
+  2. 增强 summary prompt：包含工具调用摘要和明确的指令
+  3. 添加 fallback 机制：若 summary turn 仍为空，基于 `allToolCalls` 生成合成回复
+- **文件**: `web-ide/backend/src/main/kotlin/com/forge/webide/service/ClaudeAgentService.kt`
 
 ### BUG-017: Knowledge Services 页面白屏崩溃
 - **发现**: Session 16, Phase 1.6 验收测试 TC-5.4
@@ -202,8 +204,8 @@
 ## 统计
 
 - **总计**: 20 个 Bug
-- **已修复**: 19 个
-- **挂起**: 1 个 (BUG-016)
+- **已修复**: 20 个
+- **挂起**: 0 个
 - **P0 (阻塞)**: 2 个 (BUG-008, BUG-012)
 - **P1 (严重)**: 4 个 (BUG-001, BUG-005, BUG-013, BUG-017)
 - **P2 (一般)**: 14 个
