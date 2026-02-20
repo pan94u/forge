@@ -1,6 +1,6 @@
-# Forge Web IDE — 设计基线 v5
+# Forge Web IDE — 设计基线 v5.1
 
-> 基线日期: 2026-02-19 | Phase 1.6 全部完成后更新（v4 → v5）
+> 基线日期: 2026-02-20 | Phase 1.6 验收测试通过后更新（v5 → v5.1）
 > 本文档冻结当前已验证的 UI/API/数据模型/架构设计细节，作为未来修改的对照基准。
 > 任何对本文档覆盖范围的修改，必须先意识到偏离、再决定是否接受。
 >
@@ -207,7 +207,7 @@ Dashboard → 创建/选择 Workspace → 编辑文件（Monaco）
 
 **按钮位置**: 代码块右上角 header 区域，Copy 按钮左侧
 
-**按钮样式**: 与 Copy 按钮一致 — `rounded p-0.5 text-muted-foreground opacity-0 group-hover:opacity-100`
+**按钮样式**: 与 Copy 按钮一致 — `rounded p-0.5 text-muted-foreground transition-opacity hover:text-foreground`（始终可见，BUG-019 移除了 opacity-0 隐藏）
 
 **图标**: `FileDown`（默认）/ `Loader2 animate-spin`（applying）/ `Check text-green-400`（applied, 3 秒后重置）
 
@@ -998,10 +998,11 @@ const [oodaPhase, setOodaPhase] = useState<OodaPhase | null>(null);
 
 ---
 
-> 基线版本: v5
+> 基线版本: v5.1
 > 初始冻结日期: 2026-02-18 (v1, Phase 1.5)
 > v2 更新日期: 2026-02-18 (Phase 2 E2E 验证后)
 > v3 更新日期: 2026-02-18 (Sprint 2A 验收通过后)
 > v4 更新日期: 2026-02-19 (Phase 2 全部完成 — Sprint 2B + 2C)
 > v5 更新日期: 2026-02-19 (Phase 1.6 全部完成 — AI 交付闭环 + Keycloak SSO + 编辑器增强)
+> v5.1 更新日期: 2026-02-20 (BUG-019/020 修复 — Apply 按钮始终可见 + ContextPicker 搜索键盘转发)
 > 下次评审: Phase 3 启动前

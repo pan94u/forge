@@ -58,17 +58,38 @@ export function ContextPicker({
   const [searchQuery, setSearchQuery] = useState("");
   const searchRef = useRef<HTMLInputElement>(null);
 
-  // No auto-focus: keep focus on the main chat input so users can keep typing
-
+  // Forward keyboard input to search when ContextPicker is open
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         onClose();
+        return;
+      }
+      // If search input doesn't have focus and user types a printable character,
+      // focus the search input so the keystroke goes there
+      if (
+        searchRef.current &&
+        document.activeElement !== searchRef.current &&
+        e.key.length === 1 &&
+        !e.ctrlKey &&
+        !e.metaKey
+      ) {
+        searchRef.current.focus();
+        // Don't prevent default — the character will be typed into the now-focused input
+      }
+      // Backspace support: focus search input on backspace too
+      if (
+        e.key === "Backspace" &&
+        searchRef.current &&
+        document.activeElement !== searchRef.current &&
+        searchQuery.length > 0
+      ) {
+        searchRef.current.focus();
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [onClose]);
+  }, [onClose, searchQuery]);
 
   // Profiles are static (no API call needed)
   const isProfileCategory = activeCategory === "profiles";
@@ -107,6 +128,7 @@ export function ContextPicker({
           ref={searchRef}
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
+          onMouseDown={(e) => e.stopPropagation()}
           className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
           placeholder="Search context..."
         />
@@ -123,6 +145,7 @@ export function ContextPicker({
             onClick={() => {
               setActiveCategory(cat.id);
               setSearchQuery("");
+              setTimeout(() => searchRef.current?.focus(), 0);
             }}
             className={`flex items-center gap-1 px-3 py-1.5 text-xs font-medium transition-colors ${
               activeCategory === cat.id

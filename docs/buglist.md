@@ -27,6 +27,8 @@
 | BUG-016 | P2 | ⏸ 挂起 | Agentic loop 8 轮耗尽后 AI 无文字输出（safety net 未生效） |
 | BUG-017 | P1 | ✅ 已修复 | Knowledge Services 页面白屏崩溃（ServiceType/ServiceStatus 枚举大小写） |
 | BUG-018 | P2 | ✅ 已修复 | Context Picker Knowledge tab 无内容（空字符串未 fallback 到通配搜索） |
+| BUG-019 | P2 | ✅ 已修复 | 代码块 Apply/Copy 按钮不可见（CSS opacity-0 隐藏） |
+| BUG-020 | P2 | ✅ 已修复 | Context Picker 搜索过滤无反应（焦点留在主输入框，键入未转发到搜索框） |
 
 ---
 
@@ -179,16 +181,32 @@
   2. `McpProxyService.kt`: 移除空查询报错逻辑，空查询时返回全部文档（13 条）
 - **文件**: `ContextController.kt`, `McpProxyService.kt`
 
+### BUG-019: 代码块 Apply/Copy 按钮不可见
+- **发现**: Session 18, Phase 1.6 验收测试 TC-B.5
+- **症状**: AI 回复中的代码块右上角没有 Apply 和 Copy 按钮，用户无法一键将代码写入 workspace
+- **根因**: `ChatMessage.tsx` 中 Apply 和 Copy 按钮的 CSS 类包含 `opacity-0 group-hover:opacity-100`，默认隐藏。在聊天侧边栏窄面板中，`group-hover` 可能未正常触发
+- **修复**: 移除 `opacity-0` 和 `group-hover:opacity-100`，让按钮始终可见
+- **文件**: `web-ide/frontend/src/components/chat/ChatMessage.tsx`
+
+### BUG-020: Context Picker 搜索过滤无反应
+- **发现**: Session 18, Phase 1.6 验收测试 TC-C.3
+- **症状**: 在 Context Picker 中切换到 Knowledge tab 后输入搜索关键词，列表不过滤，搜索框无反应
+- **根因**: BUG-014 修复移除了搜索框自动聚焦后，焦点始终留在主聊天 textarea 上。用户打字时字符进入 textarea 而非 ContextPicker 搜索框
+- **修复**:
+  1. `ContextPicker.tsx`: 添加全局 keydown 监听，当用户输入可打印字符时自动聚焦搜索框；切换 tab 时 `setTimeout(() => searchRef.focus(), 0)`
+  2. `AiChatSidebar.tsx`: 当 `showContextPicker` 为 true 时，`handleKeyDown` 中 `preventDefault()` 阻止可打印字符和 Backspace 进入 textarea
+- **文件**: `ContextPicker.tsx`, `AiChatSidebar.tsx`
+
 ---
 
 ## 统计
 
-- **总计**: 18 个 Bug
-- **已修复**: 17 个
+- **总计**: 20 个 Bug
+- **已修复**: 19 个
 - **挂起**: 1 个 (BUG-016)
 - **P0 (阻塞)**: 2 个 (BUG-008, BUG-012)
 - **P1 (严重)**: 4 个 (BUG-001, BUG-005, BUG-013, BUG-017)
-- **P2 (一般)**: 12 个
+- **P2 (一般)**: 14 个
 
 ## 影响文件
 
@@ -201,7 +219,8 @@
 | `web-ide/backend/src/test/kotlin/com/forge/webide/controller/McpControllerTest.kt` | BUG-010 |
 | `web-ide/backend/src/main/kotlin/com/forge/webide/websocket/ChatWebSocketHandler.kt` | BUG-012 |
 | `web-ide/frontend/src/lib/claude-client.ts` | BUG-012 |
-| `web-ide/frontend/src/components/chat/AiChatSidebar.tsx` | BUG-012, 013, 014, 015 |
-| `web-ide/frontend/src/components/chat/ContextPicker.tsx` | BUG-014, 015 |
+| `web-ide/frontend/src/components/chat/AiChatSidebar.tsx` | BUG-012, 013, 014, 015, 020 |
+| `web-ide/frontend/src/components/chat/ContextPicker.tsx` | BUG-014, 015, 020 |
 | `web-ide/backend/src/main/kotlin/com/forge/webide/service/ClaudeAgentService.kt` | BUG-016 |
 | `web-ide/backend/src/main/kotlin/com/forge/webide/controller/ContextController.kt` | BUG-018 |
+| `web-ide/frontend/src/components/chat/ChatMessage.tsx` | BUG-019 |
