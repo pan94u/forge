@@ -1,0 +1,90 @@
+id: eval-003-requirement-analysis
+name: Requirement Analysis for Workspace Collaboration
+description: >
+  Evaluate the agent's ability to analyze an ambiguous business requirement,
+  ask clarifying questions, identify gaps, derive functional and non-functional
+  requirements, and produce a structured requirements document.
+tags:
+  - planning
+  - requirements
+  - analysis
+  - stakeholder-communication
+baseline_pass_rate: 0.75
+
+prompt: |
+  Analyze the following stakeholder request and produce a requirements document:
+
+  Stakeholder email:
+  "We need the Forge Web IDE to support real-time collaboration. Multiple
+  developers should be able to work on the same workspace simultaneously,
+  like Google Docs but for our AI-assisted coding environment. They should
+  see each other's changes in real-time, know who is editing what, and the
+  AI agent should be aware of all participants' context. We want this for
+  the enterprise tier. It needs to work well even with slow connections.
+  Please have something ready for the Q3 demo."
+
+  Current system context:
+  - Forge Web IDE uses a workspace model where each workspace has isolated
+    file storage, an SSE-based agentic stream, and MCP tool access
+  - Backend is Spring Boot 3.3 with WebSocket support (already configured
+    for the agentic stream)
+  - Frontend is Next.js 15 with a Monaco editor component
+  - Authentication is via Keycloak OIDC with role-based access control
+  - Workspaces are stored per-user in the current model
+
+  Deliverables:
+  1. Clarifying questions you would ask the stakeholder (at least 8)
+  2. Assumptions made where answers are unknown
+  3. Functional requirements (numbered, testable)
+  4. Non-functional requirements (performance, scalability, reliability)
+  5. Out-of-scope items for the initial release
+  6. User stories derived from the requirements
+  7. Technical constraints and dependencies
+  8. Acceptance criteria for the top 3 user stories
+
+context:
+  product: "Forge Web IDE — AI-powered intelligent delivery platform"
+  current_architecture: "Spring Boot 3.3, Next.js 15, WebSocket, SSE, Keycloak"
+  collaboration_precedents: "Monaco editor supports collaborative editing via Yjs/CRDT"
+  timeline: "Q3 demo target, roughly 10 weeks away"
+  team: "2 backend, 1 frontend, 1 AI/ML engineer"
+
+assertions:
+  - type: contains
+    expected: "clarifying question"
+    description: "Identifies questions to ask stakeholder"
+
+  - type: contains
+    expected: "concurrent"
+    description: "Addresses concurrent editing concerns"
+
+  - type: contains
+    expected: "conflict"
+    description: "Addresses conflict resolution (operational transform or CRDT)"
+
+  - type: contains
+    expected: "WebSocket"
+    description: "Identifies WebSocket as the transport mechanism"
+
+  - type: contains
+    expected: "non-functional"
+    description: "Separates functional and non-functional requirements"
+
+  - type: contains
+    expected: "out of scope"
+    description: "Explicitly defines out-of-scope items"
+
+  - type: contains
+    expected: "acceptance criteria"
+    description: "Provides testable acceptance criteria"
+
+  - type: contains
+    expected: "latency"
+    description: "Addresses performance under slow connections"
+
+quality_criteria:
+  completeness: 0.85
+  correctness: 0.80
+  structure: 0.90
+  stakeholder_alignment: 0.85
+  testability: 0.85

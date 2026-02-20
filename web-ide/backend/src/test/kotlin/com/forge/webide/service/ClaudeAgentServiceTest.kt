@@ -32,6 +32,7 @@ class ClaudeAgentServiceTest {
     private lateinit var skillLoader: SkillLoader
     private lateinit var systemPromptAssembler: SystemPromptAssembler
     private lateinit var metricsService: MetricsService
+    private lateinit var baselineService: BaselineService
     private lateinit var service: ClaudeAgentService
 
     private val defaultProfile = ProfileDefinition(
@@ -55,6 +56,7 @@ class ClaudeAgentServiceTest {
         skillLoader = mockk()
         systemPromptAssembler = mockk()
         metricsService = mockk(relaxed = true)
+        baselineService = mockk(relaxed = true)
 
         // Default routing: always route to development profile
         every { profileRouter.route(any(), any()) } returns ProfileRoutingResult(
@@ -62,7 +64,7 @@ class ClaudeAgentServiceTest {
             confidence = 0.3,
             reason = "Default fallback"
         )
-        every { skillLoader.loadSkillsForProfile(any()) } returns emptyList()
+        every { skillLoader.loadSkillsForProfile(any(), any()) } returns emptyList()
         every { systemPromptAssembler.assemble(any(), any()) } returns "You are a test assistant."
         every { systemPromptAssembler.fallbackPrompt() } returns "You are a test assistant."
 
@@ -75,7 +77,8 @@ class ClaudeAgentServiceTest {
             profileRouter = profileRouter,
             skillLoader = skillLoader,
             systemPromptAssembler = systemPromptAssembler,
-            metricsService = metricsService
+            metricsService = metricsService,
+            baselineService = baselineService
         )
 
         // Default: no conversation history

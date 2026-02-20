@@ -1,0 +1,93 @@
+id: eval-002-sprint-planning
+name: Sprint Planning for Forge Plugin System
+description: >
+  Evaluate the agent's ability to plan a two-week sprint, decomposing a feature
+  epic into appropriately sized stories with accurate estimates, dependency
+  ordering, and risk identification.
+tags:
+  - planning
+  - sprint-planning
+  - agile
+  - estimation
+baseline_pass_rate: 0.80
+
+prompt: |
+  Plan a 2-week sprint for the Forge Platform plugin system enhancement.
+  The team has 3 engineers (2 backend, 1 full-stack) with 8 story points
+  capacity each per sprint (total: 24 points).
+
+  Epic: "Plugin Marketplace MVP"
+  Goal: Allow users to browse, install, and manage community-contributed
+  Forge plugins (Skills, Profiles, Commands) from a central marketplace.
+
+  Known requirements:
+  - Plugin registry API: CRUD endpoints for plugin metadata (name, version,
+    author, description, tags, compatibility matrix)
+  - Plugin discovery: Search and filter plugins by tag, profile type,
+    popularity, and compatibility with current Forge version
+  - Plugin installation: Download plugin package, validate integrity (SHA-256),
+    extract to plugins/ directory, register with ToolRegistry
+  - Plugin version management: Support semantic versioning, upgrade/downgrade,
+    detect conflicts with other installed plugins
+  - Plugin review system: Star ratings, text reviews, abuse reporting
+  - Admin moderation: Approve/reject submissions, flag malicious plugins
+
+  Constraints:
+  - Must not break existing plugin loading from local plugins/ directory
+  - Must integrate with existing Keycloak authentication
+  - Backend is Spring Boot 3.3 + Kotlin, frontend is Next.js 15
+  - PostgreSQL for persistence, S3 for plugin package storage
+
+  Deliverables:
+  1. Sprint backlog with user stories (title, description, acceptance criteria)
+  2. Story point estimates using Fibonacci scale (1, 2, 3, 5, 8, 13)
+  3. Priority ordering (MoSCoW: Must/Should/Could/Won't this sprint)
+  4. Dependency graph between stories
+  5. Risk register with mitigation strategies
+  6. Definition of Done for the sprint
+
+context:
+  team_velocity: "22 points average over last 3 sprints"
+  tech_stack: "Spring Boot 3.3 + Kotlin, Next.js 15, PostgreSQL, S3, Keycloak"
+  existing_system: "Forge Platform with local plugin loading, MCP tool registry"
+  sprint_duration: "2 weeks"
+
+assertions:
+  - type: contains
+    expected: "story point"
+    description: "Includes story point estimates"
+
+  - type: contains
+    expected: "acceptance criteria"
+    description: "Stories include acceptance criteria"
+
+  - type: contains
+    expected: "dependency"
+    description: "Identifies dependencies between stories"
+
+  - type: contains
+    expected: "risk"
+    description: "Includes risk identification"
+
+  - type: contains
+    expected: "Must"
+    description: "Uses MoSCoW prioritization"
+
+  - type: contains
+    expected: "Definition of Done"
+    description: "Defines sprint-level Definition of Done"
+
+  - type: contains
+    expected: "registry"
+    description: "Addresses plugin registry as a foundational story"
+
+  - type: not_contains
+    expected: "I'm not sure"
+    description: "Does not express unwarranted uncertainty"
+
+quality_criteria:
+  completeness: 0.85
+  correctness: 0.80
+  structure: 0.90
+  actionability: 0.90
+  estimation_quality: 0.80

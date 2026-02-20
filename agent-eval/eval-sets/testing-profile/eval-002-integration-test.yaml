@@ -1,0 +1,123 @@
+id: eval-002-integration-test
+name: Integration Tests for MCP Tool Execution Pipeline
+description: >
+  Evaluate the agent's ability to write integration tests that verify
+  component interactions, use realistic test infrastructure (Testcontainers),
+  and cover cross-cutting concerns like authentication, error propagation,
+  and transactional behavior.
+tags:
+  - testing
+  - integration-tests
+  - spring-boot
+  - testcontainers
+baseline_pass_rate: 0.75
+
+prompt: |
+  Write integration tests for the Forge MCP tool execution pipeline. This
+  pipeline handles the flow: HTTP request -> authentication -> tool routing ->
+  MCP server call -> response mapping -> metrics recording.
+
+  The system under test:
+  - McpController: REST controller exposing POST /api/v1/mcp/tools/{toolName}/call
+  - McpProxyService: Routes tool calls to the correct MCP server
+  - ToolRegistry: Maintains a map of tool names to MCP server endpoints
+  - AuthService: Validates JWT tokens and extracts user context
+
+  Test scenarios to cover:
+  1. Happy path: Authenticated user calls a valid tool, receives a successful response
+  2. Authentication failure: Request with expired/invalid JWT returns 401
+  3. Authorization failure: User without required role calls admin-only tool returns 403
+  4. Tool not found: Request for non-existent tool returns 404 with descriptive error
+  5. MCP server timeout: Backend MCP server doesn't respond within 30s, returns 504
+  6. MCP server error: Backend MCP server returns 500, error is wrapped and returned as 502
+  7. Workspace isolation: Tool call with workspaceId only accesses files in that workspace
+  8. Metrics verification: Successful and failed calls increment the correct Prometheus counters
+  9. Concurrent tool calls: Multiple simultaneous requests are handled without interference
+  10. Request validation: Malformed JSON body returns 400 with validation error details
+
+  Technical requirements:
+  - Use @SpringBootTest with WebTestClient
+  - Use Testcontainers for PostgreSQL and a mock MCP server (WireMock)
+  - Set up Keycloak test realm or mock JWT validation
+  - Verify Micrometer metrics using MeterRegistry assertions
+  - Each test must be independent and idempotent
+  - Use @Sql or TestEntityManager for test data setup
+  - Clean up resources after each test
+
+  ```kotlin
+  // Test skeleton for reference
+  @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+  @Testcontainers
+  class McpToolExecutionIntegrationTest {
+
+      companion object {
+          @Container
+          val postgres = PostgreSQLContainer("postgres:15-alpine")
+
+          @Container
+          val wireMock = GenericContainer("wiremock/wiremock:3.3.1")
+              .withExposedPorts(8080)
+      }
+
+      @Autowired lateinit var webTestClient: WebTestClient
+      @Autowired lateinit var meterRegistry: MeterRegistry
+
+      // Write the complete test class...
+  }
+  ```
+
+context:
+  framework: "Spring Boot 3.3"
+  test_framework: "JUnit 5 + Spring Boot Test"
+  containers: "Testcontainers for PostgreSQL 15 and WireMock"
+  language: "Kotlin"
+  auth: "JWT Bearer tokens via Keycloak (can be mocked for tests)"
+  metrics: "Micrometer with Prometheus registry"
+
+assertions:
+  - type: contains
+    expected: "@SpringBootTest"
+    description: "Uses Spring Boot integration test annotation"
+
+  - type: contains
+    expected: "@Testcontainers"
+    description: "Uses Testcontainers for infrastructure"
+
+  - type: contains
+    expected: "PostgreSQLContainer"
+    description: "Spins up PostgreSQL via Testcontainers"
+
+  - type: contains
+    expected: "WireMock"
+    description: "Uses WireMock for MCP server simulation"
+
+  - type: contains
+    expected: "webTestClient"
+    description: "Uses WebTestClient for HTTP assertions"
+
+  - type: contains
+    expected: "401"
+    description: "Tests authentication failure scenario"
+
+  - type: contains
+    expected: "404"
+    description: "Tests tool not found scenario"
+
+  - type: contains
+    expected: "meterRegistry"
+    description: "Verifies metrics are recorded"
+
+  - type: contains
+    expected: "concurrent"
+    description: "Tests concurrent request handling"
+
+  - type: not_contains
+    expected: "TODO"
+    description: "No unfinished test placeholders"
+
+quality_criteria:
+  test_completeness: 0.85
+  test_isolation: 0.90
+  infrastructure_realism: 0.85
+  assertion_quality: 0.85
+  cleanup_correctness: 0.90

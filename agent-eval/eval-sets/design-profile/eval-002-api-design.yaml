@@ -1,0 +1,97 @@
+id: eval-002-api-design
+name: REST API Design for Forge Knowledge Base
+description: >
+  Evaluate the agent's ability to design a comprehensive REST API following
+  best practices including resource modeling, HTTP semantics, versioning,
+  pagination, error handling, and documentation.
+tags:
+  - design
+  - rest-api
+  - openapi
+  - http-semantics
+baseline_pass_rate: 0.80
+
+prompt: |
+  Design a REST API for the Forge Knowledge Base management system. The
+  knowledge base stores professional documents (Skill profiles, conventions,
+  ADR records, runbooks) that the AI agent searches during delivery tasks.
+
+  Business requirements:
+  - CRUD operations for knowledge documents
+  - Each document has: title, content (Markdown), category (profile/convention/
+    adr/runbook), tags, version, author, created/updated timestamps
+  - Full-text search across document content with relevance scoring
+  - Document versioning: view history, diff between versions, rollback
+  - Category-based browsing with pagination and sorting
+  - Tag management: add/remove tags, list all tags with document counts
+  - Bulk import/export in ZIP format (Markdown files with YAML frontmatter)
+  - Access control: readers can search/view, editors can create/update,
+    admins can delete and manage categories
+
+  Technical constraints:
+  - Must follow existing Forge API patterns: /api/v1/ prefix, JSON responses,
+    Spring Boot @RestController conventions
+  - Must integrate with Keycloak OIDC for authentication
+  - Must support ETag-based conditional requests for caching
+  - Maximum response size: 10MB (for bulk export)
+  - Rate limiting: 100 requests/minute for search, 1000/minute for reads
+
+  Deliverables:
+  1. Resource model and URI design
+  2. Complete endpoint list with HTTP methods, paths, request/response bodies
+  3. Pagination strategy (cursor-based vs offset)
+  4. Error response format with error codes
+  5. Authentication and authorization model
+  6. OpenAPI 3.0 specification (YAML) for the core endpoints
+  7. Versioning strategy rationale
+
+context:
+  framework: "Spring Boot 3.3"
+  existing_api_prefix: "/api/v1"
+  auth: "Keycloak OIDC with JWT Bearer tokens, roles: reader, editor, admin"
+  search_engine: "Built-in Spring Data JPA full-text search on PostgreSQL"
+  documentation: "SpringDoc OpenAPI for auto-generated Swagger UI"
+
+assertions:
+  - type: contains
+    expected: "/api/v1/knowledge"
+    description: "Uses consistent resource naming under the existing API prefix"
+
+  - type: contains
+    expected: "GET"
+    description: "Defines GET endpoints for retrieval"
+
+  - type: contains
+    expected: "POST"
+    description: "Defines POST endpoints for creation"
+
+  - type: contains
+    expected: "pagination"
+    description: "Addresses pagination strategy"
+
+  - type: contains
+    expected: "ETag"
+    description: "Addresses caching with ETags"
+
+  - type: contains
+    expected: "401"
+    description: "Documents authentication error responses"
+
+  - type: contains
+    expected: "403"
+    description: "Documents authorization error responses"
+
+  - type: contains
+    expected: "openapi"
+    description: "Provides OpenAPI specification"
+
+  - type: not_contains
+    expected: "TODO"
+    description: "No placeholder sections left incomplete"
+
+quality_criteria:
+  completeness: 0.90
+  correctness: 0.85
+  convention_adherence: 0.90
+  documentation_quality: 0.85
+  security_awareness: 0.80

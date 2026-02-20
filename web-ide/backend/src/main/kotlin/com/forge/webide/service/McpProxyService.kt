@@ -64,8 +64,8 @@ class McpProxyService(
                 }
 
                 val client = getOrCreateClient(serverUrl)
-                val response = client.post()
-                    .uri("/mcp/tools/list")
+                val response = client.get()
+                    .uri("/tools")
                     .retrieve()
                     .bodyToMono(Map::class.java)
                     .block()
@@ -82,13 +82,16 @@ class McpProxyService(
                 toolCache[serverUrl] = tools
                 allTools.addAll(tools)
 
-                logger.debug("Discovered ${tools.size} tools from $serverUrl")
+                logger.info("Discovered {} tools from {}", tools.size, serverUrl)
             } catch (e: Exception) {
                 logger.warn("Failed to list tools from $serverUrl: ${e.message}")
             }
         }
 
-        return allTools.ifEmpty { getDefaultTools() }
+        // Merge: external tools + default tools (external take precedence by name)
+        val externalToolNames = allTools.map { it.name }.toSet()
+        val defaults = getDefaultTools().filter { it.name !in externalToolNames }
+        return (allTools + defaults).ifEmpty { getDefaultTools() }
     }
 
     /**
@@ -148,8 +151,9 @@ class McpProxyService(
         val client = getOrCreateClient(serverUrl)
 
         try {
+            logger.info("Calling MCP server: {} tool={}", serverUrl, toolName)
             val response = client.post()
-                .uri("/mcp/tools/call")
+                .uri("/tools/$toolName")
                 .bodyValue(mapOf(
                     "name" to toolName,
                     "arguments" to arguments

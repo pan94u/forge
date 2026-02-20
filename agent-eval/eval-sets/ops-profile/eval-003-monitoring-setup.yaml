@@ -1,0 +1,137 @@
+id: eval-003-monitoring-setup
+name: Monitoring and Alerting Setup for Forge Platform
+description: >
+  Evaluate the agent's ability to design a comprehensive monitoring and alerting
+  strategy using Prometheus, Grafana, and alerting rules, covering application
+  metrics, infrastructure metrics, SLOs, and incident response runbooks.
+tags:
+  - ops
+  - monitoring
+  - alerting
+  - prometheus
+  - grafana
+  - observability
+baseline_pass_rate: 0.70
+
+prompt: |
+  Design the monitoring and alerting setup for the Forge Platform in production.
+  The platform serves AI-assisted software delivery, so reliability of the AI
+  agent pipeline and MCP tool execution is critical to user experience.
+
+  System components to monitor:
+  1. forge-backend (Spring Boot 3.3)
+     - Custom Micrometer metrics: forge.mcp.tool.duration, forge.mcp.tool.success,
+       forge.mcp.tool.error (with tags: tool, server, type)
+     - Agentic stream SSE connections (active count, duration, errors)
+     - Knowledge base search latency and hit rate
+     - JVM metrics: heap, GC, thread pool utilization
+     - HTTP request metrics (via Spring Boot Actuator)
+
+  2. forge-frontend (Next.js 15)
+     - Client-side performance (LCP, FID, CLS via Web Vitals)
+     - API call latency from browser perspective
+     - WebSocket connection stability
+     - Error rate (JavaScript exceptions)
+
+  3. forge-nginx
+     - Request rate, latency percentiles (p50, p95, p99)
+     - 4xx and 5xx error rates
+     - Active connections, connection queue depth
+     - Upstream response times
+
+  4. forge-keycloak
+     - Authentication success/failure rates
+     - Token issuance latency
+     - Active sessions count
+     - Realm event rates (login, logout, token refresh)
+
+  5. PostgreSQL
+     - Connection pool utilization
+     - Query latency (slow query threshold: 500ms)
+     - Table bloat and vacuum status
+     - Replication lag (if applicable)
+     - Disk usage and growth rate
+
+  SLO targets:
+  - Availability: 99.9% (measured by successful HTTP responses / total)
+  - MCP tool latency: p95 < 5s, p99 < 15s
+  - Knowledge search latency: p95 < 500ms
+  - SSE stream establishment: p95 < 2s
+  - Authentication: p95 < 1s
+
+  Deliverables:
+  1. Prometheus scrape configuration for all components
+  2. Key PromQL queries for each SLO (with burn-rate alerting)
+  3. Grafana dashboard JSON (or description) with panels for:
+     - Platform overview (golden signals: latency, traffic, errors, saturation)
+     - MCP tool execution deep-dive
+     - AI agent session monitoring
+     - Infrastructure (JVM, PostgreSQL, Nginx)
+  4. Alerting rules with severity levels (critical, warning, info)
+  5. Alert routing configuration (PagerDuty for critical, Slack for warning)
+  6. Incident response runbook for the top 5 alert scenarios
+  7. Log aggregation strategy (structured logs, correlation IDs, log levels)
+  8. Distributed tracing integration (OpenTelemetry for request tracing
+     across backend -> MCP servers)
+
+context:
+  monitoring_stack: "Prometheus + Grafana (already deployed)"
+  metrics_endpoint: "/actuator/prometheus on port 8081"
+  known_issues:
+    - "Micrometer metrics are lazy-registered; forge.* metrics appear only after first use"
+    - "SSE format: data:{\"type\":\"...\"} (no space after colon)"
+  alerting: "Alertmanager with PagerDuty and Slack integrations"
+  logging: "Structured JSON logs, ELK or Loki for aggregation"
+  tracing: "OpenTelemetry SDK available, Jaeger for trace visualization"
+
+assertions:
+  - type: contains
+    expected: "scrape_configs"
+    description: "Provides Prometheus scrape configuration"
+
+  - type: contains
+    expected: "PromQL"
+    description: "Includes PromQL queries for monitoring"
+
+  - type: contains
+    expected: "burn rate"
+    description: "Uses SLO burn-rate based alerting"
+
+  - type: contains
+    expected: "Grafana"
+    description: "Designs Grafana dashboards"
+
+  - type: contains
+    expected: "critical"
+    description: "Defines alert severity levels"
+
+  - type: contains
+    expected: "PagerDuty"
+    description: "Routes critical alerts to PagerDuty"
+
+  - type: contains
+    expected: "runbook"
+    description: "Provides incident response runbooks"
+
+  - type: contains
+    expected: "correlation"
+    description: "Addresses log correlation across services"
+
+  - type: contains
+    expected: "OpenTelemetry"
+    description: "Integrates distributed tracing"
+
+  - type: contains
+    expected: "forge.mcp.tool"
+    description: "Monitors custom MCP tool metrics"
+
+  - type: not_contains
+    expected: "TODO"
+    description: "No incomplete placeholder sections"
+
+quality_criteria:
+  completeness: 0.85
+  correctness: 0.80
+  actionability: 0.85
+  slo_coverage: 0.85
+  incident_readiness: 0.80

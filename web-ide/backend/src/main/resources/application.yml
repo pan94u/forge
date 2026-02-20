@@ -148,7 +148,7 @@ forge:
   model:
     provider: ${MODEL_PROVIDER:anthropic}
     url: ${LOCAL_MODEL_URL:}
-    name: ${LOCAL_MODEL_NAME:}
+    name: ${LOCAL_MODEL_NAME:claude-sonnet-4-20250514}
     api-key: ${LOCAL_MODEL_API_KEY:}
 
   # ---------------------------------------------------------------------------

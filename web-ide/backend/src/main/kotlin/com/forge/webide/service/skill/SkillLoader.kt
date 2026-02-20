@@ -53,14 +53,19 @@ class SkillLoader(
     }
 
     /**
-     * Load all skills referenced by a profile.
+     * Load all skills referenced by a profile, with optional message-based keyword triggering.
      * Handles special tokens:
      * - "foundation-skills-all" → all foundation skills
      * - "domain-skills-contextual" → skipped (runtime context-dependent)
+     *
+     * Additionally loads skills whose tags match keywords in the user message,
+     * filtered by stage compatibility with the current profile.
      */
-    fun loadSkillsForProfile(profile: ProfileDefinition): List<SkillDefinition> {
+    fun loadSkillsForProfile(profile: ProfileDefinition, message: String = ""): List<SkillDefinition> {
+        val totalSkillCount = skillCache.size
         val result = mutableListOf<SkillDefinition>()
 
+        // 1. Load explicitly referenced skills
         for (skillRef in profile.skills) {
             when (skillRef) {
                 "foundation-skills-all" -> result.addAll(loadAllFoundationSkills())
@@ -78,7 +83,36 @@ class SkillLoader(
             }
         }
 
-        return result.distinctBy { it.name }
+        // 2. Load keyword-triggered skills from message content
+        if (message.isNotBlank()) {
+            val keywordTriggered = loadKeywordTriggeredSkills(message, profile.name)
+            if (keywordTriggered.isNotEmpty()) {
+                logger.info("Keyword-triggered skills for profile '{}': {}",
+                    profile.name, keywordTriggered.map { it.name })
+                result.addAll(keywordTriggered)
+            }
+        }
+
+        val filtered = result.distinctBy { it.name }
+
+        logger.info("Filtering skills for profile: {}", profile.name)
+        logger.info("Loaded {} skills (filtered from {})", filtered.size, totalSkillCount)
+
+        return filtered
+    }
+
+    /**
+     * Find skills whose tags match keywords in the user message.
+     * Only returns skills compatible with the given profile (by stage).
+     */
+    fun loadKeywordTriggeredSkills(message: String, profileName: String): List<SkillDefinition> {
+        val messageLower = message.lowercase()
+        return skillCache.values.filter { skill ->
+            val tagMatch = skill.tags.any { tag ->
+                tag.length >= 2 && messageLower.contains(tag.lowercase())
+            }
+            tagMatch && skill.matchesProfile(profileName)
+        }
     }
 
     fun reloadAll() {
@@ -179,6 +213,8 @@ class SkillLoader(
 
         val description = yamlMap["description"]?.toString() ?: ""
         val trigger = yamlMap["trigger"]?.toString()
+        val stage = yamlMap["stage"]?.toString()
+        val type = yamlMap["type"]?.toString()
 
         @Suppress("UNCHECKED_CAST")
         val tags: List<String> = when (val tagsVal = yamlMap["tags"]) {
@@ -192,6 +228,8 @@ class SkillLoader(
             description = description,
             trigger = trigger,
             tags = tags,
+            stage = stage,
+            type = type,
             content = body.trim(),
             sourcePath = path.toString()
         )

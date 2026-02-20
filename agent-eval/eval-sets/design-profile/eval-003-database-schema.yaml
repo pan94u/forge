@@ -1,0 +1,105 @@
+id: eval-003-database-schema
+name: Database Schema Design for Workspace File Storage
+description: >
+  Evaluate the agent's ability to design a normalized database schema with
+  appropriate indexing, constraints, migration strategy, and consideration
+  for query performance patterns.
+tags:
+  - design
+  - database
+  - postgresql
+  - schema-design
+baseline_pass_rate: 0.75
+
+prompt: |
+  Design the PostgreSQL database schema for the Forge Workspace file storage
+  system. This system manages files and directories within isolated workspaces
+  where AI agents read, write, and organize code during delivery tasks.
+
+  Business requirements:
+  - Each workspace belongs to a user and optionally a project
+  - Workspace contains a hierarchical file tree (directories and files)
+  - Files have content (stored as text for code files, binary reference for others),
+    MIME type, size, encoding, and line count
+  - Full version history for every file change (who changed, when, diff-friendly)
+  - Workspace-level snapshots: save/restore entire workspace state at a point in time
+  - File locking: prevent concurrent writes to the same file during agent operations
+  - Soft delete with configurable retention period (30 days default)
+  - Metadata: custom key-value tags on files and workspaces
+  - Usage tracking: storage quota per user, current usage calculation
+
+  Query patterns to optimize for:
+  - List files in a directory (with sorting by name, date, size)
+  - Get file content by workspace ID + path (most frequent query)
+  - Search files by name pattern within a workspace
+  - Get version history for a specific file (paginated, newest first)
+  - Calculate total storage used by a workspace
+  - Find all workspaces for a user with summary stats
+
+  Technical constraints:
+  - PostgreSQL 15+ (can use JSONB, GIN indexes, ltree, generated columns)
+  - Must support Flyway migrations (versioned SQL scripts)
+  - File content for code files stored inline (< 1MB), larger files stored
+    in S3 with reference
+  - Expected scale: 10,000 workspaces, 500 files per workspace average,
+    50 versions per active file
+
+  Deliverables:
+  1. Entity-relationship diagram (described in text)
+  2. Complete CREATE TABLE statements with constraints
+  3. Index strategy with justification for each index
+  4. Flyway migration script (V1__create_workspace_schema.sql)
+  5. Key query examples showing how the schema supports each query pattern
+  6. Storage estimation for the expected scale
+  7. Discussion of trade-offs (e.g., ltree vs adjacency list vs materialized path)
+
+context:
+  database: "PostgreSQL 15"
+  orm: "Spring Data JPA with Hibernate 6"
+  migration_tool: "Flyway"
+  file_storage: "Inline for small files, S3 for large files"
+  existing_tables: "users, projects (already exist, referenced by foreign key)"
+
+assertions:
+  - type: contains
+    expected: "CREATE TABLE"
+    description: "Provides DDL statements"
+
+  - type: contains
+    expected: "workspace"
+    description: "Defines workspace table"
+
+  - type: contains
+    expected: "FOREIGN KEY"
+    description: "Defines referential integrity constraints"
+
+  - type: contains
+    expected: "INDEX"
+    description: "Defines indexes for query optimization"
+
+  - type: contains
+    expected: "version"
+    description: "Addresses file versioning in the schema"
+
+  - type: contains
+    expected: "soft delete"
+    description: "Implements soft delete mechanism"
+
+  - type: contains
+    expected: "migration"
+    description: "Provides Flyway migration script"
+
+  - type: contains
+    expected: "trade-off"
+    description: "Discusses design trade-offs"
+
+  - type: not_contains
+    expected: "TODO"
+    description: "No placeholder content left in the schema"
+
+quality_criteria:
+  completeness: 0.85
+  normalization: 0.80
+  index_strategy: 0.85
+  query_performance: 0.80
+  migration_quality: 0.85

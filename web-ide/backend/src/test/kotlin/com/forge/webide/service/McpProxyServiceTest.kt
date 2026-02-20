@@ -166,11 +166,15 @@ class McpProxyServiceTest {
     }
 
     @Test
-    fun `callTool search_knowledge requires query param`() {
+    fun `callTool search_knowledge with empty query does not reject as missing param`() {
         val result = service.callTool("search_knowledge", mapOf("query" to ""))
 
-        assertThat(result.isError).isTrue()
-        assertThat(result.content[0].text).contains("required")
+        // Empty query is valid — used by Context Picker to list all documents.
+        // In test env, knowledge-base dir may not exist (returns dir-not-found error),
+        // but the important thing is it doesn't reject empty query as "required".
+        if (result.isError) {
+            assertThat(result.content[0].text).doesNotContain("required")
+        }
     }
 
     @Test
