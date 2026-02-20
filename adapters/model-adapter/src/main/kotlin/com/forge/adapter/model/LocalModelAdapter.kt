@@ -15,18 +15,20 @@ import org.slf4j.LoggerFactory
 import java.util.concurrent.TimeUnit
 
 /**
- * ModelAdapter implementation for locally-hosted models.
+ * ModelAdapter implementation for locally-hosted models or any OpenAI-compatible API.
  *
  * Connects to local model servers that expose an OpenAI-compatible API,
- * such as Ollama, llama.cpp server, vLLM, or LocalAI. This enables
- * offline development, air-gapped environments, and cost-free experimentation.
+ * such as Ollama, llama.cpp server, vLLM, or LocalAI. Also supports
+ * corporate/private OpenAI-compatible endpoints with API key authentication.
  *
- * @param baseUrl The local model server URL (default: http://localhost:11434 for Ollama)
- * @param defaultModel The default model name on the local server
+ * @param baseUrl The model server URL (default: http://localhost:11434 for Ollama)
+ * @param defaultModel The default model name on the server
+ * @param apiKey Optional API key for authenticated endpoints (falls back to LOCAL_MODEL_API_KEY env var)
  */
 class LocalModelAdapter(
     private val baseUrl: String = System.getenv("LOCAL_MODEL_URL") ?: "http://localhost:11434",
-    private val defaultModel: String = System.getenv("LOCAL_MODEL_NAME") ?: "llama3.1:8b"
+    private val defaultModel: String = System.getenv("LOCAL_MODEL_NAME") ?: "llama3.1:8b",
+    private val apiKey: String? = System.getenv("LOCAL_MODEL_API_KEY")
 ) : ModelAdapter {
 
     private val logger = LoggerFactory.getLogger(LocalModelAdapter::class.java)
@@ -86,6 +88,7 @@ class LocalModelAdapter(
 
             val request = Request.Builder()
                 .url(endpoint)
+                .addAuthIfPresent()
                 .post(requestBody.toRequestBody("application/json".toMediaType()))
                 .build()
 
@@ -126,6 +129,82 @@ class LocalModelAdapter(
                 reader.close()
                 response.close()
             }
+        }.flowOn(Dispatchers.IO)
+    }
+
+    override suspend fun streamWithTools(
+        messages: List<Message>,
+        options: CompletionOptions,
+        tools: List<ToolDefinition>
+    ): Flow<StreamEvent> {
+        val model = options.model ?: defaultModel
+        logger.info("Local model stream: model={}, url={}", model, baseUrl)
+
+        return flow {
+            val apiMessages = messages.map { msg ->
+                mapOf(
+                    "role" to when (msg.role) {
+                        Message.Role.USER, Message.Role.TOOL -> "user"
+                        Message.Role.ASSISTANT -> "assistant"
+                        Message.Role.SYSTEM -> "system"
+                    },
+                    "content" to msg.content
+                )
+            }
+
+            val requestBody = gson.toJson(
+                mapOf(
+                    "model" to model,
+                    "messages" to apiMessages,
+                    "stream" to true,
+                    "max_tokens" to options.maxTokens,
+                    "temperature" to options.temperature
+                )
+            )
+
+            val request = Request.Builder()
+                .url("$baseUrl/v1/chat/completions")
+                .addAuthIfPresent()
+                .post(requestBody.toRequestBody("application/json".toMediaType()))
+                .build()
+
+            emit(StreamEvent.MessageStart("", model))
+
+            val response = client.newCall(request).execute()
+            if (!response.isSuccessful) {
+                val body = response.body?.string() ?: "Unknown error"
+                response.close()
+                throw ModelAdapterException("Local model error (${response.code}): $body")
+            }
+
+            val reader = response.body?.byteStream()?.bufferedReader()
+                ?: throw ModelAdapterException("Empty response stream")
+
+            try {
+                var line: String?
+                while (reader.readLine().also { line = it } != null) {
+                    val currentLine = line ?: continue
+                    if (!currentLine.startsWith("data: ")) continue
+                    val data = currentLine.removePrefix("data: ").trim()
+                    if (data == "[DONE]") break
+                    try {
+                        val json = gson.fromJson(data, JsonObject::class.java)
+                        val delta = json.getAsJsonArray("choices")
+                            ?.get(0)?.asJsonObject
+                            ?.getAsJsonObject("delta")
+                        val text = delta?.get("content")?.asString
+                        if (text != null) emit(StreamEvent.ContentDelta(text))
+                    } catch (e: Exception) {
+                        logger.debug("Skipping unparseable SSE event: {}", data)
+                    }
+                }
+            } finally {
+                reader.close()
+                response.close()
+            }
+
+            emit(StreamEvent.MessageDelta(StopReason.END_TURN))
+            emit(StreamEvent.MessageStop)
         }.flowOn(Dispatchers.IO)
     }
 
@@ -208,6 +287,7 @@ class LocalModelAdapter(
         return withContext(Dispatchers.IO) {
             val request = Request.Builder()
                 .url("$baseUrl/api/generate")
+                .addAuthIfPresent()
                 .post(requestBody.toRequestBody("application/json".toMediaType()))
                 .build()
 
@@ -264,6 +344,7 @@ class LocalModelAdapter(
         return withContext(Dispatchers.IO) {
             val request = Request.Builder()
                 .url("$baseUrl/v1/chat/completions")
+                .addAuthIfPresent()
                 .post(requestBody.toRequestBody("application/json".toMediaType()))
                 .build()
 
@@ -299,6 +380,10 @@ class LocalModelAdapter(
                 )
             }
         }
+    }
+
+    private fun Request.Builder.addAuthIfPresent(): Request.Builder = apply {
+        if (!apiKey.isNullOrBlank()) addHeader("Authorization", "Bearer $apiKey")
     }
 
     private fun defaultModelList(): List<ModelInfo> {

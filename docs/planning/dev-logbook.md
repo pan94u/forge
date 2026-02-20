@@ -2612,3 +2612,62 @@ echo "Regression test workspace cleaned up"
 | **Bug 追踪** | **18 个（17 已修复，1 挂起）** |
 | Phase 0~1.6 | ✅ 完成 |
 | **验收测试进度** | **20/24 场景通过，4 场景待 UI 手动测试** |
+
+---
+
+## Session 18 — 2026-02-20：OpenAI 兼容模型接入
+
+### 18.1 目标
+
+支持公司提供的 OpenAI 兼容格式模型，无需每次手动 export 环境变量。
+
+### 18.2 实施内容
+
+| 操作 | 文件 | 说明 |
+|------|------|------|
+| 修改 | `adapters/model-adapter/.../LocalModelAdapter.kt` | 新增 `apiKey` 构造参数，支持 `LOCAL_MODEL_API_KEY` 环境变量；所有 HTTP 请求统一通过 `addAuthIfPresent()` 扩展方法注入 `Authorization: Bearer` header |
+| 修改 | `web-ide/backend/.../config/ClaudeConfig.kt` | Bean 返回类型改为 `ModelAdapter` 接口；根据 `MODEL_PROVIDER` 环境变量（或 `LOCAL_MODEL_URL` 是否设置）动态选择注入 `ClaudeAdapter` 或 `LocalModelAdapter` |
+| 修改 | `web-ide/backend/.../service/ClaudeAgentService.kt` | 注入类型从 `ClaudeAdapter` 改为 `ModelAdapter` 接口；model 配置项支持 `forge.model.name` 优先，回退到 `forge.claude.model` |
+| 修改 | `web-ide/backend/src/main/resources/application.yml` | 新增 `forge.model.*` 配置块（provider/url/name/api-key），绑定对应环境变量 |
+| 新增 | `.env.example` | 本地开发环境变量模板，已在 `.gitignore` 中忽略 |
+
+### 18.3 配置方式
+
+切换到公司 OpenAI 兼容模型，只需在项目根 `.env` 中设置：
+
+```bash
+MODEL_PROVIDER=openai
+LOCAL_MODEL_URL=https://your-company-api.com
+LOCAL_MODEL_NAME=your-model-name
+LOCAL_MODEL_API_KEY=your-api-key
+```
+
+切回 Anthropic 直连：去掉 `MODEL_PROVIDER` 或设为 `anthropic`，改设 `ANTHROPIC_API_KEY`。
+
+### 18.4 经验沉淀
+
+1. **Adapter 接口隔离的价值**：`ModelAdapter` 接口设计使得切换 provider 只需改 Spring Bean 配置，上层 `ClaudeAgentService` 零改动（除注入类型）
+2. **OkHttp 扩展函数**：用 `Request.Builder.addAuthIfPresent()` 扩展方法统一处理可选 header，比在每个请求处 if/else 更干净
+3. **本地 .env 文件**：`.gitignore` 已预置 `.env`，直接 `cp .env.example .env` 即可，配合 `direnv` 实现自动加载
+
+### Git 提交记录（Session 18）
+
+| Commit | 说明 |
+|--------|------|
+| *(pending)* | feat: 支持 OpenAI 兼容模型接入，新增 .env.example |
+
+### 项目统计快照（Session 18）
+
+| 指标 | 数值 |
+|------|------|
+| 总文件数 | ~326+ |
+| Git Commits | 33 |
+| Sessions | 18 |
+| 单元测试 | 147 |
+| Skills 加载 | 32 (5 profiles) |
+| MCP 工具 | 9 |
+| Docker 容器 | 4 |
+| 知识库文档 | 13 |
+| E2E 验收测试 | 89 用例，~76/89 已通过（85%） |
+| Bug 追踪 | 18 个（17 已修复，1 挂起） |
+| Phase 0~1.6 | ✅ 完成 |

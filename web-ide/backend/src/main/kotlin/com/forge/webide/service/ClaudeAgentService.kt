@@ -28,7 +28,7 @@ import java.util.concurrent.Executors
  */
 @Service
 class ClaudeAgentService(
-    private val claudeAdapter: ClaudeAdapter,
+    private val claudeAdapter: ModelAdapter,
     private val mcpProxyService: McpProxyService,
     private val knowledgeGapDetectorService: KnowledgeGapDetectorService,
     private val chatSessionRepository: ChatSessionRepository,
@@ -41,7 +41,7 @@ class ClaudeAgentService(
     private val logger = LoggerFactory.getLogger(ClaudeAgentService::class.java)
     private val executor = Executors.newFixedThreadPool(10)
 
-    @Value("\${forge.claude.model:claude-sonnet-4-20250514}")
+    @Value("\${forge.model.name:\${forge.claude.model:claude-sonnet-4-20250514}}")
     private var model: String = "claude-sonnet-4-20250514"
 
     companion object {
