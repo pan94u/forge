@@ -303,12 +303,7 @@ class McpProxyService(
         val query = (arguments["query"] as? String ?: "").lowercase()
         val typeFilter = arguments["type"] as? String
 
-        if (query.isBlank()) {
-            return McpToolCallResponse(
-                content = listOf(McpContent(type = "text", text = "Error: 'query' parameter is required")),
-                isError = true
-            )
-        }
+        // Empty query = list all documents (used by Context Picker default view)
 
         val knowledgeBaseDir = resolveKnowledgeBaseDir()
         if (!knowledgeBaseDir.exists()) {

@@ -2498,7 +2498,8 @@ echo "Regression test workspace cleaned up"
 
 | Commit | 说明 |
 |--------|------|
-| *(pending)* | fix: BUG-013/015/017 + agentic safety net + 验收场景2/3/5/9/10 |
+| `0500f58` | fix: BUG-015/017 ContextPicker Profiles + enum序列化 + 验收场景2/3/5/9/10 |
+| `f200157` | docs: 补全 buglist — BUG-014 填充 + BUG-013/017 详细记录 + 统计修正 |
 
 ### 项目统计快照（Session 16）
 
@@ -2516,3 +2517,98 @@ echo "Regression test workspace cleaned up"
 | **Bug 追踪** | **17 个（16 已修复，1 挂起）** |
 | Phase 0~1.6 | ✅ 完成 |
 | **验收测试进度** | **场景 1/3/5/9/10/D/E 全通过，场景 2 大部分通过** |
+
+---
+
+## Session 17 — 2026-02-20：Phase 1.6 E2E 验收测试（大规模批量推进）
+
+### 17.1 目标
+
+批量推进 Phase 1.6 验收测试，覆盖所有可自动化场景 + UI 手动场景，修复测试中发现的 Bug。
+
+### 17.2 Bug 修复
+
+| Bug ID | 严重等级 | 问题 | 修复 |
+|--------|---------|------|------|
+| BUG-018 | P2 | Context Picker Knowledge tab 无内容 | 两层修复：(1) ContextController 空字符串 fallback (2) McpProxyService 空查询返回全部文档而非报错 |
+
+### 17.3 验收测试执行进度
+
+本 Session 新增通过的场景（在 Session 15/16 基础上）：
+
+| 场景 | 结果 | 方式 | 备注 |
+|------|------|------|------|
+| 场景 4（代码审查） | ✅ 2/2 | UI 手动 | Profile 路由 + Markdown 渲染正常 |
+| 场景 6（对话高级功能） | ✅ 5/5 | UI 手动 | TC-6.4 修复 BUG-018 后通过 |
+| 场景 7（Profile 轮转） | ✅ 5/5 | UI 手动 | 5 个 Profile 全部正确路由 |
+| 场景 8（边界异常） | ✅ 4/4 | UI 手动 | 空消息/长文本/快速发送/XSS 全通过 |
+| 场景 11（MCP 直接调用） | ✅ 5/5 | curl 自动 | search_knowledge/list_baselines/run_baseline/get_service_info/nonexistent |
+| 场景 12（工作流编辑器） | ✅ 3/3 | UI 手动 | 页面加载/节点拖放/连线 |
+| 场景 13（agent-eval） | ✅ 2/3 | CLI | TC-13.1/13.3 通过，TC-13.2 跳过（需真实 API Key） |
+| 场景 14（单元测试） | ✅ 147 tests | CLI | backend 118 + adapter 11 + eval 18 |
+| 场景 15（Docker 部署） | ✅ 3/3 | CLI+docker | 4 容器 healthy |
+| 场景 A（Keycloak SSO） | ✅ TC-A.1 | curl | OIDC 发现端点可访问 |
+| 场景 F（知识库升级） | ✅ 2/2 | curl+本地 | 13 个 md 文件 + 搜索正常 |
+| 场景 G（API 升级） | ✅ 3/3 | curl | workspace inputSchema + context search + auth API |
+| 场景 I（Docker 4 容器） | ✅ 3/3 | curl+docker | 容器间网络/Keycloak realm/workspace 工具 E2E |
+
+### 17.4 文件变更
+
+| 操作 | 文件 | 说明 |
+|------|------|------|
+| 修改 | `web-ide/backend/.../controller/ContextController.kt` | BUG-018 空查询 fallback |
+| 修改 | `web-ide/backend/.../service/McpProxyService.kt` | BUG-018 空查询返回全部文档 |
+| 修改 | `docs/buglist.md` | 新增 BUG-018 |
+| 修改 | `docs/phase1.6-e2e-acceptance-test.md` | 批量更新通过状态 + 汇总表 |
+| 修改 | `docs/planning/dev-logbook.md` | Session 17 记录 |
+
+### 17.5 经验沉淀
+
+1. **空字符串 vs null 陷阱再现**：Kotlin `String?` 参数从 HTTP query param 接收时，`q=`（空字符串）和不传 `q`（null）是两种情况。`?: default` 只处理 null，需用 `isNullOrBlank()` 处理空字符串
+2. **MCP 工具的"列出全部"语义**：`search_knowledge` 原本不支持空查询（报错），但 Context Picker 的"默认视图"需要列出全部。改为空查询返回全部，通过 `"".contains("")` == true 的 Kotlin/Java 特性实现
+3. **自动化测试优先**：curl/CLI 能跑的场景优先批量执行（11/13/14/15/F/G/I），节省 UI 手动测试时间
+
+### 17.6 测试总结
+
+**Phase 1.6 E2E 验收测试进度**：
+
+| 维度 | 数据 |
+|------|------|
+| 总场景数 | 24 个（Phase 0~1.5: 15 + Phase 1.6 新增: 9） |
+| 总用例数 | 89 个 |
+| **已通过场景** | **20/24**（83%） |
+| **已通过用例** | **约 76/89**（85%） |
+| 未测试 | 场景 A(3 TC)/B(5 TC)/C(3 TC)/H(3 TC)，共 14 个 TC |
+| 受 BUG-016 阻塞 | TC-2.3 部分 + TC-2.4 部分（Profile 路由正常，AI 输出被 agentic loop 截断） |
+| 已发现 Bug | 18 个（17 已修复，1 挂起） |
+
+**已通过场景清单**：1, 2(大部分), 3, 4, 5, 6, 7, 8, 9, 10(5/7), 11, 12, 13(2/3), 14, 15, A(1/4), D, E, F, G, I
+
+**未测试场景**（需 UI 手动 + 安全模式开启）：
+- 场景 A TC-A.2~A.4（SSO 登录/JWT/登出 — 需 FORGE_SECURITY_ENABLED=true）
+- 场景 B（AI 交付闭环 — 核心场景，需 UI 手动验证 workspace_write_file 端到端）
+- 场景 C（Context Picker 实连 — 需 UI 手动验证 @file/@knowledge chip 流程）
+- 场景 H（Header 角色切换 — 需 UI 手动验证角色切换影响侧边栏）
+
+### Git 提交记录（Session 17）
+
+| Commit | 说明 |
+|--------|------|
+| *(pending)* | fix: BUG-018 + 验收场景 4/6/7/8/11/12/13/14/15/A/F/G/I + 测试总结 |
+
+### 项目统计快照（Session 17）
+
+| 指标 | 数值 |
+|------|------|
+| 总文件数 | ~325+ |
+| Git Commits | 32 |
+| Sessions | 17 |
+| 单元测试 | **147** |
+| Skills 加载 | 32 (5 profiles) |
+| MCP 工具 | 9 |
+| Docker 容器 | 4 |
+| 知识库文档 | 13 |
+| E2E 验收测试 | 89 用例，**~76/89 已通过**（85%） |
+| **Bug 追踪** | **18 个（17 已修复，1 挂起）** |
+| Phase 0~1.6 | ✅ 完成 |
+| **验收测试进度** | **20/24 场景通过，4 场景待 UI 手动测试** |

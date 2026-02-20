@@ -26,6 +26,7 @@
 | BUG-015 | P2 | ✅ 已修复 | @设计/@测试 等 Profile 标签被 ContextPicker 拦截，无法路由到后端 |
 | BUG-016 | P2 | ⏸ 挂起 | Agentic loop 8 轮耗尽后 AI 无文字输出（safety net 未生效） |
 | BUG-017 | P1 | ✅ 已修复 | Knowledge Services 页面白屏崩溃（ServiceType/ServiceStatus 枚举大小写） |
+| BUG-018 | P2 | ✅ 已修复 | Context Picker Knowledge tab 无内容（空字符串未 fallback 到通配搜索） |
 
 ---
 
@@ -167,16 +168,27 @@
 - **修复**: 在 `ServiceType` 和 `ServiceStatus` 枚举上添加 `@JsonValue fun toValue() = name.lowercase()`，确保序列化为小写
 - **文件**: `web-ide/backend/src/main/kotlin/com/forge/webide/model/Models.kt`
 
+### BUG-018: Context Picker Knowledge tab 无内容
+- **发现**: Session 17, Phase 1.6 验收测试 TC-6.4
+- **症状**: 在 Context Picker 中切换到 Knowledge tab，列表为空，显示 "No knowledge found"
+- **根因**: 两层问题：
+  1. `ContextController.searchKnowledge()` 中 `query ?: "documentation"` 只处理 null 不处理空字符串（前端发 `q=` 空字符串）
+  2. `McpProxyService.handleSearchKnowledge()` 对空查询直接返回 error（`'query' parameter is required`），不支持列出全部文档
+- **修复**:
+  1. `ContextController.kt`: 改为 `query ?: ""`，空查询时传空字符串触发"列出全部"
+  2. `McpProxyService.kt`: 移除空查询报错逻辑，空查询时返回全部文档（13 条）
+- **文件**: `ContextController.kt`, `McpProxyService.kt`
+
 ---
 
 ## 统计
 
-- **总计**: 17 个 Bug
-- **已修复**: 16 个
+- **总计**: 18 个 Bug
+- **已修复**: 17 个
 - **挂起**: 1 个 (BUG-016)
 - **P0 (阻塞)**: 2 个 (BUG-008, BUG-012)
 - **P1 (严重)**: 4 个 (BUG-001, BUG-005, BUG-013, BUG-017)
-- **P2 (一般)**: 11 个
+- **P2 (一般)**: 12 个
 
 ## 影响文件
 
@@ -192,3 +204,4 @@
 | `web-ide/frontend/src/components/chat/AiChatSidebar.tsx` | BUG-012, 013, 014, 015 |
 | `web-ide/frontend/src/components/chat/ContextPicker.tsx` | BUG-014, 015 |
 | `web-ide/backend/src/main/kotlin/com/forge/webide/service/ClaudeAgentService.kt` | BUG-016 |
+| `web-ide/backend/src/main/kotlin/com/forge/webide/controller/ContextController.kt` | BUG-018 |

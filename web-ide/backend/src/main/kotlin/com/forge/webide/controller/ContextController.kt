@@ -74,7 +74,7 @@ class ContextController(
 
     private fun searchKnowledge(query: String?): List<ContextItem> {
         return try {
-            val searchQuery = query ?: "documentation"
+            val searchQuery = query ?: ""
             val result = mcpProxyService.callTool("search_knowledge", mapOf("query" to searchQuery))
             if (result.isError) return emptyList()
 
