@@ -142,6 +142,16 @@ forge:
     api-key: ${ANTHROPIC_API_KEY:}
 
   # ---------------------------------------------------------------------------
+  # Model Provider (anthropic | openai)
+  # Defaults to anthropic. Set provider=openai to use any OpenAI-compatible API.
+  # ---------------------------------------------------------------------------
+  model:
+    provider: ${MODEL_PROVIDER:anthropic}
+    url: ${LOCAL_MODEL_URL:}
+    name: ${LOCAL_MODEL_NAME:}
+    api-key: ${LOCAL_MODEL_API_KEY:}
+
+  # ---------------------------------------------------------------------------
   # MCP Server URLs
   # ---------------------------------------------------------------------------
   mcp:
