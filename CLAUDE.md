@@ -5,7 +5,7 @@
 - **用中文交流**。所有回复、注释、文档默认使用中文
 - **行动优先**：用户说"执行"/"继续"/"全部"时直接做，不要反问
 - **简洁回复**：少说多做。避免冗长解释，给结果和关键数据
-- **遵循三大开发纪律**（见下方"开发纪律"章节）
+- **遵循四大开发纪律**（见下方"开发纪律"章节）
 
 ## Quick Start
 
@@ -101,7 +101,7 @@ Forge is a Gradle monorepo (Kotlin DSL) with the following modules:
 - No circular dependencies between modules
 - Plugins are standalone Markdown/JSON — no Kotlin compilation needed
 
-## 已知陷阱（从 14 个 Session 提炼）
+## 已知陷阱（从 18 个 Session 提炼）
 
 - **JDK 版本**: 必须 21+，系统默认可能是 8，用 `JAVA_HOME` 显式指定
 - **Profile 命名**: 带 `-profile` 后缀（如 `development-profile`，非 `development`）
@@ -110,8 +110,36 @@ Forge is a Gradle monorepo (Kotlin DSL) with the following modules:
 - **WebSocket CORS**: `allowed-origins` 用逗号分隔字符串（非 YAML list），@Value 无法解析 list
 - **npm run build vs dev**: `npm run dev` 不检查类型错误，**必须用 `npm run build` 验证**
 - **workspaceId 传递**: REST API（McpController）和 WebSocket（agenticStream）是两条独立路径，都需要传 workspaceId
+- **Kotlin 枚举序列化**: `enum class` 默认序列化为大写（`DIRECTORY`），前端期望小写（`directory`）。所有枚举必须加 `@JsonValue` 返回小写。**新增枚举时立即全局排查** `grep -r "enum class" --include="*.kt"`
+- **空字符串 vs null**: Kotlin `String?` 从 HTTP query param 接收时，`q=`（空串）和不传 `q`（null）不同。`?: default` 只处理 null，需用 `isNullOrBlank()` 同时处理两者
 
-## 开发纪律（三大支柱）
+## 交付方法论（从 18 Session 实践总结）
+
+> 核心理念：**用文档对抗 AI 遗忘，用验收测试对抗质量腐化，用双基线对抗设计偏移。**
+> 详细分析：`docs/delivery-methodology-analysis.md`
+
+### Session 微型 PDCA 循环
+
+每个 Session 遵循固定结构：`目标声明 → 实施 → Bug 修复 → 文件变更表 → 经验沉淀 → 统计快照 → Git 提交`。Session 结束时 Claude 应主动提醒用户完成所有环节。
+
+### 经验编码管道
+
+发现可复用的经验时，按此管道固化：`logbook 经验沉淀 → 验证（跨 2+ Session 确认） → 编码到 CLAUDE.md（已知陷阱/纪律/方法论）`。用户明确要求记住的内容可跳过验证直接编码。
+
+### 并行 Agent 策略
+
+以下场景**应该**使用并行 Agent（Task 工具）提高效率：
+- 初始化或大型功能集（5+ 文件同时修改）：拆分为前端/后端两个 Agent
+- 独立场景的验收测试：不同场景可并行执行
+- 文档批量更新：logbook + baseline + acceptance test 可并行修改
+
+### 里程碑命名规范
+
+格式：`Phase X.Y — 语义标题`（如 `Phase 1.6 — AI 交付闭环`）。新增中间阶段用小数点扩展，**禁止重命名已有编号**（Session 13 的 69 处重命名教训）。
+
+---
+
+## 开发纪律（四大支柱）
 
 ### 纪律 1：Logbook 维护（对抗遗忘）
 
@@ -129,11 +157,13 @@ Forge is a Gradle monorepo (Kotlin DSL) with the following modules:
 
 **格式约定**: 沿用现有 `### X.Y 小节标题` + 表格 + 代码块风格。统计快照放在 Session 末尾。
 
+**文档债务控制**: 每 5 个 Session 做一次文档全量审查（格式统一、去重、清理版本批注）。Claude 在 Session 编号为 5 的倍数时主动提醒用户。
+
 ### 纪律 2：Baseline 交叉校验（防止腐化）
 
 **两份 Baseline 的定位不同**:
 - **设计基线** `docs/design-baseline-v1.md`（当前 v5）：**实现驱动**，每个 Phase 结束后根据实际实现来更新，记录"我们造了什么"
-- **规划基线** `docs/planning/baseline-v1.4.md`：**设计驱动**，由开发者和 Claude 共同讨论设计来更新，记录"我们要造什么"
+- **规划基线** `docs/planning/baseline-v1.5.md`：**设计驱动**，由开发者和 Claude 共同讨论设计来更新，记录"我们要造什么"
 
 **更新时机**:
 - Phase 结束 → 先更新设计基线（对齐实现）→ 再用设计基线与规划基线交叉校验 → 发现偏差后决定是修正规划还是补齐实现
@@ -149,18 +179,18 @@ Forge is a Gradle monorepo (Kotlin DSL) with the following modules:
 
 ### 纪律 3：验收测试驱动（连接代码与产品）
 
-**当前验收测试**: `docs/phase1.6-e2e-acceptance-test.md`（89 用例 / 336 检查项）
+**当前验收测试**: `docs/phase1.6-e2e-acceptance-test.md`（21 场景 / 87 用例，80 通过 = 92.0%）
 
 **验收测试生命周期**:
 
 ```
-编写 → 代码交叉验证 → 运行时执行 → 数据校准 → 更新文档
-  ↑                                              |
-  └──────── 下一个 Phase 时继承并扩展 ────────────┘
+场景先行 → 编码实现 → 交叉验证 → 运行时执行 → 数据校准 → 更新文档
+  ↑                                                        |
+  └────────────── 下一个 Phase 时继承并扩展 ────────────────┘
 ```
 
-1. **编写时**: 每个新 Phase 在实施前/中创建验收测试文档，继承前一个 Phase 的全部用例
-2. **交叉验证**: 编写后必须对照代码验证（Session 13 发现 16 处错误就因为跳过了这步）
+1. **场景先行**: 每个新 Phase **编码前**先写验收场景标题 + 关键预期（防止后补导致的 16 处错误，Session 13 教训）
+2. **编码后补充**: 编码完成后填充 TC 操作细节，并对照代码交叉验证
 3. **运行时执行**: 用 curl/docker exec 自动执行可自动化的用例，UI 用例标注为手动
 4. **数据校准**: 执行后将实际值（profile 名称、测试数量、工具数量等）回填文档
 5. **ROI 评估**: 验收测试的通过率直接反映 Phase 交付的有效性
@@ -173,8 +203,25 @@ Forge is a Gradle monorepo (Kotlin DSL) with the following modules:
 
 **核心原则**: 验收测试是写给人看的产品规格，同时也是可执行的运行时校验。147 个单元测试全过 ≠ 产品可用（Session 14 的 workspace 工具 bug 就是证明）。
 
+### 纪律 4：防腐规则（持续改进）
+
+**系统性 Bug 全局排查**: 发现一个 Bug 属于某类系统性问题时（如枚举序列化），**立即**全局排查同类问题并一次性修复，不留到下次踩坑。
+
+**本地验证优先于 Docker**: 代码修改后先跑本地验证（单元测试 + `npm run build` 类型检查），确认无误后再 Docker 重建。避免"改一行 → Docker 重建 3 分钟 → 发现新问题"的低效循环。
+
+```
+修改代码 → 本地单元测试（30s）→ npm run build（10s）→ 确认无误 → Docker 重建（仅集成验证时）
+```
+
+**Git 提交粒度**: 每个逻辑变更一个 commit（一个 Bug 修复 = 一个 commit，一个功能 = 一个 commit）。避免单个 commit 包含 20+ 文件的大杂烩，便于 bisect 和回滚。
+
+**同一入口多路径测试**: 同一功能的不同入口（REST API / WebSocket / UI）必须各自测试。Session 14 教训：workspace 工具通过 WebSocket 可用但 REST API 未连通。
+
 ## Git
 
 - **Remote**: `git@github.com:pan94u/forge.git`（branch: main）
 - **开发日志**: `docs/planning/dev-logbook.md`
 - **验收测试**: `docs/phase1.6-e2e-acceptance-test.md`
+- **方法论分析**: `docs/delivery-methodology-analysis.md`
+- **度量报告**: `docs/metrics-report-phase1.6.md`
+- **Phase 2 计划**: `docs/phase2-implementation-plan.md`

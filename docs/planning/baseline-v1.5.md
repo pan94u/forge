@@ -1,6 +1,6 @@
 # Forge — 面向 AI 时代的智能交付平台
 
-> 规划基线 v1.4 | 基线日期: 2026-02-19
+> 规划基线 v1.5 | 基线日期: 2026-02-20
 
 ---
 
@@ -15,6 +15,7 @@
 3. **持续进化**：建立"交付环 + 进化环"双环机制，让平台在使用中自动变好
 4. **全员可用**：开发者通过 CLI/IDE 使用，产品团队通过 Web IDE 使用，共享同一套智能和知识
 5. **跨栈迁移**：化解"无人懂旧技术栈"的死结，AI 做知识抢救 + 跨语言翻译，目标栈聚焦 Java/Kotlin
+6. **方法论内化**：将人+AI 协同验证过的交付方法论（四维记忆、PDCA 循环、经验编码）编码为平台自动能力，让用户无需手动维护即可获得相同的质量保障
 
 ### 1.2 平台定位
 
@@ -35,6 +36,7 @@
 - **双环 > 单环**：只有交付没有进化 = 不会变好；交付 + 进化 = 飞轮效应
 - **Runtime 无关是长期战略**：Skill/知识/底线是平台的"稳态"，Agent Runtime（Claude Code / ForgeNative / 其他）是可替换的"敏态"
 - **质量底线 > 开发速度**：logbook 证明——38K 行代码中 CORS 通配符直接进 commit。速度不缺（2400 行/小时），缺的是安全网
+- **手动验证的方法论是平台能力的种子**：18 Session 实践出的四维记忆系统（Logbook → execution-logger，双基线 → design-baseline-tracker，验收测试 → CI baseline，经验编码 → skill-feedback-analyzer）先手动验证有效性，再编码为平台自动能力。Phase 0-2 验证方法论，Phase 3 将其平台化
 
 ---
 
@@ -54,8 +56,11 @@
 | 10 | 经验数据驱动 | 用 logbook/执行日志的真实数据校验设计，而非理论推演 | 凭感觉评估提效比 |
 | 11 | 已验证设计不可隐式退化 | 经过 E2E 验证的设计决策必须有文档冻结 + 测试守护，修改必须显式评审 | 修改代码时无意改变已验证的行为/外观/契约，且无人察觉 |
 | 12 | 开发者痛点即平台能力 | 开发中遇到的低效模式应编码为 Skill/底线自动化解决，让未来的开发者无感地获得保护 | 只解决当下问题，不沉淀为平台能力；同样的坑反复踩 |
+| 13 | 场景先行验收 | 每个 Phase **编码前**先写验收场景标题 + 关键预期，编码后填充细节并交叉验证 | 先写代码后补验收测试（Session 13 发现 16 处错误就因为跳过了交叉验证） |
+| 14 | 本地验证优先 | 代码修改后先跑本地测试（单元测试 + `npm run build`），确认无误后再 Docker 重建 | 每改一行都 Docker 重建 3-5 分钟（Session 15 的 4 次低效重建） |
 
 > 原则 11-12 源于 Phase 1.5 Docker 部署调试经验——90 分钟、13 次尝试、10 个计划外问题。详见 `dev-logbook.md` Session 5。
+> 原则 13-14 源于 Phase 1.6 验收测试 + 交付方法论分析（18 个 Session 实践总结）。详见 `docs/delivery-methodology-analysis.md`。
 
 ---
 
@@ -137,9 +142,9 @@
 | Phase 1 | Web IDE 实连 + 跨栈基础 | ✅ | 真流式 + Agentic Loop + 跨栈画像 + 37 测试 | Claude Code |
 | Phase 1.5 | 设计守护 + Docker 部署 | ✅ | Docker 3 容器 + E2E 验证 + 设计基线冻结 + 设计守护底线 | Claude Code |
 | Phase 1.6 | AI 交付闭环 + SSO + UX 增强 | ✅ | AI→Workspace 写文件 + Keycloak SSO + Context Picker + CRUD + 自动保存 | Claude Code |
-| Phase 2 | 单环运转 + Runtime 初步脱离 | 👈 下一阶段 | OODA 引擎 + SkillLoader 增强 + ProfileRouter 后端 + 底线 CI | Claude Code + ForgeNativeRuntime (PoC) |
-| Phase 3 | 双环闭合 + Runtime 完全抽象 | ⏳ | 进化环 + ForgeNativeRuntime 完整 + RuntimeAdapter 切换 | Claude Code 或 ForgeNative（可选） |
-| Phase 4 | 持续进化 + 生态开放 | ⏳ | 多 Runtime 支持 + Skill 生态 + 垂域模型 | 任意 Runtime |
+| Phase 2 | 质量基础设施 + OODA 增强 + 内部试用 | 👈 下一阶段 | Sprint 2.1（CI/Playwright/Bug 修复）+ Sprint 2.2（SkillLoader/MCP 真实服务）+ Sprint 2.3（内部试用） | Claude Code |
+| Phase 3 | 方法论平台化 + 进化环闭合 | ⏳ | 方法论自动化（execution-logger / design-baseline-tracker / skill-feedback-analyzer） + ForgeNativeRuntime + RuntimeAdapter | Claude Code 或 ForgeNative（可选） |
+| Phase 4 | 全面上线 + 持续进化 | ⏳ | 多 Runtime 支持 + Skill 生态 + 进化环飞轮 + 垂域模型 | 任意 Runtime |
 
 ### 3.5 跨栈迁移工作流
 
@@ -176,13 +181,13 @@ Phase 3:   + AgentLoop + HookEngine + ContextBuilder → 完整 ForgeNativeRunti
 
 **ForgeNativeRuntime 5 个核心组件**：
 
-| 组件 | 职责 | 目标阶段 | 当前状态 |
-|------|------|---------|---------|
-| SkillLoader | 读取 SKILL.md → 按 frontmatter trigger 条件 → 拼接到 system prompt | Phase 2 | ✅ 基础版（SystemPromptAssembler 已实现 Skill 注入） |
-| ProfileRouter | 解析用户意图 → 选择 Profile → 加载对应 Skill 集 | Phase 2 | ✅ 基础版（前端 RoleSelector 手动切换 5 个 Profile） |
-| AgentLoop | 消息 → 模型 → tool_use → 执行 → tool_result → 循环（OODA） | Phase 3 | ⏳ 待实现 |
-| HookEngine | 在 tool 调用前后执行检查脚本 | Phase 3 | ⏳ 待实现 |
-| ContextBuilder | 读取三级上下文 .md 文件 → 合并 → 注入 system prompt | Phase 3 | ⏳ 待实现 |
+| 组件 | 职责 | 对应的手动实践 | 目标阶段 | 当前状态 |
+|------|------|--------------|---------|---------|
+| SkillLoader | 读取 SKILL.md → 按 frontmatter trigger → 拼接 system prompt | 手动加载 Skill 到提示词 | Phase 2 | ✅ 基础版（SystemPromptAssembler） |
+| ProfileRouter | 解析用户意图 → 选择 Profile → 加载 Skill 集 | 手动 `@角色` 切换 | Phase 2 | ✅ 基础版（前端 RoleSelector） |
+| AgentLoop | 消息 → 模型 → tool_use → 执行 → tool_result → OODA 循环 | Session PDCA 循环 | Phase 3 | ⏳ 待实现 |
+| HookEngine | tool 调用前后执行底线检查脚本 | 纪律 4 防腐规则 | Phase 3 | ⏳ 待实现 |
+| ContextBuilder | 三级上下文 .md → 合并 → 注入 system prompt | CLAUDE.md 手动维护 | Phase 3 | ⏳ 待实现 |
 
 ---
 
@@ -282,7 +287,7 @@ Phase 3:   + AgentLoop + HookEngine + ContextBuilder → 完整 ForgeNativeRunti
 |---------|------|---------|----------|
 | 模型适配 | `ModelAdapter.kt` | `ClaudeAdapter` (Opus/Sonnet/Haiku) | BedrockAdapter / LocalModelAdapter |
 | 资产格式适配 | `AssetFormatAdapter.kt` | SKILL.md v1 格式 | 未来格式版本迁移 |
-| Runtime 适配 | `RuntimeAdapter.kt` | 空壳接口（SkillLoader/ProfileRouter 基础版已独立实现） | Phase 2 PoC → Phase 3 完整 ForgeNativeRuntime |
+| Runtime 适配 | `RuntimeAdapter.kt` | 空壳接口（SkillLoader/ProfileRouter 基础版已独立实现） | Phase 3 ForgeNativeRuntime（方法论执行引擎） |
 
 ### 4.6 进化环设计
 
@@ -321,6 +326,16 @@ SuperAgent 下次执行时自动获得更好的知识和技能
 ```
 
 > 进化环（环 2）尚未实现，属于 Phase 3 范畴。
+> **关键洞察**：进化环的 4 个核心组件与我们手动实践的四维记忆系统一一对应（详见 §11）。Phase 0-2 用手动方式验证了这套方法论的有效性（18 Session 零中断、92% 验收通过率），Phase 3 的核心目标就是将其平台化。
+
+**手动实践 → 平台自动化的映射**：
+
+| 手动实践（Phase 0-2 已验证） | 平台组件（Phase 3 自动化） | 解决的问题 |
+|---|---|---|
+| Logbook（时间维度记忆） | `execution-logger` 自动采集执行日志 | AI 遗忘 → 自动记录 |
+| 双基线交叉校验（空间维度） | `design-baseline-tracker` 自动检测 API/UI/数据模型偏移 | 设计偏移 → 自动守护 |
+| 经验编码管道（知识维度） | `asset-extractor` + `skill-feedback-analyzer` 自动提取经验更新 Skill | 知识流失 → 自动沉淀 |
+| 验收测试 + Buglist（质量维度） | CI baseline + Playwright + Bug 模式识别 | 质量腐化 → 自动拦截（Phase 2 已部分实现） |
 
 四个胶水机制：
 
@@ -602,78 +617,150 @@ forge-platform/                          # Gradle Monorepo (Kotlin DSL)
 - Docker 从 3 容器 → 4 容器（+keycloak）
 - 5 个 Skill Profile 全部提前完成（原计划 planning-profile + ops-profile 在 Phase 3）
 
-### Phase 2：单环运转 + Runtime 初步脱离 — 👈 下一阶段
+### Phase 2：质量基础设施 + OODA 增强 + 内部试用 — 👈 下一阶段
 
-**目标**：交付环在开发阶段完整运转；Web IDE 后端具备独立的 Skill 加载和 Profile 切换能力；跨栈迁移流程验证。
+> 详细实施计划：`docs/phase2-implementation-plan.md`
+> 关键决策：混合路线（Sprint 拆分）、ForgeNativeRuntime 推迟到 Phase 3、MCP 做 1-2 个真实服务、组织 3-5 人试用
+
+**目标**：建立自动化质量保障体系；增强 OODA 引擎智能性；让真人用起来并收集反馈。
 
 **前置条件**：
 
 | 条件 | 状态 |
 |------|------|
-| Phase 1.5 验收标准全部完成 | ✅ |
-| 设计基线文档已冻结 | ✅（v5） |
-| AI→Workspace 交付闭环 | ✅（Phase 1.6） |
-| Keycloak SSO | ✅（Phase 1.6） |
-| 设计守护底线纳入 CI | **Gap** — 底线脚本已设计但未集成到 CI |
-| 3-5 人内部试用 ≥ 3 天 | **Gap** — 内部试用尚未开展 |
+| Phase 0~1.6 全部完成 | ✅ |
+| 设计基线已冻结 | ✅（v5.1） |
+| Phase 1.6 Metrics 报告 | ✅（`docs/metrics-report-phase1.6.md`） |
+| 交付方法论分析 | ✅（`docs/delivery-methodology-analysis.md`） |
+| E2E 验收通过率 ≥ 90% | ✅（92.0%，80/87） |
 
-**关键交付物**：
+**原始 12 交付物对照**：
+
+| # | 原始交付物 | 状态 | Phase 2 行动 |
+|---|-----------|------|-------------|
+| 1 | SuperAgent OODA 引擎 | ⚠️ 基础版 | Sprint 2.2 增强（底线自动检查） |
+| 2 | SkillLoader.kt 增强 | ⚠️ 基础版 | Sprint 2.2 增强（frontmatter trigger） |
+| 3 | ProfileRouter.kt 后端 | ⚠️ 基础版 | 已实现关键词+标签路由，可选增强 |
+| 4 | MCP Server 完善 | ⚠️ 骨架代码 | Sprint 2.2 做 knowledge + database 真实服务 |
+| 5 | convention-miner 跨语言增强 | 📄 SKILL.md | **推迟到 Phase 3** |
+| 6 | 全部 13 Foundation Skill | ✅ 32 Skills | 已超额完成 |
+| 7 | 端到端跨栈迁移 PoC | ✅ 100% 覆盖 | 已完成（11/11 业务规则） |
+| 8 | agent-eval 评估体系 | ⚠️ 框架已搭建 | Sprint 2.1 填充评估集 |
+| 9 | 度量基线采集 | ⚠️ MetricsService | 已完成 metrics 报告 + Sprint 2.2 Dashboard |
+| 10 | 底线脚本 CI 集成 | ❌ 未开始 | Sprint 2.1 核心交付 |
+| 11 | Playwright E2E | ❌ 未开始 | Sprint 2.1 核心交付 |
+| 12 | 内部用户试用 | ❌ 未开始 | Sprint 2.3 核心交付 |
+
+**Sprint 2.1：质量基础设施 — "让系统可信赖"**
+
+| # | 交付物 | 优先级 |
+|---|--------|--------|
+| 1 | GitHub Actions CI Pipeline（构建 + 测试 + lint） | P0 |
+| 2 | 底线脚本 CI 集成（至少 code-style + security + test-coverage 先行） | P0 |
+| 3 | Playwright E2E（20-30 个核心验收场景自动化） | P1 |
+| 4 | BUG-016 修复（agentic loop 耗尽后无输出） | P1 |
+| 5 | Cmd+K 命令面板（Header.tsx 键盘监听器） | P2 |
+| 6 | agent-eval 评估集填充（5 Profile × 2-3 场景） | P2 |
+
+**Sprint 2.2：OODA 引擎增强 + MCP 真实服务 — "让智能更真实"**
+
+| # | 交付物 | 优先级 |
+|---|--------|--------|
+| 1 | SkillLoader frontmatter trigger 增强（keywords/file-patterns/profile 动态过滤） | P0 |
+| 2 | knowledge-mcp 真实服务（Ktor HTTP，对接真实知识库目录） | P0 |
+| 3 | McpProxyService 真实 HTTP 调用（knowledge/database 从内置改为 HTTP） | P0 |
+| 4 | AgentLoop 底线自动检查（Act 后自动运行底线，失败回到 Observe） | P1 |
+| 5 | database-mcp 真实服务（Ktor HTTP，对接 H2/PostgreSQL） | P1 |
+| 6 | Docker 扩容 4→6 容器（+knowledge-mcp + database-mcp） | P1 |
+| 7 | Metrics Dashboard（Grafana 或内置简易面板） | P2 |
+
+**Sprint 2.3：内部试用 + 反馈闭环 — "让真人用起来"**
+
+| # | 交付物 | 优先级 |
+|---|--------|--------|
+| 1 | 试用准备文档（用户手册 + 环境搭建 + FAQ） | P0 |
+| 2 | 试用环境部署（稳定的共享/独立 Docker 环境） | P0 |
+| 3 | 试用执行（3-5 人，≥ 3 天） | P0 |
+| 4 | Top 问题修复（根据反馈修 Top 3-5 问题） | P0 |
+| 5 | 反馈收集机制（结构化反馈表） | P1 |
+| 6 | 验收测试更新（基于试用新场景扩展） | P1 |
+
+**验收标准**：
+- [ ] GitHub Actions CI 自动运行 build + test + 底线检查
+- [ ] Playwright E2E ≥ 20 个场景自动通过
+- [ ] BUG-016 修复 + Cmd+K 可用
+- [ ] Skill 按 frontmatter trigger 条件动态加载
+- [ ] knowledge-mcp + database-mcp 作为独立容器运行
+- [ ] McpProxyService 通过 HTTP 调用真实 MCP Server
+- [ ] ≥ 3 人完成 ≥ 3 天试用 + 结构化反馈
+- [ ] 所有 Bug ≤ 1 个挂起
+
+**不在 Phase 2 范围**：
+- ForgeNativeRuntime（AgentLoop.kt / HookEngine.kt / ContextBuilder.kt）→ Phase 3
+- 进化环全部组件 → Phase 3
+- RuntimeAdapter 配置切换 → Phase 3
+- 3-5 个 MCP Server 全部真实化 → 仅做 knowledge + database
+- Domain Skills 扩展 / convention-miner 跨语言增强 → Phase 3
+
+### Phase 3：交付方法论平台化 + 进化环闭合 — ⏳ 待开始
+
+> **核心理念**：Phase 0-2 用手动方式验证了四维记忆系统和 PDCA 方法论的有效性（18 Session 零中断、92% 验收通过率、20 Bug 追踪闭环）。Phase 3 的目标是将这套验证过的方法论编码为平台自动能力——让未来的用户无需手动维护 Logbook / 双基线 / 验收测试，即可获得相同的质量保障。
+
+**目标**：交付方法论平台化；进化环闭合；ForgeNativeRuntime 让 Web IDE 完全独立于 Claude Code CLI。
+
+**Sprint 3.1：ForgeNativeRuntime — 方法论执行引擎**
+
+将手动的 Session PDCA 循环和底线检查编码为自动化引擎：
+
+| # | 交付物 | 对应的手动实践 | 说明 |
+|---|--------|--------------|------|
+| 1 | AgentLoop.kt | Session PDCA 循环 → OODA 自动循环 | 完整 OODA + tool calling |
+| 2 | HookEngine.kt | 纪律 4 防腐规则 → 自动底线检查 | tool 调用前后执行检查脚本 |
+| 3 | ContextBuilder.kt | CLAUDE.md 三级上下文 → 自动上下文合并 | 读取三级 .md 文件 → 合并注入 system prompt |
+| 4 | RuntimeAdapter | — | Claude Code ↔ ForgeNative 一行配置切换 |
+
+**Sprint 3.2：进化环 — 方法论学习引擎**
+
+将手动的经验沉淀和知识编码管道编码为自动化引擎：
+
+| # | 交付物 | 对应的手动实践 | 说明 |
+|---|--------|--------------|------|
+| 1 | execution-logger | Logbook（时间维度） | 自动采集每次执行的输入/输出/Skill 选择/底线结果/耗时 |
+| 2 | asset-extractor | 经验编码管道（知识维度） | 从执行日志提取知识资产 → 自动更新 Skill / 知识库 |
+| 3 | design-baseline-tracker | 双基线交叉校验（空间维度） | 每次 merge 自动对比 API 契约 / UI 路由 / 数据模型变更 |
+| 4 | skill-feedback-analyzer | CLAUDE.md 进化 | 分析 Skill 效果 → 生成优化建议 → 人工 Review → 合入 |
+| 5 | 四个胶水机制 CI 化 | 文档债务清理 | convention-sync / doc-generation / domain-skill-staleness / knowledge-gap |
+
+**Sprint 3.3：规模化验证**
 
 | # | 交付物 | 说明 |
 |---|--------|------|
-| 1 | SuperAgent OODA 引擎 | development-profile 完整实现：OODA + 底线 + HITL |
-| 2 | SkillLoader.kt 增强 | 基于 frontmatter trigger 条件动态加载（基础 Skill 注入已有） |
-| 3 | ProfileRouter.kt 后端 | 后端根据用户意图自动选择 Profile（前端手动切换已有） |
-| 4 | MCP Server 完善 | forge-service-graph-mcp + forge-database-mcp 增强 |
-| 5 | convention-miner 跨语言增强 | 源语言规范 → 目标语言映射 |
-| 6 | 全部 13 个 Foundation Skill 实现 | 含 3 个来自 Phase 1.5 调试的 Skill |
-| 7 | 端到端跨栈迁移 PoC | 小规模 .NET → Java |
-| 8 | agent-eval 评估体系 | SuperAgent 评估框架（框架已搭建，评估集待填充） |
-| 9 | 度量基线采集 | 效率/质量基线数据 |
-| 10 | 底线脚本 CI 集成 | 8 个底线脚本集成到 GitHub Actions |
-| 11 | Playwright E2E 测试 | 自动化验收测试（替代手动 89 用例） |
-| 12 | 内部用户试用 | 3-5 人实际使用 ≥ 3 天，收集反馈 |
-
-**验收标准**：
-- [ ] SuperAgent OODA 循环运转，底线一次通过率 ≥ 70%
-- [ ] Web IDE 后端 SkillLoader 独立加载 Skill（不依赖 Claude Code）
-- [ ] 跨栈迁移 PoC：小型 .NET 模块 → Java，业务规则覆盖率 ≥ 90%
-- [ ] 底线脚本在 CI 中自动运行
-- [ ] 至少 3 名用户完成试用并提交反馈
-
-### Phase 3：双环闭合 + Runtime 完全抽象 — ⏳ 待开始
-
-**目标**：进化环闭合；ForgeNativeRuntime 完整；Claude Code 变为"可选"。
-
-| # | 关键交付物 | 说明 |
-|---|-----------|------|
-| 1 | AgentLoop.kt | 完整 OODA 循环 + tool calling |
-| 2 | HookEngine.kt | 底线检查集成 |
-| 3 | ContextBuilder.kt | 三级上下文合并 |
-| 4 | RuntimeAdapter 完整实现 + 配置切换 | Claude Code ↔ ForgeNative 一行配置 |
-| 5 | 进化环组件 | execution-logger, asset-extractor, skill-feedback-analyzer, design-baseline-tracker |
-| 6 | 四个胶水机制 CI | convention-sync / doc-generation / domain-skill-staleness |
-| 7 | Top 3 Domain Skills | 按业务域扩展 |
-| 8 | Web IDE 代码浏览 + 可视化工作流 | Web IDE 功能完善 |
-| 9 | 50 名开发者 CLI 部署 | 规模化推广 |
+| 1 | Top 3 Domain Skills | 基于真实业务场景（从内部试用反馈驱动） |
+| 2 | convention-miner 跨语言增强 | 源语言规范 → 目标语言映射 |
+| 3 | 50 名开发者 CLI 部署 | 规模化推广 + 反馈收集 |
+| 4 | Web IDE 增强 | 代码浏览 + 可视化工作流 |
 
 **验收标准**：
 - [ ] ForgeNativeRuntime 在 Web IDE 中端到端运行（不依赖 Claude Code CLI）
 - [ ] RuntimeAdapter 配置切换：Claude Code ↔ ForgeNative 一行配置
-- [ ] 知识库增长率 ≥ 5 条/周
+- [ ] execution-logger 自动记录每次 Agent 执行（替代手动 Logbook）
+- [ ] design-baseline-tracker 自动检测设计偏移（替代手动双基线校验）
+- [ ] 知识库增长率 ≥ 5 条/周（asset-extractor 驱动）
 - [ ] 底线一次通过率 ≥ 80%
 - [ ] PR 周期缩短 ≥ 20%，审查时间缩短 ≥ 30%
 
 ### Phase 4：全面上线 + 持续进化 — ⏳ 待开始
 
-**目标**：CLI 全组织部署，Web IDE 全开放，持续进化。
+**目标**：平台全组织部署；方法论飞轮效应显现（进化环持续产出知识 → Skill 自动优化 → 交付质量持续提升）。
 
-**方向**：
-- 多 Runtime 支持（Claude Code / ForgeNative / 其他框架）
-- 跨栈迁移工具链成熟化
-- Skill 生态开放（组织外共享）
-- 月度质量对比报告（vs logbook 基线数据）
-- CI/CD 深度集成、垂域模型探索
+| # | 方向 | 说明 |
+|---|------|------|
+| 1 | 多 Runtime 支持 | Claude Code / ForgeNative / 其他框架（Bedrock Agent / LangGraph）按需切换 |
+| 2 | 跨栈迁移工具链成熟化 | codebase-profiler 全语言支持 + business-rule-extraction 产品化 |
+| 3 | Skill 生态开放 | 组织内 Skill 市场 → 跨组织共享 |
+| 4 | 进化环飞轮验证 | 月度质量对比报告：知识库增长 / Skill 效果改善 / 底线通过率趋势 |
+| 5 | CI/CD 深度集成 | 底线检查嵌入 PR 流程 + 部署流水线 |
+| 6 | 垂域模型探索 | 基于 execution-logger 累积数据微调领域模型 |
 
 **验收标准**：
 - [ ] CLI 周活 ≥ 60% 开发者
@@ -681,12 +768,13 @@ forge-platform/                          # Gradle Monorepo (Kotlin DSL)
 - [ ] 底线一次通过率 ≥ 85%
 - [ ] PR 周期缩短 ≥ 30%，审查时间缩短 ≥ 40%
 - [ ] 生产 Bug 率下降 ≥ 15%
+- [ ] 进化环飞轮可测量：Skill 效果逐月改善，知识库月增 ≥ 20 条
 
 ---
 
 ## 八、实施进度基线
 
-### 基线快照 (2026-02-19)
+### 基线快照 (2026-02-20)
 
 | 模块 | 文件数 | 完成阶段 | 说明 |
 |------|--------|---------|------|
@@ -703,26 +791,26 @@ forge-platform/                          # Gradle Monorepo (Kotlin DSL)
 | plugins/forge-deployment | 5 | Phase 0 | 2 skills + 2 commands |
 | plugins/forge-team-templates | 3 | Phase 0 | 3 team CLAUDE.md templates |
 | web-ide/frontend | 30+ | Phase 1.6 | +auth.ts, login/callback, Apply button, CRUD, auto-save, file_changed |
-| web-ide/backend | 35+ | Phase 1.6 | +workspace tools, AuthController, ContextController, SecurityConfig |
+| web-ide/backend | 35+ | Phase 1.6 | +workspace tools, AuthController, ContextController, SecurityConfig, MetricsService |
 | cli | 7 | Phase 0 | 5 commands + main + build |
 | adapters | 14+ | Phase 1 | + StreamEvent, tool calling 扩展, tests |
 | agent-eval | 11 | Phase 0 | EvalRunner + Reporter + 6 eval sets |
 | skill-tests | 4 | Phase 0 | Validator + Parser + Runner |
-| knowledge-base | 12+ | Phase 1.6 | +git-workflow, code-review-checklist, forge-mcp-tools, troubleshooting-guide, ADR-004 |
+| knowledge-base | 13 | Phase 1.6 | +git-workflow, code-review-checklist, forge-mcp-tools, troubleshooting-guide, ADR-004 |
 | managed-config | 2 | Phase 0 | managed-settings.json + managed-mcp.json |
 | .github/workflows | 6 | Phase 0 | 6 CI workflows |
-| docs | 19+ | Phase 1.6 | design-baseline v5, phase1.6-e2e-acceptance-test, baseline-v1.4 |
+| docs | 22+ | Phase 1.6 | design-baseline v5.1, phase1.6-e2e-acceptance-test, baseline-v1.5, metrics-report, phase2-plan, delivery-analysis |
 | infrastructure | 8+ | Phase 1.6 | keycloak realm-export, nginx-trial.conf, docker-compose.trial.yml (4 容器) |
-| **总计** | **~320+** | | **~45,000+ 行** |
+| **总计** | **~325+** | | **~50,000+ 行** |
 
 ### 里程碑
 
 ```
-Phase 0       Phase 1          Phase 1.5         Phase 1.6            Phase 2           Phase 3
-骨架搭建       实连+跨栈基础      设计守护+Docker    AI交付闭环+SSO        单环运作            双环闭合
-244 files     37 tests         3容器+基线冻结      4容器+9工具+130测试   SuperAgent OODA    ForgeNativeRuntime
-──── ✅ ── ── ──── ✅ ── ── ── ──── ✅ ── ── ── ──── ✅ ── ── ── ──── 👈 下一阶段 ── ── ──────────
-  W1-3          W4-8                                                     W9-14            W15-20
+Phase 0       Phase 1          Phase 1.5         Phase 1.6            Phase 2                    Phase 3
+骨架搭建       实连+跨栈基础      设计守护+Docker    AI交付闭环+SSO        质量+OODA+试用              双环闭合
+244 files     37 tests         3容器+基线冻结      4容器+9工具+147测试   Sprint 2.1/2.2/2.3         ForgeNativeRuntime
+──── ✅ ── ── ──── ✅ ── ── ── ──── ✅ ── ── ── ──── ✅ ── ── ── ──── 👈 下一阶段 ── ── ── ──────────
+  W1-3          W4-8                                                     W9-14                     W15-20
 ```
 
 | 里程碑 | 状态 |
@@ -732,20 +820,25 @@ Phase 0       Phase 1          Phase 1.5         Phase 1.6            Phase 2   
 | Phase 1 代码完成 | ✅ 完成（+41 files, 4,027 insertions, 37 tests） |
 | Phase 1.5 Docker E2E 验证 | ✅ 完成（3 容器运行，前后端路由正常） |
 | Phase 1.5 设计守护体系 | ✅ 完成（设计基线 + baseline v1.3 + 3 新底线 + 3 新 Skill） |
-| Phase 1.6 AI 交付闭环 + SSO | ✅ 完成（4 容器，9 工具，130+ 测试，89 验收用例） |
-| Phase 2 单环运转 | 👈 下一阶段 |
+| Phase 1.6 AI 交付闭环 + SSO | ✅ 完成（4 容器，9 工具，147 测试，87 验收用例 92% 通过） |
+| Phase 1.6 Metrics 报告 | ✅ 完成（7 个 Prometheus 指标已采集，度量报告已生成） |
+| Phase 1.6 交付方法论分析 | ✅ 完成（18 Session 全量分析，评分 4.4/5.0） |
+| Phase 2 质量+OODA+试用 | 👈 下一阶段（Sprint 2.1/2.2/2.3） |
 | Phase 3 双环闭合 | ⏳ 待开始 |
 | Phase 4 全面上线 | ⏳ 待开始 |
 
 ### 已识别 Gap
 
-| Gap | 说明 | 目标阶段 |
-|-----|------|---------|
-| 底线 CI 集成 | 8 个底线脚本已设计，尚未集成到 GitHub Actions | Phase 2 |
-| Playwright E2E | 89 个手动验收用例未自动化 | Phase 2 |
-| 内部用户试用 | 3-5 人实际使用 ≥ 3 天尚未开展 | Phase 2 |
-| AI Chat 流式验证 | 待 API Key 配置后验证完整流式体验 | Phase 2 |
-| 进化环（环 2） | 全部组件待实现 | Phase 3 |
+| Gap | 说明 | 目标阶段 | Sprint |
+|-----|------|---------|--------|
+| 底线 CI 集成 | 8 个底线脚本已设计，尚未集成到 GitHub Actions | Phase 2 | Sprint 2.1 |
+| Playwright E2E | 87 个手动验收用例未自动化（目标先自动化 20-30 个核心场景） | Phase 2 | Sprint 2.1 |
+| BUG-016 | Agentic loop 耗尽后无文字输出（唯一挂起 Bug） | Phase 2 | Sprint 2.1 |
+| Cmd+K 命令面板 | Header.tsx 缺少键盘监听器（TC-14.2 挂起） | Phase 2 | Sprint 2.1 |
+| MCP Server 真实化 | 5 个 MCP Server 均为骨架代码，需真实化 knowledge + database | Phase 2 | Sprint 2.2 |
+| 内部用户试用 | 3-5 人实际使用 ≥ 3 天尚未开展 | Phase 2 | Sprint 2.3 |
+| 进化环（环 2） | 全部组件待实现 | Phase 3 | — |
+| ForgeNativeRuntime | AgentLoop.kt / HookEngine.kt / ContextBuilder.kt 待实现 | Phase 3 | — |
 
 ---
 
@@ -757,11 +850,13 @@ Phase 0       Phase 1          Phase 1.5         Phase 1.6            Phase 2   
 | MCP Server | 构建 + 集成测试 | `./gradlew :mcp-servers:forge-knowledge-mcp:test` | ✅ |
 | CLI | 单测 + 端到端 | `./gradlew :cli:test` + `forge doctor` | ✅ |
 | Web IDE 前端 | 单测 + E2E | `cd web-ide/frontend && npm test` + Playwright | ✅ 单测 / ⏳ Playwright |
-| Web IDE 后端 | 集成测试 | `./gradlew :web-ide:backend:test` | ✅ 130+ tests |
+| Web IDE 后端 | 集成测试 | `./gradlew :web-ide:backend:test` | ✅ 118 tests |
 | Workspace 工具 | 单元测试 | McpProxyServiceTest — 9 个 workspace tool 测试用例 | ✅ |
 | Context API | 单元测试 | ContextControllerTest — 4 个类别搜索测试 | ✅ |
 | Keycloak SSO | 容器健康检查 | docker-compose.trial.yml — 4 容器全部 healthy | ✅ |
-| Phase 1.6 验收 | E2E 手动测试 | `docs/phase1.6-e2e-acceptance-test.md` — 24 场景 89 用例 | ✅ 文档就绪 |
+| Phase 1.6 验收 | E2E 手动测试 | `docs/phase1.6-e2e-acceptance-test.md` — 21 场景 87 用例 | ✅ 80/87 通过（92%） |
+| Prometheus 指标 | Actuator 端点 | `curl localhost:9000/actuator/prometheus \| grep forge_` | ✅ 7 个 forge.* 指标 |
+| 度量报告 | 文档 | `docs/metrics-report-phase1.6.md` | ✅ 已生成 |
 | SuperAgent OODA | 手动测试 | 给定任务 → 观察 OODA → 检查底线 | ⏳ Phase 2 |
 | 底线体系 | CI 运行 | PR 提交自动触发 baseline-runner | ⏳ Phase 2 |
 | 进化环健康度 | 评估框架 | `./gradlew :agent-eval:run` | ⏳ Phase 3 |
@@ -773,19 +868,23 @@ Phase 0       Phase 1          Phase 1.5         Phase 1.6            Phase 2   
 
 ## 十、价值度量体系
 
-| 层 | 时间线 | 指标 | 目标 |
-|---|-------|------|------|
-| 活跃度 | 上线即采集 | 日活率 / Skill 触发次数 / MCP 调用量 / Web IDE 会话 | 4 周 60%+ 渗透 |
-| 效率 | 4-8 周对比 | PR 周期 / 审查时间 / 新人上手 / Bug 修复时间 | 缩短 30-60% |
-| 质量 | 8-12 周趋势 | 生产 Bug 率 / 规范一致性 / 测试覆盖 / 架构合规 | 持续改善 |
-| 迁移效率 | 迁移项目启动时 | 跨栈迁移人天对比（传统 vs Forge） | 10x+ 人天提效 |
-| Agent 可靠性 | 上线即采集 | OODA 一次通过率（vs logbook 67% 基线） | ≥ 85% |
-| 质量安全网 | 上线即采集 | 安全漏洞逃逸数（vs logbook CORS 事件） | 零逃逸 |
-| 知识持久性 | 4 周后对比 | 跨 session 信息损失率 | → 0 |
-| Runtime 独立性 | Phase 2+ | Web IDE 不依赖 Claude Code 的功能覆盖率 | Phase 3 达到 100% |
-| 设计保真度 | Phase 1.5+ | 设计基线回归测试通过率 | 100%（非预期变更 = 0） |
-| 部署效率 | Phase 1.5+ | 首次部署成功率（pre-flight check 后） | ≥ 90%（vs 当前 7.7%，1/13） |
-| 调试效率 | Phase 1.5+ | 构建失败到定位根因的平均时间 | ≤ 5 分钟（vs 当前 ~7 分钟/次） |
+| 层 | 时间线 | 指标 | 目标 | Phase 1.6 实际 |
+|---|-------|------|------|---------------|
+| 活跃度 | 上线即采集 | 日活率 / Skill 触发次数 / MCP 调用量 / Web IDE 会话 | 4 周 60%+ 渗透 | — |
+| 效率 | 4-8 周对比 | PR 周期 / 审查时间 / 新人上手 / Bug 修复时间 | 缩短 30-60% | — |
+| 质量 | 8-12 周趋势 | 生产 Bug 率 / 规范一致性 / 测试覆盖 / 架构合规 | 持续改善 | — |
+| 迁移效率 | 迁移项目启动时 | 跨栈迁移人天对比（传统 vs Forge） | 10x+ 人天提效 | PoC 100%（11/11 规则覆盖） |
+| Agent 可靠性 | 上线即采集 | OODA 一次通过率（vs logbook 67% 基线） | ≥ 85% | OODA 5 阶段全采集（observe:9/orient:9/decide:9/act:10/complete:7） |
+| 质量安全网 | 上线即采集 | 安全漏洞逃逸数（vs logbook CORS 事件） | 零逃逸 | ✅ 零逃逸 |
+| 知识持久性 | 4 周后对比 | 跨 session 信息损失率 | → 0 | 18 Session 零中断（logbook + 双基线 + CLAUDE.md） |
+| Runtime 独立性 | Phase 2+ | Web IDE 不依赖 Claude Code 的功能覆盖率 | Phase 3 达到 100% | — |
+| 设计保真度 | Phase 1.5+ | 设计基线回归测试通过率 | 100%（非预期变更 = 0） | 手动 100%，自动化待 CI |
+| 部署效率 | Phase 1.5+ | 首次部署成功率（pre-flight check 后） | ≥ 90%（vs 当前 7.7%，1/13） | ✅ Session 14: 一次成功 |
+| 调试效率 | Phase 1.5+ | 构建失败到定位根因的平均时间 | ≤ 5 分钟（vs 当前 ~7 分钟/次） | — |
+| E2E 验收通过率 | Phase 1.6+ | 验收测试通过 / 总数 | ≥ 90% | ✅ 92.0%（80/87） |
+| Bug 修复率 | Phase 1.6+ | 已修复 / 已发现 | ≥ 95% | ✅ 95%（19/20） |
+
+> Phase 1.6 实际度量数据详见 `docs/metrics-report-phase1.6.md`，包含 7 个 Prometheus forge.* 指标的完整采集数据。
 
 数据来源：
 
@@ -802,6 +901,66 @@ Phase 0       Phase 1          Phase 1.5         Phase 1.6            Phase 2   
 
 ---
 
+## 十一、交付方法论
+
+> 详细分析：`docs/delivery-methodology-analysis.md` | 综合评分：4.4/5.0
+> 核心理念：**用文档对抗 AI 遗忘，用验收测试对抗质量腐化，用双基线对抗设计偏移。**
+
+### 11.1 四维项目记忆系统
+
+| 记忆维度 | 载体 | 回答的问题 |
+|---------|------|-----------|
+| 时间维度 | `dev-logbook.md`（Logbook） | 过去发生了什么？为什么这样做？ |
+| 空间维度 | 设计基线 + 规划基线（双基线） | 系统当前的全貌是什么？ |
+| 质量维度 | 验收测试 + `buglist.md` | 什么能工作？什么不能？ |
+| 知识维度 | `CLAUDE.md` + 经验沉淀 | 我们学到了什么？ |
+
+### 11.2 Session 微型 PDCA 循环
+
+每个 Session（~2-3 小时 Claude Code 对话）遵循固定结构：
+
+```
+目标声明 → 实施（代码/文档） → Bug 修复 → 文件变更表 → 经验沉淀 → 统计快照 → Git 提交
+```
+
+Session 结束时 Claude 主动提醒用户完成所有环节。
+
+### 11.3 经验编码管道
+
+```
+logbook 经验沉淀 → 跨 2+ Session 验证 → 编码到 CLAUDE.md（已知陷阱/纪律/方法论）
+```
+
+### 11.4 关键观察（18 Session 数据）
+
+- **"写完代码"只是交付的一半**：Session 12 之后的 6 个 Session（33%）全部用于测试、修 Bug 和文档治理
+- **文档债务需要定期清理**：每 5 个 Session 做一次全量审查（格式统一、去重、清理版本批注）
+- **CLAUDE.md 持续进化**：67 行 → 228 行，编码了交互偏好、架构知识、9 条已知陷阱、四大开发纪律、交付方法论
+
+### 11.5 方法论平台化路径
+
+手动验证有效 → 编码为平台能力，是 Forge 的核心进化逻辑：
+
+```
+Phase 0-2：手动验证方法论有效性
+  │  Logbook + 双基线 + 验收测试 + 经验编码
+  │  → 18 Session 零中断、92% 验收通过率、20 Bug 闭环追踪
+  │
+  ▼
+Phase 3：将方法论编码为平台自动能力
+  │  execution-logger + design-baseline-tracker + asset-extractor + skill-feedback-analyzer
+  │  → 用户无需手动维护即可获得相同质量保障
+  │
+  ▼
+Phase 4：飞轮效应
+     平台自动记录 → 自动提取知识 → 自动优化 Skill → 交付质量持续提升
+     → 更多数据 → 更好的知识 → 更强的 Skill → ♻️
+```
+
+这也是目标 6"方法论内化"（§1.1）和核心判断"手动验证的方法论是平台能力的种子"（§1.3）的具体落地路径。
+
+---
+
 ### 变更记录
 
 | 版本 | 日期 | 变更说明 |
@@ -812,5 +971,6 @@ Phase 0       Phase 1          Phase 1.5         Phase 1.6            Phase 2   
 | v1.3 | 2026-02-18 | 设计守护体系：新增原则 11-12；新增 3 底线脚本 + 3 Foundation Skill；增强进化环；创建设计基线文档；新增 3 度量指标 |
 | v1.4 | 2026-02-19 | 文档重构 + Phase 1.6 纳入：新增 Phase 1.6 阶段（AI 交付闭环 / Keycloak SSO / Context Picker / CRUD / Apply / 自动保存 / 知识库扩展）；记录 MCP 工具聚合策略（20→9）；Docker 3→4 容器（+Keycloak）；5 Profile 全完成；更新进度基线（320+ 文件 / 45K+ 行 / 130+ 测试）；标注 5 个 Gap；消除散落的版本批注，统一格式 |
 | v1.4.1 | 2026-02-19 | 数据校准：修正 MCP 聚合工具名（与 McpProxyService 代码对齐：knowledge_search→search_knowledge 等 6 处）；修正 Context Picker 类别（skills/profiles→schema/services） |
+| v1.5 | 2026-02-20 | Phase 2 计划纳入 + 方法论升级 + 整体审视：Phase 2 从 12 交付物重构为 Sprint 2.1/2.2/2.3；新增设计原则 13-14（场景先行验收 + 本地验证优先）；新增 §11 交付方法论（四维记忆系统 + PDCA + 经验编码管道）；度量体系加入 Phase 1.6 实际数据（E2E 92%、Bug 修复率 95%、7 个 Prometheus 指标）；更新进度基线到 Session 18（325+ 文件 / 50K+ 行 / 147 测试 / 34 commits）；Gap 清单细化到 Sprint 级别；**整体审视**：§1.1 新增目标 6（方法论内化）；§1.3 新增核心判断（手动方法论→平台能力种子）；§3.6 ForgeNativeRuntime 增加手动实践映射列；§4.6 进化环增加方法论→平台组件映射表；Phase 3 重写为「交付方法论平台化 + 进化环闭合」（Sprint 3.1/3.2/3.3）；Phase 4 重写为表格格式（含飞轮验证标准）；§11.5 新增方法论平台化路径 |
 
-> 基线版本: v1.4 | 基线日期: 2026-02-19 | 下次评审: Phase 2 中期
+> 基线版本: v1.5 | 基线日期: 2026-02-20 | 下次评审: Sprint 2.1 完成后
