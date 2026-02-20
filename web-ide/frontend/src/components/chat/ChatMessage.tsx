@@ -115,7 +115,7 @@ function CodeBlock({
             <button
               onClick={handleApply}
               disabled={applying}
-              className="rounded p-0.5 text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover:opacity-100 disabled:opacity-50"
+              className="rounded p-0.5 text-muted-foreground transition-opacity hover:text-foreground disabled:opacity-50"
               title="Apply to workspace"
             >
               {applied ? (
@@ -129,7 +129,7 @@ function CodeBlock({
           )}
           <button
             onClick={handleCopy}
-            className="rounded p-0.5 text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover:opacity-100"
+            className="rounded p-0.5 text-muted-foreground transition-opacity hover:text-foreground"
           >
             {copied ? (
               <Check className="h-3.5 w-3.5 text-green-400" />

@@ -2060,7 +2060,7 @@ Sprint 2C 是 Phase 2 最后一个 Sprint，目标是达成全部验收标准：
 | `docs/planning/analysis-claude-code-independence.md` | Claude Code 独立性分析 | Session 3 |
 | `docs/planning/phase1-implementation-plan.md` | Phase 1 五周实施计划 | Session 4 |
 | `docs/TRIAL-GUIDE.md` | Phase 1.5 内部试用引导 | Session 5 |
-| `docs/design-baseline-v1.md` | Web IDE 设计基线（**v5**, Phase 1.6 complete） | Session 5 创建, Session 12 升级 |
+| `docs/design-baseline-v1.md` | Web IDE 设计基线（**v5.1**, Phase 1.6 验收完成） | Session 5 创建, Session 12 升级, **Session 18 更新** |
 | `docs/planning/baseline-v1.4.md` | 规划基线 v1.4（Phase 1.6 + 文档重构 + 数据校准） | Session 5 创建, **Session 13 重构** |
 | `docs/planning/session5-design-retrospective.md` | Session 5 设计回顾 | Session 5 |
 | `docs/phase2-skill-aware-ooda-loop.md` | Phase 2 Skill-Aware OODA Loop 实施计划 | Session 6 |
@@ -2070,7 +2070,7 @@ Sprint 2C 是 Phase 2 最后一个 Sprint，目标是达成全部验收标准：
 | `docs/sprint2a-acceptance-test.md` | Sprint 2A 验收测试（9 场景 / 36 用例） | Session 9 |
 | `docs/cross-stack-poc-report.md` | 跨栈迁移 PoC 报告（.NET → Java, 11 规则 100% 覆盖） | Session 11 |
 | `docs/phase2-e2e-acceptance-test.md` | Phase 2 E2E 验收测试（15 场景 / 59 用例） | **Session 12** |
-| `docs/phase1.6-e2e-acceptance-test.md` | Phase 1.6 E2E 验收测试（24 场景 / 89 用例） | Session 12, **Session 13 修正** |
+| `docs/phase1.6-e2e-acceptance-test.md` | Phase 1.6 E2E 验收测试（21 场景 / 87 用例） | Session 12, Session 13 修正, **Session 18 重构** |
 | `docs/generate-ppt-v3.py` | Apple 发布会风格 PPT 生成脚本 | **Session 13** |
 | `docs/forge-platform-executive-v3.pptx` | 领导汇报 PPT（14 页） | **Session 13** |
 
@@ -2615,59 +2615,105 @@ echo "Regression test workspace cleaned up"
 
 ---
 
-## Session 18 — 2026-02-20：OpenAI 兼容模型接入
+## Session 18 — 2026-02-20：Phase 1.6 验收测试收尾 + BUG-019/020 修复 + 验收文档重构
 
-### 18.1 目标
+> 续 Session 17 的 4 个未测试 UI 场景（B/C/H + Prometheus），修复 2 个 Bug，验收通过率从 78.7% → 92.0%。同时重构验收测试文档：统一编号、合并重复用例、优化分组。
 
-支持公司提供的 OpenAI 兼容格式模型，无需每次手动 export 环境变量。
+### 18.1 验收测试执行
 
-### 18.2 实施内容
+本 Session 完成了 Session 17 遗留的全部 UI 手动测试场景：
+
+| 场景 | 用例 | 结果 | 方式 | 备注 |
+|------|------|------|------|------|
+| 场景 9（AI 交付闭环） | TC-9.1~9.4 | ✅ 4/4 | UI 手动 | write_file/read_file/list_files/auto-open 全通过 |
+| 场景 9 TC-9.5 | Apply 按钮 | ✅ | UI 手动 | BUG-019 修复后通过 |
+| 场景 10（Context Picker） | TC-10.1~10.2 | ✅ 2/2 | UI 手动 | Files/Knowledge 类别 |
+| 场景 10 TC-10.3 | 搜索过滤 | ✅ | UI 手动 | BUG-020 修复后通过 |
+| 场景 14（Header） | TC-14.1, 14.3 | ✅ 2/3 | UI 手动 | 角色切换/侧边栏折叠 |
+| 场景 14 TC-14.2 | 命令面板 | ⏸ 挂起 | — | Cmd+K 无监听器实现 |
+| TC-16.6 | Prometheus 自定义指标 | ✅ | curl | 5 个 forge_ 指标全出现 |
+| TC-16.7 | Prometheus 指标有数据 | ✅ | curl | turn.duration COUNT=17, tool.duration COUNT=10 |
+
+### 18.2 Bug 修复
+
+| Bug ID | 严重等级 | 问题 | 根因 | 修复 |
+|--------|---------|------|------|------|
+| BUG-019 | P2 | 代码块 Apply/Copy 按钮不可见 | CSS `opacity-0 group-hover:opacity-100` 在侧边栏窄面板中 hover 不触发 | 移除 `opacity-0` 和 `group-hover:opacity-100`，按钮始终可见 |
+| BUG-020 | P2 | Context Picker 搜索过滤无反应 | 焦点留在主 textarea，键入的字符进入 textarea 而非搜索框 | 三层修复：(1) ContextPicker 添加全局 keydown 监听，自动将可打印字符转发到搜索框 (2) AiChatSidebar 在 picker 打开时 preventDefault 阻止字符进入 textarea (3) 切换 tab 时自动 focus 搜索框 |
+
+**BUG-020 修复注意事项**：需与 BUG-014（ContextPicker 不能自动抢焦点）协调。解决方案：不在 picker 打开时自动 focus 搜索框（尊重 BUG-014），而是通过全局键盘事件拦截 + 转发实现。
+
+### 18.3 验收测试文档重构
+
+**问题**：原文档 24 场景使用混合编号（1-15 数字 + A-I 字母），存在重复用例，结构不清晰。
+
+**重构内容**：
+
+| 优化项 | 说明 |
+|--------|------|
+| 统一编号 | 24 场景（数字+字母混合）→ 21 场景（纯数字 1-21） |
+| 三大分组 | 用户旅程（1-8）→ Phase 1.6 核心功能（9-14）→ 技术验证与回归（15-21） |
+| 合并重复 | TC-13.3⊂TC-14.1 → 合并为 TC-21.3；TC-9.3≈G.1 → 合并为 TC-15.3 |
+| 合并场景 | 场景 15(Docker)+I(4容器) → 场景 20；场景 9(API)+G(API升级) → 场景 15 |
+| 用例总数 | 89 → 87（-2 重复） |
+
+**重编号映射**：A→13, B→9, C→10, D→11, E→12, F→19, G→(并入15), H→14, I→(并入20)
+
+### 18.4 文件变更
 
 | 操作 | 文件 | 说明 |
 |------|------|------|
-| 修改 | `adapters/model-adapter/.../LocalModelAdapter.kt` | 新增 `apiKey` 构造参数，支持 `LOCAL_MODEL_API_KEY` 环境变量；所有 HTTP 请求统一通过 `addAuthIfPresent()` 扩展方法注入 `Authorization: Bearer` header |
-| 修改 | `web-ide/backend/.../config/ClaudeConfig.kt` | Bean 返回类型改为 `ModelAdapter` 接口；根据 `MODEL_PROVIDER` 环境变量（或 `LOCAL_MODEL_URL` 是否设置）动态选择注入 `ClaudeAdapter` 或 `LocalModelAdapter` |
-| 修改 | `web-ide/backend/.../service/ClaudeAgentService.kt` | 注入类型从 `ClaudeAdapter` 改为 `ModelAdapter` 接口；model 配置项支持 `forge.model.name` 优先，回退到 `forge.claude.model` |
-| 修改 | `web-ide/backend/src/main/resources/application.yml` | 新增 `forge.model.*` 配置块（provider/url/name/api-key），绑定对应环境变量 |
-| 新增 | `.env.example` | 本地开发环境变量模板，已在 `.gitignore` 中忽略 |
+| 修改 | `web-ide/frontend/src/components/chat/ChatMessage.tsx` | BUG-019：移除 Apply/Copy 按钮 opacity-0 |
+| 修改 | `web-ide/frontend/src/components/chat/ContextPicker.tsx` | BUG-020：全局 keydown 转发 + tab 切换 focus + mouseDown stopPropagation |
+| 修改 | `web-ide/frontend/src/components/chat/AiChatSidebar.tsx` | BUG-020：picker 打开时 preventDefault 阻止字符进入 textarea |
+| 重写 | `docs/phase1.6-e2e-acceptance-test.md` | 全文重构：21 场景 / 87 用例 / 统一编号 |
+| 修改 | `docs/buglist.md` | 新增 BUG-019, BUG-020 |
+| 修改 | `docs/design-baseline-v1.md` | v5→v5.1：Apply 按钮样式更新 |
+| 修改 | `docs/planning/dev-logbook.md` | Session 18 |
 
-### 18.3 配置方式
+### 18.5 经验沉淀
 
-切换到公司 OpenAI 兼容模型，只需在项目根 `.env` 中设置：
+1. **CSS opacity-0 group-hover 陷阱**：Tailwind 的 `opacity-0 group-hover:opacity-100` 模式在窄面板、触屏、或 group 容器层级不匹配时不触发。对于功能按钮（非装饰性），应始终可见
+2. **焦点管理的多 Bug 协调**：BUG-014（不要自动抢焦点）和 BUG-020（要让搜索框能接收键入）存在矛盾。解法：不改变焦点初始位置，但通过事件拦截实现键入转发
+3. **验收文档需要定期重构**：24 场景经过多次增量添加后，混合编号 + 重复用例使得文档难以维护。每 5-6 个 Session 做一次全量重构
 
-```bash
-MODEL_PROVIDER=openai
-LOCAL_MODEL_URL=https://your-company-api.com
-LOCAL_MODEL_NAME=your-model-name
-LOCAL_MODEL_API_KEY=your-api-key
-```
+### 18.6 测试总结
 
-切回 Anthropic 直连：去掉 `MODEL_PROVIDER` 或设为 `anthropic`，改设 `ANTHROPIC_API_KEY`。
+**Phase 1.6 E2E 验收测试最终结果**：
 
-### 18.4 经验沉淀
+| 维度 | 数据 |
+|------|------|
+| 总场景数 | 21 个（重构后） |
+| 总用例数 | 87 个（去重后） |
+| **已通过** | **80/87（92.0%）** |
+| 未通过 | 7 个（2 部分阻塞 + 3 需安全模式 + 1 挂起 + 1 需 API Key） |
+| **Bug 累计** | **20 个（19 已修复，1 挂起 BUG-016）** |
 
-1. **Adapter 接口隔离的价值**：`ModelAdapter` 接口设计使得切换 provider 只需改 Spring Bean 配置，上层 `ClaudeAgentService` 零改动（除注入类型）
-2. **OkHttp 扩展函数**：用 `Request.Builder.addAuthIfPresent()` 扩展方法统一处理可选 header，比在每个请求处 if/else 更干净
-3. **本地 .env 文件**：`.gitignore` 已预置 `.env`，直接 `cp .env.example .env` 即可，配合 `direnv` 实现自动加载
+**未通过用例明细**：
+- TC-2.3/2.4 部分：BUG-016 agentic loop 耗尽（⏸ 挂起）
+- TC-13.1~13.3：Keycloak SSO 需 FORGE_SECURITY_ENABLED=true
+- TC-14.2：命令面板 Cmd+K（⏸ 挂起，无键盘监听器）
+- TC-21.2：agent-eval 需真实 API Key
 
 ### Git 提交记录（Session 18）
 
 | Commit | 说明 |
 |--------|------|
-| *(pending)* | feat: 支持 OpenAI 兼容模型接入，新增 .env.example |
+| *(pending)* | fix: BUG-019/020 + 验收文档重构 + Session 18 logbook + design baseline v5.1 |
 
 ### 项目统计快照（Session 18）
 
 | 指标 | 数值 |
 |------|------|
-| 总文件数 | ~326+ |
-| Git Commits | 33 |
+| 总文件数 | ~325+ |
+| Git Commits | 33+ |
 | Sessions | 18 |
-| 单元测试 | 147 |
+| 单元测试 | **147** |
 | Skills 加载 | 32 (5 profiles) |
 | MCP 工具 | 9 |
 | Docker 容器 | 4 |
 | 知识库文档 | 13 |
-| E2E 验收测试 | 89 用例，~76/89 已通过（85%） |
-| Bug 追踪 | 18 个（17 已修复，1 挂起） |
+| E2E 验收测试 | **87 用例（重构后），80/87 通过（92.0%）** |
+| **Bug 追踪** | **20 个（19 已修复，1 挂起）** |
 | Phase 0~1.6 | ✅ 完成 |
+| **验收测试** | **92.0% 通过率，Phase 1.6 验收基本完成** |

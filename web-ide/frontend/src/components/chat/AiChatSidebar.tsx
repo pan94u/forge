@@ -340,6 +340,14 @@ export function AiChatSidebar({
     if (e.key === "@") {
       setShowContextPicker(true);
     }
+    // When ContextPicker is open, block printable chars from entering textarea
+    // so they go to the picker's search input instead
+    if (showContextPicker && e.key.length === 1 && e.key !== "@" && !e.ctrlKey && !e.metaKey) {
+      e.preventDefault();
+    }
+    if (showContextPicker && e.key === "Backspace") {
+      e.preventDefault();
+    }
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSubmit();
