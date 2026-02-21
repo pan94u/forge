@@ -68,7 +68,7 @@ function getFileIcon(name: string, isDirectory: boolean, isOpen: boolean) {
     case "gif":
     case "svg":
     case "ico":
-      return <Image className="h-4 w-4 text-green-400" alt="" />;
+      return <Image className="h-4 w-4 text-green-400" role="presentation" />;
     default:
       return <File className="h-4 w-4 text-gray-400" />;
   }
