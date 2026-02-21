@@ -57,7 +57,7 @@ class EncryptionService(
 
     /**
      * 加密明文字符串。
-     * 如果加密密钥未配置，返回原文（开发模式）。
+     * 如果加密密钥未配置，抛出异常。
      */
     fun encrypt(plaintext: String): String {
         if (plaintext.isBlank()) return ""
@@ -78,11 +78,11 @@ class EncryptionService(
 
     /**
      * 解密密文字符串。
-     * 如果加密密钥未配置，假设输入为明文直接返回（开发模式）。
+     * 如果加密密钥未配置，抛出异常。
      */
     fun decrypt(ciphertext: String): String {
         if (ciphertext.isBlank()) return ""
-        val key = secretKey ?: return ciphertext
+        val key = secretKey ?: throw IllegalStateException("Encryption key is not configured. Please set FORGE_ENCRYPTION_KEY environment variable.")
 
         return try {
             val combined = Base64.getDecoder().decode(ciphertext)

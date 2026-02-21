@@ -62,12 +62,19 @@ class EncryptionServiceTest {
     }
 
     @Test
-    fun `without key configured returns plaintext`() {
+    fun `encrypt without key configured throws`() {
         val service = EncryptionService("")
 
-        val plaintext = "my-api-key"
-        assertThat(service.encrypt(plaintext)).isEqualTo(plaintext)
-        assertThat(service.decrypt(plaintext)).isEqualTo(plaintext)
+        assertThatThrownBy { service.encrypt("my-api-key") }
+            .isInstanceOf(IllegalStateException::class.java)
+    }
+
+    @Test
+    fun `decrypt without key configured throws`() {
+        val service = EncryptionService("")
+
+        assertThatThrownBy { service.decrypt("my-api-key") }
+            .isInstanceOf(IllegalStateException::class.java)
     }
 
     @Test

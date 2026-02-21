@@ -68,17 +68,14 @@ function getFileIcon(name: string, isDirectory: boolean, isOpen: boolean) {
     case "gif":
     case "svg":
     case "ico":
-      return <Image className="h-4 w-4 text-green-400" />;
+      return <Image className="h-4 w-4 text-green-400" alt="" />;
     default:
       return <File className="h-4 w-4 text-gray-400" />;
   }
 }
 
 /** Check if a name already exists among siblings at the same level */
-function hasDuplicateSibling(
-  nodes: FileNode[],
-  fullPath: string
-): boolean {
+function hasDuplicateSibling(nodes: FileNode[], fullPath: string): boolean {
   const parts = fullPath.split("/");
   const name = parts[parts.length - 1];
 
@@ -86,7 +83,7 @@ function hasDuplicateSibling(
   let siblings = nodes;
   for (let i = 0; i < parts.length - 1; i++) {
     const dir = siblings.find(
-      (n) => n.name === parts[i] && n.type === "directory"
+      (n) => n.name === parts[i] && n.type === "directory",
     );
     if (!dir?.children) return false; // Parent doesn't exist yet
     siblings = dir.children;
@@ -203,7 +200,7 @@ export function FileExplorer({
         isDirectory: isDir,
       });
     },
-    []
+    [],
   );
 
   const closeContextMenu = useCallback(() => {
@@ -222,7 +219,7 @@ export function FileExplorer({
         window.dispatchEvent(
           new CustomEvent("forge:ai-explain-file", {
             detail: { filePath: contextMenu.path },
-          })
+          }),
         );
       }, 500);
     }
@@ -261,13 +258,16 @@ export function FileExplorer({
       }
       closeContextMenu();
     },
-    [workspaceId, files, onFileTreeChanged, onFileSelect, closeContextMenu]
+    [workspaceId, files, onFileTreeChanged, onFileSelect, closeContextMenu],
   );
 
   const handleNewFolder = useCallback(
     async (parentPath?: string) => {
       const prefix = parentPath ? `${parentPath}/` : "";
-      const folderName = window.prompt("New folder name:", `${prefix}new-folder`);
+      const folderName = window.prompt(
+        "New folder name:",
+        `${prefix}new-folder`,
+      );
       if (!folderName) return;
 
       // Sibling-level duplicate check
@@ -278,7 +278,11 @@ export function FileExplorer({
       }
 
       try {
-        await workspaceApi.createFile(workspaceId, `${folderName}/.gitkeep`, "");
+        await workspaceApi.createFile(
+          workspaceId,
+          `${folderName}/.gitkeep`,
+          "",
+        );
         onFileTreeChanged?.();
       } catch (err) {
         console.error("Failed to create folder:", err);
@@ -286,57 +290,58 @@ export function FileExplorer({
       }
       closeContextMenu();
     },
-    [workspaceId, files, onFileTreeChanged, closeContextMenu]
+    [workspaceId, files, onFileTreeChanged, closeContextMenu],
   );
 
-  const handleRename = useCallback(
-    async () => {
-      const oldPath = contextMenu.path;
-      const newPath = window.prompt("Rename to:", oldPath);
-      if (!newPath || newPath === oldPath) {
-        closeContextMenu();
-        return;
-      }
-
-      // Sibling-level duplicate check
-      if (hasDuplicateSibling(files, newPath)) {
-        const name = newPath.split("/").pop();
-        window.alert(`"${name}" already exists in this directory.`);
-        return;
-      }
-
-      try {
-        const content = await workspaceApi.getFileContent(workspaceId, oldPath);
-        await workspaceApi.createFile(workspaceId, newPath, content);
-        await workspaceApi.deleteFile(workspaceId, oldPath);
-        onFileTreeChanged?.();
-        onFileSelect(newPath);
-      } catch (err) {
-        console.error("Failed to rename file:", err);
-        window.alert("Failed to rename file.");
-      }
+  const handleRename = useCallback(async () => {
+    const oldPath = contextMenu.path;
+    const newPath = window.prompt("Rename to:", oldPath);
+    if (!newPath || newPath === oldPath) {
       closeContextMenu();
-    },
-    [workspaceId, files, contextMenu.path, onFileTreeChanged, onFileSelect, closeContextMenu]
-  );
+      return;
+    }
 
-  const handleDelete = useCallback(
-    async () => {
-      const confirmed = window.confirm(`Delete "${contextMenu.path}"?`);
-      if (!confirmed) {
-        closeContextMenu();
-        return;
-      }
-      try {
-        await workspaceApi.deleteFile(workspaceId, contextMenu.path);
-        onFileTreeChanged?.();
-      } catch (err) {
-        console.error("Failed to delete file:", err);
-      }
+    // Sibling-level duplicate check
+    if (hasDuplicateSibling(files, newPath)) {
+      const name = newPath.split("/").pop();
+      window.alert(`"${name}" already exists in this directory.`);
+      return;
+    }
+
+    try {
+      const content = await workspaceApi.getFileContent(workspaceId, oldPath);
+      await workspaceApi.createFile(workspaceId, newPath, content);
+      await workspaceApi.deleteFile(workspaceId, oldPath);
+      onFileTreeChanged?.();
+      onFileSelect(newPath);
+    } catch (err) {
+      console.error("Failed to rename file:", err);
+      window.alert("Failed to rename file.");
+    }
+    closeContextMenu();
+  }, [
+    workspaceId,
+    files,
+    contextMenu.path,
+    onFileTreeChanged,
+    onFileSelect,
+    closeContextMenu,
+  ]);
+
+  const handleDelete = useCallback(async () => {
+    const confirmed = window.confirm(`Delete "${contextMenu.path}"?`);
+    if (!confirmed) {
       closeContextMenu();
-    },
-    [workspaceId, contextMenu.path, onFileTreeChanged, closeContextMenu]
-  );
+      return;
+    }
+    try {
+      await workspaceApi.deleteFile(workspaceId, contextMenu.path);
+      onFileTreeChanged?.();
+    } catch (err) {
+      console.error("Failed to delete file:", err);
+    }
+    closeContextMenu();
+  }, [workspaceId, contextMenu.path, onFileTreeChanged, closeContextMenu]);
 
   return (
     <div

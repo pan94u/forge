@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls:*)",
+      "Bash(open:*)",
+      "Bash(find:*)",
+      "Bash(./gradlew :adapters:model-adapter:test:*)",
+      "Bash(npm run build:*)",
+      "WebSearch",
+      "WebFetch(domain:ai.google.dev)",
+      "WebFetch(domain:www.alibabacloud.com)",
+      "Bash(./gradlew :adapters:model-adapter:compileKotlin:*)",
+      "Bash(./gradlew :web-ide:backend:compileKotlin:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git fetch:*)"
+    ]
+  }
+}
