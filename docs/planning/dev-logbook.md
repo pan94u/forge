@@ -3086,3 +3086,14 @@ echo "Regression test workspace cleaned up"
 **已知阻塞项**：
 1. Development Profile rate limit（system prompt 106K → 30K token 限额），需优化 skill 按需加载
 2. ExecutionLoggerService 文件日志未集成到主流程（DB 持久化已工作）
+| `a7c2dce` | fix: 修复前端 CI Jest 与 Playwright 混淆问题 |
+| `2d6750b` | chore: 同步前端 package-lock.json |
+| `407cf04` | docs: 更新开发日志 Session 20 |
+| `d591813` | fix: 前端 CI 诚实配置（无单元测试则跳过） |
+
+### 20.4 经验沉淀
+
+**第一性原理分析**：
+- CI 配置 `npm test` 运行 Jest，但前端**没有单元测试文件**
+- 诚实方案：删除无用的 Jest 配置，CI 跳过不存在的测试
+- 教训：项目初期应明确测试策略，避免配置与实际不符 |
