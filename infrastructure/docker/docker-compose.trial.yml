@@ -16,6 +16,43 @@ services:
       retries: 15
       start_period: 30s
 
+  knowledge-mcp:
+    build:
+      context: ../../mcp-servers/forge-knowledge-mcp
+      dockerfile: Dockerfile
+    environment:
+      PORT: "8081"
+      WIKI_BASE_URL: "http://localhost:8090"
+      WIKI_API_TOKEN: ""
+    volumes:
+      - ../../knowledge-base:/knowledge-base:ro
+    ports:
+      - "8081:8081"
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8081/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  database-mcp:
+    build:
+      context: ../../mcp-servers/forge-database-mcp
+      dockerfile: Dockerfile
+    environment:
+      PORT: "8082"
+      FORGE_DB_FORGE_URL: "jdbc:h2:mem:forge;DB_CLOSE_DELAY=-1"
+      FORGE_DB_FORGE_USER: sa
+      FORGE_DB_FORGE_PASSWORD: ""
+    ports:
+      - "8082:8082"
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8082/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
   backend:
     build:
       context: ../../web-ide/backend
@@ -27,6 +64,7 @@ services:
       FORGE_FRONTEND_URL: "http://localhost:9000"
       SPRING_JPA_HIBERNATE_DDL_AUTO: update
       FORGE_PLUGINS_PATH: /plugins
+      FORGE_MCP_SERVERS: "http://knowledge-mcp:8081,http://database-mcp:8082"
       OAUTH2_ISSUER_URI: http://keycloak:8080/realms/forge
       OAUTH2_CLIENT_ID: forge-web-ide
     volumes:
@@ -40,6 +78,10 @@ services:
       start_period: 30s
     depends_on:
       keycloak:
+        condition: service_healthy
+      knowledge-mcp:
+        condition: service_healthy
+      database-mcp:
         condition: service_healthy
 
   frontend:

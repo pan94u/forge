@@ -2720,6 +2720,7 @@ echo "Regression test workspace cleaned up"
 
 ---
 
+<<<<<<< HEAD
 ## Session 19 — 2026-02-20/21：Sprint 2.3 多模型适配器实现
 
 ### 19.1 目标
@@ -2809,12 +2810,90 @@ echo "Regression test workspace cleaned up"
 3. **AES-256-GCM 加密模式**：每次加密必须使用不同的随机 IV（12 字节），确保相同明文产生不同密文。密文格式 = Base64(iv + ciphertext + authTag)
 
 ### 19.6 项目统计快照（Session 19）
+=======
+## Session 19 — 2026-02-20/21：Sprint 2.1 + 2.2 开发 & 验收测试
+
+### 19.1 Sprint 2.2 核心开发
+
+**时间**: 2026-02-20
+
+**目标**: 完成 Sprint 2.2 三大交付物 — Skill 条件触发、底线自动检查、MCP 真实服务
+
+#### 文件变更表
+
+| 操作 | 文件 | 说明 |
+|------|------|------|
+| 修改 | `web-ide/backend/.../service/skill/SkillLoader.kt` | Skill trigger 过滤：按 Profile stage/type 过滤 + 关键词匹配 tags |
+| 修改 | `web-ide/backend/.../service/skill/SkillModels.kt` | SkillDefinition 添加 stage/type/matchesProfile() |
+| 修改 | `web-ide/backend/.../service/ClaudeAgentService.kt` | 底线自动检查：Act 后运行 baseline，失败自动重试（max 2） |
+| 修改 | `web-ide/backend/.../service/McpProxyService.kt` | MCP 端点修复：GET /tools + POST /tools/{name}，工具合并策略 |
+| 修改 | `web-ide/backend/.../service/MetricsService.kt` | 新增 forge.skill.loaded Prometheus 指标 |
+| 修改 | `web-ide/backend/src/main/resources/application.yml` | 修复 model.name 空字符串 Bug（默认值 claude-sonnet-4-20250514） |
+| 修改 | `web-ide/backend/.../test/ClaudeAgentServiceTest.kt` | 适配 baselineService 依赖 |
+| 修改 | `web-ide/backend/.../test/McpProxyServiceTest.kt` | 适配新端点 |
+| 修改 | `infrastructure/docker/docker-compose.trial.yml` | 4→6 容器：新增 knowledge-mcp (8081) + database-mcp (8082) |
+| 修改 | `mcp-servers/forge-knowledge-mcp/.../KnowledgeMcpServer.kt` | 修复 callloging 拼写（Ktor 包名） |
+| 修改 | `mcp-servers/forge-database-mcp/.../DatabaseMcpServer.kt` | 同上 |
+| 修改 | `mcp-servers/forge-artifact-mcp/.../ArtifactMcpServer.kt` | 同上 |
+| 修改 | `mcp-servers/forge-observability-mcp/.../ObservabilityMcpServer.kt` | 同上 |
+| 修改 | `mcp-servers/forge-service-graph-mcp/.../ServiceGraphMcpServer.kt` | 同上 |
+| 修改 | `web-ide/frontend/src/components/common/Header.tsx` | Cmd+K 命令面板键盘监听 |
+| 新增 | `.github/workflows/ci-web-ide.yml` | GitHub Actions CI Pipeline |
+| 新增 | `web-ide/frontend/playwright.config.ts` | Playwright E2E 配置 |
+| 新增 | `web-ide/frontend/e2e/*.spec.ts` | 5 个 E2E 测试文件 |
+| 新增 | `agent-eval/eval-sets/**/*.yaml` | 10 个新增评估场景（5 Profile 各 2-3 个） |
+| 新增 | `docs/sprint2.1-acceptance-test.md` | Sprint 2.1 验收测试文档（34 用例） |
+| 新增 | `docs/sprint2.2-acceptance-test.md` | Sprint 2.2 验收测试文档（24 用例） |
+| 新增 | `docs/forge-platform-executive-v4.pptx` | PPT v4 更新 |
+
+### 19.2 关键 Bug 发现与修复
+
+| Bug | 根因 | 修复 |
+|-----|------|------|
+| MCP 端点路径不匹配 | McpProxyService 调用 `/mcp/tools/list`，实际 MCP Server 暴露 `/tools` | 改为 GET /tools + POST /tools/{name} |
+| Ktor callloging 拼写 | 5 个 MCP Server 用 `calllogging`（双 g），Ktor 包名为 `callloging`（单 g） | 全局修复 5 个文件（纪律 4：系统性排查） |
+| model.name 空字符串 | `application.yml` 中 `${LOCAL_MODEL_NAME:}` 解析为空串而非 null | 默认值改为 `claude-sonnet-4-20250514` |
+| profileRouter.route() 误用 | `runBaselineAutoCheck` 中错误调用 `route(profileName)`，该方法接受 message | 改用 `skillLoader.loadProfile()` |
+
+### 19.3 验收测试执行
+
+**Sprint 2.1 + 2.2 合计 58 用例**
+
+| Sprint | 总用例 | 自动 PASS | 待手动 | 通过率 |
+|--------|--------|-----------|--------|--------|
+| Sprint 2.1 | 34 | 34 | 0 | 100% |
+| Sprint 2.2 | 24 | 17 | 7 | 71% |
+| **合计** | **58** | **51** | **7** | **88%** |
+
+**Sprint 2.2 待手动验证项**：TC-1.2 testing-profile 路由、TC-3.1~4.3 底线自动检查（Docker Alpine 无 bash 限制）、TC-6.3 SQL 只读拒绝、TC-7.3~7.4 端到端知识/Schema 查询
+
+**已知限制**：
+- knowledge-mcp wiki 后端未配置（试用环境预期）
+- database-mcp H2 驱动未配置
+- Docker Alpine 无 bash，底线脚本不可执行
+- forge_skill_loaded 指标 NaN（Micrometer gauge 懒注册）
+
+### 19.4 经验沉淀
+
+1. **Ktor 包名陷阱**: `io.ktor.server.plugins.callloging`（单 g）是正确拼写，IDE 自动补全可能生成双 g
+2. **Spring @Value 空字符串**: `${ENV:}` 解析为空串（非 null），嵌套默认值 `${a:${b:default}}` 中外层空串不会 fall through
+3. **MCP Server 双 base class**: forge-mcp-common 有 McpServerBase（/mcp/ 前缀 + auth），各 Server 本地有自己的实现（/tools 前缀，无 auth），实际使用本地版本
+
+### Git 提交
+
+| Commit | 说明 |
+|--------|------|
+| *(本次提交)* | feat: Sprint 2.1+2.2 — CI pipeline, Playwright E2E, Skill trigger, baseline auto-check, MCP 6-container |
+
+### 项目统计快照（Session 19）
+>>>>>>> origin/main
 
 | 指标 | 数值 |
 |------|------|
 | 总文件数 | ~345+ |
 | Git Commits | 34+ |
 | Sessions | 19 |
+<<<<<<< HEAD
 | 单元测试 | **164**（+17 backend，model-adapter 42） |
 | 模型提供商 | **5**（anthropic, aws-bedrock, google, dashscope, openai） |
 | 模型总数 | **16**（YAML 配置） |
@@ -2826,3 +2905,16 @@ echo "Regression test workspace cleaned up"
 | Bug 追踪 | 20 个（19 已修复，1 挂起） |
 | Phase 0~1.6 | ✅ 完成 |
 | Sprint 2.3 | ✅ 多模型适配器完成 |
+=======
+| 单元测试 | **147** |
+| Skills 加载 | 32 (5 profiles, 过滤后 ~20) |
+| MCP 工具 | 9 (外部 6+3 发现) |
+| Docker 容器 | **6**（+knowledge-mcp +database-mcp） |
+| 知识库文档 | 13 |
+| E2E 测试文件 | **5 个 Playwright spec** |
+| agent-eval 评估集 | **16 个 YAML** |
+| Sprint 2.1 验收 | **34/34 通过（100%）** |
+| Sprint 2.2 验收 | **17/24 通过（71%，7 待手动）** |
+| **Bug 追踪** | **24 个（23 已修复，1 挂起 BUG-016 需极端场景验证）** |
+| Phase 2 进度 | Sprint 2.1 ✅ Sprint 2.2 进行中 |
+>>>>>>> origin/main

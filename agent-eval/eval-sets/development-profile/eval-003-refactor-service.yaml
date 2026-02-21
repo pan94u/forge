@@ -1,0 +1,130 @@
+id: eval-003-refactor-service
+name: Refactor MCP Proxy Service
+description: >
+  Evaluate the agent's ability to refactor a large service class by extracting
+  responsibilities, improving testability, and maintaining backward compatibility
+  while following SOLID principles.
+tags:
+  - development
+  - refactoring
+  - kotlin
+  - solid-principles
+baseline_pass_rate: 0.75
+
+prompt: |
+  Refactor the following McpProxyService that has grown too large (300+ lines)
+  and violates the Single Responsibility Principle. It currently handles tool
+  registration, request routing, response aggregation, error handling, and
+  metrics collection all in one class.
+
+  ```kotlin
+  @Service
+  class McpProxyService(
+      private val mcpServers: List<McpServerConfig>,
+      private val restTemplate: RestTemplate,
+      private val meterRegistry: MeterRegistry,
+      private val toolRegistry: ToolRegistry,
+      private val authService: AuthService
+  ) {
+      fun callTool(name: String, args: Map<String, Any>, workspaceId: String?): ToolResult {
+          val server = toolRegistry.resolveServer(name)
+              ?: throw ToolNotFoundException("Tool '$name' not found in any registered MCP server")
+
+          val token = authService.getServiceToken()
+          val timer = Timer.builder("forge.mcp.tool.duration")
+              .tag("tool", name)
+              .tag("server", server.id)
+              .register(meterRegistry)
+
+          return timer.record<ToolResult> {
+              try {
+                  val request = McpToolRequest(name, args, workspaceId)
+                  val response = restTemplate.postForEntity(
+                      "${server.baseUrl}/tools/call",
+                      HttpEntity(request, createHeaders(token)),
+                      McpToolResponse::class.java
+                  )
+                  meterRegistry.counter("forge.mcp.tool.success", "tool", name).increment()
+                  mapToToolResult(response.body!!)
+              } catch (e: HttpClientErrorException) {
+                  meterRegistry.counter("forge.mcp.tool.error", "tool", name, "type", "client").increment()
+                  handleClientError(name, e)
+              } catch (e: HttpServerErrorException) {
+                  meterRegistry.counter("forge.mcp.tool.error", "tool", name, "type", "server").increment()
+                  handleServerError(name, e)
+              } catch (e: ResourceAccessException) {
+                  meterRegistry.counter("forge.mcp.tool.error", "tool", name, "type", "timeout").increment()
+                  throw McpServerUnavailableException(server.id, e)
+              }
+          }
+      }
+
+      fun listTools(): List<ToolDescriptor> { /* 50+ lines of aggregation logic */ }
+      fun registerServer(config: McpServerConfig) { /* 40+ lines of registration + health check */ }
+      fun getServerHealth(): Map<String, HealthStatus> { /* 30+ lines */ }
+      private fun createHeaders(token: String): HttpHeaders { /* ... */ }
+      private fun mapToToolResult(response: McpToolResponse): ToolResult { /* ... */ }
+      private fun handleClientError(tool: String, e: HttpClientErrorException): ToolResult { /* ... */ }
+      private fun handleServerError(tool: String, e: HttpServerErrorException): ToolResult { /* ... */ }
+  }
+  ```
+
+  Requirements:
+  1. Extract into focused classes with clear responsibilities
+  2. Introduce an interface for the proxy contract
+  3. Separate metrics/observability concerns from business logic
+  4. Separate error handling into a dedicated strategy
+  5. Maintain the existing public API (backward compatible)
+  6. Ensure each extracted class is independently testable
+  7. Use Kotlin idioms (sealed classes for errors, extension functions where appropriate)
+  8. Provide tests for the refactored components
+
+context:
+  framework: "Spring Boot 3.3"
+  language: "Kotlin"
+  observability: "Micrometer + Prometheus"
+  existing_tests: "15 tests in McpProxyServiceTest that must continue to pass"
+  patterns:
+    dependency_injection: "Constructor injection via Spring"
+    error_model: "Custom exception hierarchy with @ControllerAdvice"
+    metrics: "Micrometer lazy-registered gauges and counters (forge.* namespace)"
+
+assertions:
+  - type: contains
+    expected: "interface"
+    description: "Defines an interface for the proxy contract"
+
+  - type: contains
+    expected: "class McpToolRouter"
+    description: "Extracts routing responsibility into a dedicated class"
+
+  - type: contains
+    expected: "@Service"
+    description: "Marks extracted classes as Spring components"
+
+  - type: contains
+    expected: "sealed class"
+    description: "Uses Kotlin sealed class for error modeling"
+
+  - type: contains
+    expected: "@Test"
+    description: "Includes tests for refactored components"
+
+  - type: contains
+    expected: "mockk"
+    description: "Mocks dependencies in tests"
+
+  - type: not_contains
+    expected: "TODO"
+    description: "No unfinished placeholders in the refactored code"
+
+  - type: not_contains
+    expected: "meterRegistry"
+    description: "Metrics concern is extracted out of the main service"
+
+quality_criteria:
+  completeness: 0.85
+  correctness: 0.80
+  convention_adherence: 0.85
+  test_coverage: 0.80
+  backward_compatibility: 0.95

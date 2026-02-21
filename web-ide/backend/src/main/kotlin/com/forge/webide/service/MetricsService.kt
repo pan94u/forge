@@ -45,6 +45,14 @@ class MetricsService(private val meterRegistry: MeterRegistry) {
         ).increment()
     }
 
+    fun recordSkillLoaded(profileName: String, skillCount: Int) {
+        meterRegistry.gauge(
+            "forge.skill.loaded",
+            listOf(Tag.of("profile", profileName)),
+            skillCount.toDouble()
+        )
+    }
+
     // --- Timers ---
 
     fun recordMessageDuration(durationMs: Long) {

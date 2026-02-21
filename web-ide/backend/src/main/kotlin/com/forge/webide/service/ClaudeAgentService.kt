@@ -36,17 +36,14 @@ class ClaudeAgentService(
     private val profileRouter: ProfileRouter,
     private val skillLoader: SkillLoader,
     private val systemPromptAssembler: SystemPromptAssembler,
-    private val metricsService: MetricsService
+    private val metricsService: MetricsService,
+    private val baselineService: BaselineService
 ) {
     private val logger = LoggerFactory.getLogger(ClaudeAgentService::class.java)
     private val executor = Executors.newFixedThreadPool(10)
 
     @Value("\${forge.model.name:\${forge.claude.model:claude-sonnet-4-6}}")
     private var model: String = "claude-sonnet-4-6"
-
-    companion object {
-        private const val MAX_AGENTIC_TURNS = 8
-    }
 
     /**
      * Build a dynamic system prompt based on the user's message.
@@ -55,9 +52,10 @@ class ClaudeAgentService(
     private fun buildDynamicSystemPrompt(message: String): DynamicPromptResult {
         return try {
             val routing = profileRouter.route(message)
-            val skills = skillLoader.loadSkillsForProfile(routing.profile)
+            val skills = skillLoader.loadSkillsForProfile(routing.profile, message)
             val systemPrompt = systemPromptAssembler.assemble(routing.profile, skills)
             metricsService.recordProfileRoute(routing.profile.name, routing.reason)
+            metricsService.recordSkillLoaded(routing.profile.name, skills.size)
             DynamicPromptResult(
                 systemPrompt = systemPrompt,
                 activeProfile = routing.profile.name,
@@ -204,6 +202,22 @@ class ClaudeAgentService(
                     )
                 }
 
+                // Baseline auto-check: if code was generated (workspace_write_file used),
+                // run profile baselines and retry if they fail (max 2 retries)
+                var finalResult = result
+                val hasCodeGeneration = result.toolCalls.any { it.name == "workspace_write_file" && it.status != "error" }
+                if (hasCodeGeneration && promptResult.activeProfile != "fallback") {
+                    finalResult = runBaselineAutoCheck(
+                        result = result,
+                        promptResult = promptResult,
+                        messages = history + Message(role = Message.Role.USER, content = fullMessage),
+                        options = options,
+                        tools = tools,
+                        workspaceId = workspaceId,
+                        onEvent = onEvent
+                    )
+                }
+
                 // OODA: Complete — response delivered
                 onEvent(mapOf("type" to "ooda_phase", "phase" to "complete"))
                 metricsService.recordOodaPhase("complete")
@@ -213,15 +227,15 @@ class ClaudeAgentService(
                 metricsService.recordMessageDuration(messageDurationMs)
 
                 // Persist the final assistant response
-                persistMessage(sessionId, Message.Role.ASSISTANT, result.content, result.toolCalls)
+                persistMessage(sessionId, Message.Role.ASSISTANT, finalResult.content, finalResult.toolCalls)
 
-                knowledgeGapDetectorService.analyzeForGaps(message, result.content, contexts)
+                knowledgeGapDetectorService.analyzeForGaps(message, finalResult.content, contexts)
 
                 val assistantMessage = ChatMessage(
                     sessionId = sessionId,
                     role = MessageRole.ASSISTANT,
-                    content = result.content,
-                    toolCalls = result.toolCalls
+                    content = finalResult.content,
+                    toolCalls = finalResult.toolCalls
                 )
 
                 onComplete(assistantMessage)
@@ -251,8 +265,11 @@ class ClaudeAgentService(
         var currentMessages = messages.toMutableList()
         var allToolCalls = mutableListOf<ToolCallRecord>()
         var finalContent = ""
+        var lastStopReason: StopReason? = null
+        var lastTurn = 0
 
         for (turn in 1..MAX_AGENTIC_TURNS) {
+            lastTurn = turn
             logger.debug("Agentic turn $turn / $MAX_AGENTIC_TURNS")
 
             // Accumulate events from this turn
@@ -330,6 +347,7 @@ class ClaudeAgentService(
             metricsService.recordTurnDuration(turn, turnDurationMs)
 
             finalContent = turnText.toString()
+            lastStopReason = stopReason
 
             // If tool_use stop reason, execute tools and loop
             if (stopReason == StopReason.TOOL_USE && currentToolUses.isNotEmpty()) {
@@ -428,15 +446,27 @@ class ClaudeAgentService(
         }
 
         // Safety net: if all turns exhausted and AI still wanted to use tools,
-        // inject a user message requesting summary and do one final turn WITHOUT tools
-        if (finalContent.isBlank()) {
-            logger.info("All $MAX_AGENTIC_TURNS turns exhausted with tool_use. Forcing final summary turn.")
+        // OR if final content is blank, force a summary turn WITHOUT tools.
+        // BUG-016 fix: previous condition only checked isBlank(), but Claude often
+        // produces partial text (e.g. "让我看看...") before tool calls, making
+        // isBlank() return false even when there's no real user-facing answer.
+        val turnsExhaustedWithToolUse = lastTurn >= MAX_AGENTIC_TURNS && lastStopReason == StopReason.TOOL_USE
+        if (finalContent.isBlank() || turnsExhaustedWithToolUse) {
+            logger.info("Forcing final summary turn: turnsExhausted=$turnsExhaustedWithToolUse, " +
+                "contentBlank=${finalContent.isBlank()}, lastTurn=$lastTurn, lastStopReason=$lastStopReason")
             onEvent(mapOf("type" to "ooda_phase", "phase" to "complete"))
 
-            // Add a user message to explicitly instruct the AI to summarize
+            // Build tool call summary for context
+            val toolSummary = if (allToolCalls.isNotEmpty()) {
+                val summaryLines = allToolCalls.takeLast(10).joinToString("\n") { tc ->
+                    "- ${tc.name}: ${tc.output?.take(200) ?: "(no output)"}"
+                }
+                "\n\n已调用的工具及结果摘要：\n$summaryLines"
+            } else ""
+
             currentMessages.add(Message(
                 role = Message.Role.USER,
-                content = "你已经收集了足够的信息。请基于以上工具调用的结果，直接给出完整、详细的回复。不要再调用任何工具。"
+                content = "你已经收集了足够的信息（已使用 $lastTurn 轮工具调用）。$toolSummary\n\n请基于以上工具调用的结果，直接给出完整、详细的回复。不要再调用任何工具。"
             ))
 
             var summaryText = StringBuilder()
@@ -450,10 +480,132 @@ class ClaudeAgentService(
                 }
             }
             finalContent = summaryText.toString()
-            logger.debug("Summary turn produced ${finalContent.length} chars")
+            logger.info("Summary turn produced ${finalContent.length} chars")
         }
 
         return AgenticResult(content = finalContent, toolCalls = allToolCalls)
+    }
+
+    // ---- Baseline auto-check ----
+
+    companion object {
+        private const val MAX_AGENTIC_TURNS = 8
+        private const val MAX_BASELINE_RETRIES = 2
+        private const val BASELINE_TIMEOUT_SECONDS = 30L
+    }
+
+    /**
+     * Run baseline auto-check after code generation.
+     * If baselines fail, inject failure context and run another agentic loop to fix.
+     * Max [MAX_BASELINE_RETRIES] retry attempts.
+     */
+    private fun runBaselineAutoCheck(
+        result: AgenticResult,
+        promptResult: DynamicPromptResult,
+        messages: List<Message>,
+        options: CompletionOptions,
+        tools: List<ToolDefinition>,
+        workspaceId: String,
+        onEvent: (Map<String, Any?>) -> Unit
+    ): AgenticResult {
+        // Determine which baselines to run from the profile
+        val profile = skillLoader.loadProfile(promptResult.activeProfile)
+        val baselineNames = (profile?.baselines ?: emptyList()).ifEmpty {
+            listOf("code-style-baseline", "security-baseline")
+        }
+
+        var currentResult = result
+        for (attempt in 1..MAX_BASELINE_RETRIES) {
+            logger.info("Baseline auto-check attempt {}/{}", attempt, MAX_BASELINE_RETRIES)
+
+            onEvent(mapOf(
+                "type" to "baseline_check",
+                "status" to "running",
+                "attempt" to attempt,
+                "baselines" to baselineNames
+            ))
+
+            val report = try {
+                baselineService.runBaselines(baselineNames)
+            } catch (e: Exception) {
+                logger.warn("Baseline execution failed: {}", e.message)
+                onEvent(mapOf(
+                    "type" to "baseline_check",
+                    "status" to "error",
+                    "attempt" to attempt,
+                    "message" to "Baseline execution error: ${e.message}"
+                ))
+                // Don't block on baseline execution errors
+                return currentResult
+            }
+
+            if (report.allPassed) {
+                logger.info("Baselines passed on attempt {}", attempt)
+                onEvent(mapOf(
+                    "type" to "baseline_check",
+                    "status" to "passed",
+                    "attempt" to attempt,
+                    "summary" to report.summary
+                ))
+                return currentResult
+            }
+
+            logger.info("Baselines failed on attempt {}: {}", attempt, report.summary)
+            onEvent(mapOf(
+                "type" to "baseline_check",
+                "status" to "failed",
+                "attempt" to attempt,
+                "summary" to report.summary
+            ))
+
+            if (attempt >= MAX_BASELINE_RETRIES) {
+                // Max retries reached, report failure and return current result
+                logger.warn("Baselines still failing after {} attempts, returning result with warning", MAX_BASELINE_RETRIES)
+                onEvent(mapOf(
+                    "type" to "baseline_check",
+                    "status" to "exhausted",
+                    "summary" to report.summary
+                ))
+                return currentResult
+            }
+
+            // Loop back to Observe: inject baseline failure and re-run agentic loop
+            onEvent(mapOf("type" to "ooda_phase", "phase" to "observe"))
+            metricsService.recordOodaPhase("observe")
+
+            val failureContext = report.results
+                .filter { it.status == "FAIL" || it.status == "ERROR" }
+                .joinToString("\n") { r ->
+                    "- ${r.name}: ${r.output.take(500)}"
+                }
+
+            val fixMessages = messages.toMutableList()
+            fixMessages.add(Message(
+                role = Message.Role.ASSISTANT,
+                content = currentResult.content
+            ))
+            fixMessages.add(Message(
+                role = Message.Role.USER,
+                content = """底线检查失败，请修复以下问题后重新提交代码：
+
+$failureContext
+
+请分析失败原因，修改相关文件使底线检查通过。修改完成后不要再调用底线检查工具。"""
+            ))
+
+            // Run another agentic loop to fix
+            currentResult = runBlocking {
+                agenticStream(
+                    messages = fixMessages,
+                    options = options,
+                    tools = tools,
+                    onEvent = onEvent,
+                    workspaceId = workspaceId
+                )
+            }
+        }
+
+        return currentResult
     }
 
     // ---- Persistence helpers ----

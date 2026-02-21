@@ -4,10 +4,16 @@ on:
   pull_request:
     paths:
       - 'web-ide/**'
+      - 'adapters/**'
+      - 'agent-eval/**'
+      - 'build.gradle.kts'
+      - 'settings.gradle.kts'
   push:
     branches: [main]
     paths:
       - 'web-ide/**'
+      - 'adapters/**'
+      - 'agent-eval/**'
 
 permissions:
   contents: read
@@ -105,23 +111,71 @@ jobs:
           path: |
             ~/.gradle/caches
             ~/.gradle/wrapper
-          key: ${{ runner.os }}-gradle-webide-${{ hashFiles('web-ide/backend/build.gradle.kts') }}
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle.kts') }}
           restore-keys: |
-            ${{ runner.os }}-gradle-webide-
+            ${{ runner.os }}-gradle-
 
-      - name: Build backend
-        run: ./gradlew :web-ide:backend:build --no-daemon
-
-      - name: Run backend tests
-        run: ./gradlew :web-ide:backend:test --no-daemon
+      - name: Build and test all backend modules
+        run: |
+          ./gradlew :web-ide:backend:build --no-daemon
+          ./gradlew :web-ide:backend:test --no-daemon
+          ./gradlew :adapters:model-adapter:test --no-daemon
+          ./gradlew :agent-eval:test --no-daemon
 
       - name: Upload test reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: backend-test-reports
-          path: web-ide/backend/build/reports/tests/
+          path: |
+            web-ide/backend/build/reports/tests/
+            adapters/model-adapter/build/reports/tests/
+            agent-eval/build/reports/tests/
           retention-days: 14
+
+  baseline-checks:
+    name: Baseline Quality Gates
+    needs: backend-test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Cache Gradle dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle.kts') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      - name: Make baseline scripts executable
+        run: chmod +x plugins/forge-superagent/baselines/*.sh
+
+      - name: Run security baseline
+        run: plugins/forge-superagent/baselines/security-baseline.sh
+        continue-on-error: false
+
+      - name: Run architecture baseline
+        run: plugins/forge-superagent/baselines/architecture-baseline.sh
+        continue-on-error: false
+
+      - name: Run code-style baseline
+        run: plugins/forge-superagent/baselines/code-style-baseline.sh
+        continue-on-error: true
+
+      - name: Run test-coverage baseline
+        run: plugins/forge-superagent/baselines/test-coverage-baseline.sh
+        continue-on-error: true
 
   e2e-tests:
     name: E2E Tests

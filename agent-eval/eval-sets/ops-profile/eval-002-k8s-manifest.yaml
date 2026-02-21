@@ -1,0 +1,126 @@
+id: eval-002-k8s-manifest
+name: Kubernetes Manifests for Forge Platform
+description: >
+  Evaluate the agent's ability to create production-grade Kubernetes manifests
+  including Deployments, Services, Ingress, ConfigMaps, Secrets, HPA,
+  PDBs, and proper resource management.
+tags:
+  - ops
+  - kubernetes
+  - manifests
+  - infrastructure
+baseline_pass_rate: 0.70
+
+prompt: |
+  Create Kubernetes manifests to deploy the Forge Platform on a managed
+  Kubernetes cluster (EKS/GKE). The platform consists of four services
+  that currently run via Docker Compose and need to be migrated to Kubernetes.
+
+  Services to deploy:
+  1. forge-backend: Spring Boot 3.3 application (JDK 21)
+     - Needs: PostgreSQL connection, ANTHROPIC_API_KEY, Keycloak URL
+     - Exposes: port 8080 (HTTP), port 8081 (management/actuator)
+     - Health: /api/knowledge/search (readiness), /actuator/health (liveness)
+     - Resource profile: CPU-intensive during AI agent operations
+     - Needs access to plugins/ and knowledge-base/ directories (read-only)
+
+  2. forge-frontend: Next.js 15 application
+     - Needs: Backend API URL environment variable
+     - Exposes: port 3000
+     - Health: / (HTTP 200)
+     - Resource profile: low CPU, moderate memory
+
+  3. forge-nginx: Nginx reverse proxy
+     - Routes /api/* to backend, /* to frontend
+     - Handles TLS termination, WebSocket upgrade, SSE keep-alive
+     - Exposes: port 80 (HTTP), port 443 (HTTPS)
+
+  4. forge-keycloak: Keycloak authentication server
+     - Needs: PostgreSQL connection (separate database)
+     - Exposes: port 8180
+     - Stateful: imports realm configuration on first boot
+     - Health: /health/ready
+
+  Infrastructure requirements:
+  - Namespace isolation: forge-system namespace
+  - Horizontal Pod Autoscaler for backend (CPU-based, 2-8 replicas)
+  - Pod Disruption Budget: at least 1 backend pod always available
+  - Ingress with cert-manager for automatic TLS
+  - ConfigMaps for non-sensitive configuration
+  - Kubernetes Secrets for API keys and database credentials
+  - Persistent Volume Claims for PostgreSQL and Keycloak data
+  - Network Policies: frontend can only reach nginx, nginx reaches frontend
+    and backend, backend reaches keycloak and PostgreSQL
+  - Resource requests and limits for all pods
+  - Pod anti-affinity: spread backend replicas across nodes
+  - Init containers for database migration (Flyway) before backend starts
+
+  Deliverables:
+  1. Namespace and RBAC manifests
+  2. Deployment manifests for all 4 services
+  3. Service and Ingress manifests
+  4. ConfigMap and Secret manifests
+  5. HPA and PDB manifests
+  6. NetworkPolicy manifests
+  7. PVC manifests for stateful services
+  8. Kustomize base and overlay structure for dev/staging/prod
+
+context:
+  cluster: "Managed Kubernetes (EKS or GKE)"
+  kubernetes_version: "1.28+"
+  ingress_controller: "nginx-ingress"
+  cert_manager: "cert-manager v1.13+ for Let's Encrypt"
+  storage_class: "gp3 (AWS) or standard (GCP)"
+  monitoring: "Prometheus + Grafana already deployed in monitoring namespace"
+
+assertions:
+  - type: contains
+    expected: "apiVersion"
+    description: "Provides valid Kubernetes manifests"
+
+  - type: contains
+    expected: "Deployment"
+    description: "Defines Deployment resources"
+
+  - type: contains
+    expected: "HorizontalPodAutoscaler"
+    description: "Defines HPA for auto-scaling"
+
+  - type: contains
+    expected: "PodDisruptionBudget"
+    description: "Defines PDB for availability"
+
+  - type: contains
+    expected: "NetworkPolicy"
+    description: "Defines network segmentation"
+
+  - type: contains
+    expected: "readinessProbe"
+    description: "Configures readiness probes"
+
+  - type: contains
+    expected: "livenessProbe"
+    description: "Configures liveness probes"
+
+  - type: contains
+    expected: "resources"
+    description: "Specifies resource requests and limits"
+
+  - type: contains
+    expected: "initContainers"
+    description: "Uses init containers for database migration"
+
+  - type: contains
+    expected: "anti-affinity"
+    description: "Configures pod anti-affinity for HA"
+
+  - type: not_contains
+    expected: "TODO"
+    description: "No unfinished placeholder sections"
+
+quality_criteria:
+  completeness: 0.85
+  correctness: 0.80
+  security: 0.85
+  high_availability: 0.85
+  operability: 0.80

@@ -1,0 +1,106 @@
+id: eval-003-e2e-test-plan
+name: E2E Test Plan for Forge Web IDE
+description: >
+  Evaluate the agent's ability to design a comprehensive end-to-end test plan
+  using Playwright, covering critical user journeys, test data management,
+  CI integration, and flakiness mitigation strategies.
+tags:
+  - testing
+  - e2e
+  - playwright
+  - test-planning
+baseline_pass_rate: 0.75
+
+prompt: |
+  Design a comprehensive Playwright E2E test plan for the Forge Web IDE.
+  The Web IDE is a browser-based AI-assisted development environment where
+  users interact with an AI agent through a chat interface while editing
+  code in an integrated editor.
+
+  Application under test (running via Docker Compose):
+  - Frontend: Next.js 15 app at http://localhost:9000
+  - Backend: Spring Boot 3.3 API at http://localhost:9000/api (proxied via Nginx)
+  - Auth: Keycloak at http://localhost:8180 (OIDC PKCE flow)
+  - 4 containers: frontend + backend + nginx + keycloak
+
+  Critical user journeys to cover:
+  1. Authentication flow: Login via Keycloak, session persistence, logout, token refresh
+  2. Workspace management: Create workspace, list workspaces, rename, delete,
+     workspace isolation between users
+  3. File operations: Create file, edit content in Monaco editor, save, rename,
+     delete, create directories, navigate file tree
+  4. AI agent interaction: Send message in chat, receive streaming SSE response,
+     agent uses MCP tools, tool results displayed in UI
+  5. Knowledge base search: Search documents, view results, navigate to document
+  6. Plugin system: View active profile, see available tools, switch profiles
+  7. Error handling: Network disconnection recovery, backend unavailable graceful
+     degradation, session expiry re-authentication
+
+  Deliverables:
+  1. Test suite architecture (folder structure, page object model, fixtures)
+  2. Test scenarios for each user journey (at least 3 tests per journey)
+  3. Authentication handling strategy (Keycloak login automation, token reuse)
+  4. Test data management (seed data, cleanup, isolation between tests)
+  5. Playwright configuration (browsers, viewport sizes, timeouts, retries)
+  6. CI/CD integration plan (GitHub Actions workflow, parallel execution, artifacts)
+  7. Flakiness mitigation strategies (waitFor patterns, retry logic, screenshot on failure)
+  8. Performance budget assertions (page load < 3s, SSE first token < 2s)
+  9. Accessibility testing integration (axe-core checks on key pages)
+  10. Sample test implementation for the AI agent interaction journey
+
+context:
+  test_framework: "Playwright 1.40+"
+  language: "TypeScript"
+  ci: "GitHub Actions"
+  deployment: "Docker Compose (4 containers)"
+  auth: "Keycloak OIDC PKCE flow"
+  editor: "Monaco Editor component"
+  streaming: "Server-Sent Events (SSE) for agent responses"
+
+assertions:
+  - type: contains
+    expected: "page object"
+    description: "Uses Page Object Model pattern"
+
+  - type: contains
+    expected: "Keycloak"
+    description: "Addresses Keycloak authentication automation"
+
+  - type: contains
+    expected: "SSE"
+    description: "Addresses Server-Sent Events testing strategy"
+
+  - type: contains
+    expected: "screenshot"
+    description: "Captures screenshots on failure for debugging"
+
+  - type: contains
+    expected: "parallel"
+    description: "Addresses parallel test execution"
+
+  - type: contains
+    expected: "retry"
+    description: "Addresses flakiness with retry strategies"
+
+  - type: contains
+    expected: "accessibility"
+    description: "Includes accessibility testing"
+
+  - type: contains
+    expected: "GitHub Actions"
+    description: "Provides CI/CD integration configuration"
+
+  - type: contains
+    expected: "Monaco"
+    description: "Addresses Monaco editor interaction testing"
+
+  - type: not_contains
+    expected: "TODO"
+    description: "No incomplete placeholder sections"
+
+quality_criteria:
+  completeness: 0.85
+  practicality: 0.85
+  maintainability: 0.80
+  ci_integration: 0.85
+  flakiness_awareness: 0.90

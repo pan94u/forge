@@ -1,0 +1,103 @@
+id: eval-001-docker-deployment
+name: Docker Deployment Strategy for Forge Platform
+description: >
+  Evaluate the agent's ability to design a production-grade Docker deployment
+  strategy including multi-stage builds, security hardening, health checks,
+  resource limits, and environment-specific configurations.
+tags:
+  - ops
+  - docker
+  - deployment
+  - containerization
+baseline_pass_rate: 0.75
+
+prompt: |
+  Design the Docker deployment strategy for the Forge Platform, transitioning
+  from the current trial/demo setup to a production-ready configuration.
+
+  Current state (docker-compose.trial.yml):
+  - 4 containers: backend (Spring Boot), frontend (Next.js), nginx (reverse proxy),
+    keycloak (auth server)
+  - Single docker-compose file for all environments
+  - Backend uses eclipse-temurin:21-jre-alpine (Alpine has no bash — shell scripts fail)
+  - Frontend built locally, Docker only copies build artifacts
+  - No resource limits, no health check intervals tuned, no restart policies
+  - Secrets passed as environment variables in docker-compose
+
+  Production requirements:
+  - Multi-environment support: dev, staging, production
+  - Zero-downtime deployments with health check grace periods
+  - Secret management (API keys: ANTHROPIC_API_KEY, database credentials)
+  - Resource limits and requests (CPU, memory) for each container
+  - Log aggregation strategy (structured JSON logs)
+  - Volume management for persistent data (PostgreSQL, knowledge-base, plugins)
+  - Backup strategy for PostgreSQL data
+  - TLS termination at Nginx with Let's Encrypt
+  - Image size optimization (multi-stage builds where beneficial)
+  - Security: non-root users, read-only filesystems where possible, no new privileges
+  - Container networking: isolated networks for frontend/backend/database tiers
+
+  Deliverables:
+  1. Production Dockerfile for each service (backend, frontend, nginx)
+  2. Docker Compose configuration with environment-specific overrides
+  3. Nginx configuration with TLS, rate limiting, and security headers
+  4. Health check definitions with appropriate intervals and thresholds
+  5. Secret management approach (Docker secrets or external vault)
+  6. Resource allocation recommendations with justification
+  7. Deployment runbook: step-by-step for rolling update
+  8. Rollback procedure
+  9. Monitoring integration points (Prometheus metrics endpoint exposure)
+
+context:
+  current_setup: "docker-compose.trial.yml with 4 containers"
+  backend_image: "eclipse-temurin:21-jre-alpine"
+  frontend_build: "Local npm build, Docker copies artifacts"
+  known_issues:
+    - "Alpine has no bash — shell scripts in containers will fail"
+    - "Backend health check uses /api/knowledge/search not /actuator/health"
+    - "Keycloak on port 8180, realm 'forge', client 'forge-web-ide'"
+  volumes: "plugins/ and knowledge-base/ mounted as read-only"
+
+assertions:
+  - type: contains
+    expected: "multi-stage"
+    description: "Uses multi-stage Docker builds"
+
+  - type: contains
+    expected: "HEALTHCHECK"
+    description: "Defines container health checks"
+
+  - type: contains
+    expected: "non-root"
+    description: "Runs containers as non-root users"
+
+  - type: contains
+    expected: "resource"
+    description: "Specifies resource limits"
+
+  - type: contains
+    expected: "TLS"
+    description: "Addresses TLS termination"
+
+  - type: contains
+    expected: "secret"
+    description: "Addresses secret management"
+
+  - type: contains
+    expected: "rollback"
+    description: "Provides rollback procedure"
+
+  - type: contains
+    expected: "network"
+    description: "Addresses container network isolation"
+
+  - type: not_contains
+    expected: "TODO"
+    description: "No incomplete placeholder sections"
+
+quality_criteria:
+  completeness: 0.85
+  security: 0.85
+  operability: 0.80
+  reproducibility: 0.90
+  documentation: 0.80
