@@ -2909,3 +2909,87 @@ echo "Regression test workspace cleaned up"
 | Sprint 2.2 验收 | **24/24 通过（100%）** ← Session 19 的 71% |
 | **Bug 追踪** | **29 个（28 已修复，1 挂起 BUG-016）** |
 | Phase 2 进度 | Sprint 2.1 ✅ Sprint 2.2 ✅ Sprint 2.3 待启动 |
+
+---
+
+## Session 21 — 2026-02-21：Sprint 2.4 内部试用 + 反馈收集 + Phase 3 规划
+
+> Sprint 2.4 内部试用准备（6 文件）→ 首轮试用体验 → 修复空字符串 model Bug → 试用数据分析 → 收集 4 条核心反馈 → Phase 3 完整实施计划。
+
+### 21.1 Sprint 2.4 实施
+
+| 操作 | 文件 | 说明 |
+|------|------|------|
+| 重写 | `.env.example` | 覆盖 5 Provider + 安全配置 |
+| 修改 | `infrastructure/docker/docker-compose.trial.yml` | 新增 GEMINI/DASHSCOPE/AWS 等环境变量 |
+| 新增 | `docs/trial-feedback-template.md` | 7 维度评分 + 6 开放问题 + 日志模板 |
+| 新增 | `docs/sprint2.4-acceptance-test.md` | 4 场景 17 用例 |
+| 重写 | `docs/TRIAL-GUIDE.md` | 10 章节完整试用指南（~490 行） |
+| 修改 | `docs/user-guide-trial.md` | 添加废弃提示 |
+
+### 21.2 首轮试用体验
+
+- **任务**：创建"印章管理系统" workspace
+- **结果**：8 轮 Agentic Loop 生成 6 个 TypeScript 文件
+- **底线**：code-style ✅、security ✅、test-coverage ❌（修复被 Rate Limit 中断）
+- **问题**：Rate Limit 2 次（System Prompt 105K chars）
+
+### 21.3 Bug 修复
+
+| Bug | 根因 | 修复 | 涉及文件 |
+|-----|------|------|---------|
+| 空字符串 model 导致 API 400 | Kotlin `?:` 只处理 null 不处理空串 | `options.model?.takeIf { it.isNotBlank() } ?: DEFAULT_MODEL`（3 处） | `ClaudeAdapter.kt` |
+
+### 21.4 用户四大核心反馈
+
+1. **无完整管道** — 代码生成后断裂，不能编译/测试/部署
+2. **过度自动化** — AI 跑满 8 轮无人介入，HITL 设计了但未强制执行
+3. **黑盒感** — 不知道 AI 在做什么、将做什么
+4. **无完成度度量** — 数据采集了但无可视化
+
+**共同根因**：平台是"AI 独舞"模式，缺少"计划预览 → 人工审批 → 分步执行 → 结果度量"闭环。
+
+### 21.5 关键决策
+
+- 跳过 Sprint 2.5 POC，直接做 Phase 3 完整版（人机协作闭环）
+- Phase 3 从原规划的「ForgeNativeRuntime + 进化环」重构为「HITL + 透明度 + 管道 + 度量 + 学习循环」
+
+### 21.6 Phase 3 规划产出
+
+| 操作 | 文件 | 说明 |
+|------|------|------|
+| 新增 | `docs/sprint2.4-trial-discussion-record.md` | 完整试用讨论记录（试用活动 + 反馈分析 + 决策） |
+| 新增 | `docs/planning/phase3-implementation-plan.md` | Phase 3 实施计划（6 模块 16 步，~2380 行代码） |
+| 修改 | `docs/planning/baseline-v1.5.md` | v1.5.1→v1.6：Phase 2 完成 + Phase 3 重构 |
+| 修改 | `docs/planning/dev-logbook.md` | Session 21 记录 |
+
+### 21.7 经验沉淀
+
+1. **试用反馈驱动规划重构**：原始 Phase 3 规划（ForgeNativeRuntime）是技术导向的，但试用反馈指向用户体验问题（HITL/透明度/管道/度量）。真实用户反馈 > 技术路线图
+2. **空字符串 vs null 再次出现**：这是第二次在 Kotlin 代码中遇到 `?:` 运算符不处理空字符串的问题（已编码到 CLAUDE.md 已知陷阱）
+3. **System Prompt 体积是 Rate Limit 的主因**：20 个 Skill 注入后 system prompt 达 105K chars，单次请求就接近 30K token 限额
+
+### Git 提交
+
+| Commit | 说明 |
+|--------|------|
+| *(本次提交)* | docs: Sprint 2.4 试用记录 + Phase 3 实施计划 + baseline v1.6 |
+
+### 项目统计快照（Session 21）
+
+| 指标 | 数值 |
+|------|------|
+| 总文件数 | ~355+ |
+| Git Commits | 38+ |
+| Sessions | **21** |
+| 单元测试 | **147** |
+| Skills 加载 | 32 (5 profiles, 过滤后 ~3-20) |
+| MCP 工具 | 9 builtin + 9 外部发现 |
+| Docker 容器 | **6** |
+| 知识库文档 | 13 |
+| Sprint 2.1 验收 | **34/34 通过（100%）** |
+| Sprint 2.2 验收 | **24/24 通过（100%）** |
+| Sprint 2.4 验收 | **17 用例（待执行）** |
+| **Bug 追踪** | **30 个（29 已修复，1 挂起 BUG-016）** |
+| Phase 2 进度 | Sprint 2.1 ✅ Sprint 2.2 ✅ Sprint 2.3 ✅ Sprint 2.4 ✅ |
+| **Phase 3 状态** | **规划完成，待实施** |
