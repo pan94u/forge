@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
-    "test": "jest",
+    "test": "echo 'No unit tests (use npm run test:e2e for E2E tests)'",
     "test:e2e": "playwright test"
   },
   "dependencies": {
@@ -26,15 +26,12 @@
     "zustand": "^5.0.0"
   },
   "devDependencies": {
-    "@jest/types": "^29.6.0",
     "@playwright/test": "^1.49.0",
     "@types/node": "^22.0.0",
     "@types/react": "^19.0.0",
     "autoprefixer": "^10.4.0",
     "eslint": "^9.0.0",
     "eslint-config-next": "^15.1.0",
-    "jest": "^29.7.0",
-    "jest-environment-jsdom": "^30.2.0",
     "postcss": "^8.4.0",
     "typescript": "^5.7.0"
   }

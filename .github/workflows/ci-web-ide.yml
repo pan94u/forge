@@ -46,8 +46,9 @@ jobs:
       - name: Run TypeScript type check
         run: npx tsc --noEmit
 
-      - name: Run unit tests
-        run: npm test -- --coverage --watchAll=false
+      # 前端目前没有单元测试（只有 E2E 测试），跳过此步骤
+      # - name: Run unit tests
+      #   run: npm test -- --coverage --watchAll=false
 
       - name: Upload coverage report
         if: always()
