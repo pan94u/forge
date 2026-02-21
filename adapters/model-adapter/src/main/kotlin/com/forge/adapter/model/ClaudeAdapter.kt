@@ -27,7 +27,8 @@ import java.util.concurrent.TimeUnit
  */
 class ClaudeAdapter(
     private val apiKey: String = System.getenv("ANTHROPIC_API_KEY") ?: "",
-    private val baseUrl: String = "https://api.anthropic.com"
+    private val baseUrl: String = "https://api.anthropic.com",
+    private val customModels: List<ModelInfo>? = null
 ) : ModelAdapter {
 
     private val logger = LoggerFactory.getLogger(ClaudeAdapter::class.java)
@@ -41,36 +42,36 @@ class ClaudeAdapter(
 
     companion object {
         private const val API_VERSION = "2023-06-01"
-        private const val DEFAULT_MODEL = "claude-sonnet-4-20250514"
+        private const val DEFAULT_MODEL = "claude-sonnet-4-6"
         private const val MESSAGES_PATH = "/v1/messages"
 
         val SUPPORTED_MODELS = listOf(
             ModelInfo(
-                id = "claude-opus-4-20250514",
-                displayName = "Claude Opus 4",
+                id = "claude-opus-4-6",
+                displayName = "Claude Opus 4.6",
                 provider = "anthropic",
                 contextWindow = 200_000,
-                maxOutputTokens = 32_000,
+                maxOutputTokens = 128_000,
                 supportsStreaming = true,
                 supportsVision = true,
                 costTier = CostTier.HIGH
             ),
             ModelInfo(
-                id = "claude-sonnet-4-20250514",
-                displayName = "Claude Sonnet 4",
+                id = "claude-sonnet-4-6",
+                displayName = "Claude Sonnet 4.6",
                 provider = "anthropic",
                 contextWindow = 200_000,
-                maxOutputTokens = 16_000,
+                maxOutputTokens = 64_000,
                 supportsStreaming = true,
                 supportsVision = true,
                 costTier = CostTier.MEDIUM
             ),
             ModelInfo(
-                id = "claude-haiku-3-5-20241022",
-                displayName = "Claude 3.5 Haiku",
+                id = "claude-haiku-4-5-20251001",
+                displayName = "Claude Haiku 4.5",
                 provider = "anthropic",
                 contextWindow = 200_000,
-                maxOutputTokens = 8_192,
+                maxOutputTokens = 64_000,
                 supportsStreaming = true,
                 supportsVision = true,
                 costTier = CostTier.LOW
@@ -276,7 +277,7 @@ class ClaudeAdapter(
         }.flowOn(Dispatchers.IO)
     }
 
-    override fun supportedModels(): List<ModelInfo> = SUPPORTED_MODELS
+    override fun supportedModels(): List<ModelInfo> = customModels ?: SUPPORTED_MODELS
 
     override suspend fun healthCheck(): Boolean {
         if (apiKey.isBlank()) return false
@@ -336,7 +337,7 @@ class ClaudeAdapter(
         )
 
         if (options.systemPrompt != null) {
-            body["system"] = options.systemPrompt!!
+            body["system"] = options.systemPrompt
         }
         if (options.temperature != 0.7) {
             body["temperature"] = options.temperature

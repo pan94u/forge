@@ -42,7 +42,7 @@ class ClaudeAdapterToolCallingTest {
     @Test
     fun `streamWithTools parses text content events`() = runTest {
         val sseBody = buildSseResponse(
-            sseEvent("message_start", """{"type":"message_start","message":{"id":"msg_123","model":"claude-sonnet-4-20250514","role":"assistant"}}"""),
+            sseEvent("message_start", """{"type":"message_start","message":{"id":"msg_123","model":"claude-sonnet-4-6","role":"assistant"}}"""),
             sseEvent("content_block_start", """{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}"""),
             sseEvent("content_block_delta", """{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hello"}}"""),
             sseEvent("content_block_delta", """{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" world"}}"""),
@@ -78,7 +78,7 @@ class ClaudeAdapterToolCallingTest {
     @Test
     fun `streamWithTools parses tool_use events`() = runTest {
         val sseBody = buildSseResponse(
-            sseEvent("message_start", """{"type":"message_start","message":{"id":"msg_456","model":"claude-sonnet-4-20250514","role":"assistant"}}"""),
+            sseEvent("message_start", """{"type":"message_start","message":{"id":"msg_456","model":"claude-sonnet-4-6","role":"assistant"}}"""),
             sseEvent("content_block_start", """{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}"""),
             sseEvent("content_block_delta", """{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Let me search."}}"""),
             sseEvent("content_block_stop", """{"type":"content_block_stop","index":0}"""),
@@ -219,13 +219,13 @@ class ClaudeAdapterToolCallingTest {
         val body = adapter.buildMessagesRequestBody(
             messages = messages,
             options = CompletionOptions(maxTokens = 1000, systemPrompt = "You are helpful"),
-            model = "claude-sonnet-4-20250514",
+            model = "claude-sonnet-4-6",
             tools = tools,
             stream = true
         )
 
         val json = gson.fromJson(body, JsonObject::class.java)
-        assertThat(json.get("model").asString).isEqualTo("claude-sonnet-4-20250514")
+        assertThat(json.get("model").asString).isEqualTo("claude-sonnet-4-6")
         assertThat(json.get("max_tokens").asInt).isEqualTo(1000)
         assertThat(json.get("stream").asBoolean).isTrue()
         val systemArray = json.getAsJsonArray("system")
@@ -260,7 +260,7 @@ class ClaudeAdapterToolCallingTest {
         val body = adapter.buildMessagesRequestBody(
             messages = messages,
             options = CompletionOptions(maxTokens = 1000),
-            model = "claude-sonnet-4-20250514",
+            model = "claude-sonnet-4-6",
             tools = emptyList(),
             stream = false
         )
@@ -300,7 +300,7 @@ class ClaudeAdapterToolCallingTest {
             "type": "message",
             "role": "assistant",
             "content": [{"type": "text", "text": "Hello!"}],
-            "model": "claude-sonnet-4-20250514",
+            "model": "claude-sonnet-4-6",
             "stop_reason": "end_turn",
             "usage": {"input_tokens": 10, "output_tokens": 5}
         }"""
@@ -313,7 +313,7 @@ class ClaudeAdapterToolCallingTest {
         val result = adapter.complete("Hi", CompletionOptions(maxTokens = 100))
 
         assertThat(result.content).isEqualTo("Hello!")
-        assertThat(result.model).isEqualTo("claude-sonnet-4-20250514")
+        assertThat(result.model).isEqualTo("claude-sonnet-4-6")
         assertThat(result.stopReason).isEqualTo(StopReason.END_TURN)
         assertThat(result.usage.inputTokens).isEqualTo(10)
         assertThat(result.usage.outputTokens).isEqualTo(5)
@@ -336,9 +336,9 @@ class ClaudeAdapterToolCallingTest {
         val models = adapter.supportedModels()
         assertThat(models).hasSize(3)
         assertThat(models.map { it.id }).containsExactly(
-            "claude-opus-4-20250514",
-            "claude-sonnet-4-20250514",
-            "claude-haiku-3-5-20241022"
+            "claude-opus-4-6",
+            "claude-sonnet-4-6",
+            "claude-haiku-4-5-20251001"
         )
     }
 
