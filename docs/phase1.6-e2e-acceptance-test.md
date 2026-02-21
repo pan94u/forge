@@ -1025,7 +1025,79 @@ open http://localhost:8180       # Keycloak（admin/admin）
 | 1 | Web IDE 全功能可用 | TC-1~8 | ✅ 31/33 |
 | 2 | 32 Skills + 5 Profiles | TC-15.1~15.2 | ✅ |
 | 3 | agent-eval 可运行 | TC-21.1~21.2 | ⚠️ 结构模式 ✅ |
-| 4 | 147 单元测试全过 | TC-21.3 | ✅ |
+| 4 | 147 单元测试全过 | TC-21.3 | ✅（现 164） |
+
+---
+
+## Sprint 2.3 多模型适配器验收
+
+> Session 19 新增。验证多模型提供商支持、YAML 配置化、用户级覆盖、前端选择器。
+
+### 场景 22：多模型提供商注册
+
+> 验证 ModelRegistry 正确注册多个提供商的 Adapter
+
+| TC | 操作 | 预期 |
+|----|------|------|
+| 22.1 | 设置 ANTHROPIC_API_KEY 启动后端，GET /api/models/providers | - [x] providers 包含 "anthropic"，totalModels >= 3 |
+| 22.2 | 设置多个 API Key 启动，GET /api/models | - [x] 返回所有提供商的模型列表，按 provider 分组 |
+| 22.3 | GET /api/models/providers/anthropic | - [x] 返回 3 个 Claude 模型 |
+| 22.4 | 单元测试 ModelRegistryTest 12 个 | - [x] 全部通过 |
+
+### 场景 23：Adapter 流式 + Tool Calling
+
+> 验证各 Adapter 的 SSE 解析和 tool calling 事件
+
+| TC | 操作 | 预期 |
+|----|------|------|
+| 23.1 | ClaudeAdapterToolCallingTest 11 个 | - [x] SSE 解析、tool_use 事件、错误处理全通过 |
+| 23.2 | QwenAdapterTest 9 个 | - [x] OpenAI 格式 tool calling、流式、请求体格式全通过 |
+| 23.3 | GeminiAdapterTest 10 个 | - [x] Gemini functionCall 格式、functionResponse 全通过 |
+| 23.4 | 42 个 model-adapter 测试 | - [x] 全部通过 |
+
+### 场景 24：application.yml 配置化
+
+> 验证模型列表从 YAML 外部化配置
+
+| TC | 操作 | 预期 |
+|----|------|------|
+| 24.1 | application.yml 包含 forge.models 配置段 | - [x] 5 个提供商配置，16 个模型定义 |
+| 24.2 | ModelProperties @ConfigurationProperties 绑定 | - [x] 编译通过，后端启动正常 |
+| 24.3 | Adapter customModels 参数覆盖内置列表 | - [x] YAML 配置的模型列表优先于 Adapter 硬编码 |
+
+### 场景 25：用户模型配置（加密存储）
+
+> 验证用户可覆盖系统模型配置，API Key 加密存储
+
+| TC | 操作 | 预期 |
+|----|------|------|
+| 25.1 | PUT /api/user/model-configs/anthropic（含 apiKey） | - [x] 返回 hasApiKey=true, apiKeyMasked 脱敏 |
+| 25.2 | GET /api/user/model-configs | - [x] 返回用户所有配置，API Key 脱敏 |
+| 25.3 | DELETE /api/user/model-configs/anthropic | - [x] 204 No Content |
+| 25.4 | EncryptionServiceTest 9 个 | - [x] 加解密往返、不同密文、错误密钥检测全通过 |
+| 25.5 | UserModelConfigServiceTest 8 个 | - [x] CRUD + 脱敏 + 空 key 保留全通过 |
+
+### 场景 26：前端模型选择器 + 设置弹窗
+
+> 验证前端 UI 组件
+
+| TC | 操作 | 预期 |
+|----|------|------|
+| 26.1 | 打开 AI Chat，header 显示 ModelSelector | - [x] 按提供商分组下拉，显示费用图标 |
+| 26.2 | 点击 Settings 齿轮按钮 | - [x] 弹出 ModelSettingsDialog，5 个提供商卡片 |
+| 26.3 | npm run build 零错误 | - [x] 编译通过 |
+
+---
+
+### Sprint 2.3 验收标准
+
+| # | 验收标准 | 对应测试 | 状态 |
+|---|---------|----------|------|
+| 1 | 4 提供商 Adapter 实现 | TC-22~23 | ✅ |
+| 2 | 模型清单 YAML 配置化 | TC-24 | ✅ |
+| 3 | 用户配置加密存储 | TC-25 | ✅ |
+| 4 | 前端选择器 + 设置弹窗 | TC-26 | ✅ |
+| 5 | 164 单元测试全过 | TC-23.4 + TC-25.4~25.5 | ✅ |
 
 ---
 

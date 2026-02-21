@@ -2717,3 +2717,112 @@ echo "Regression test workspace cleaned up"
 | **Bug 追踪** | **20 个（19 已修复，1 挂起）** |
 | Phase 0~1.6 | ✅ 完成 |
 | **验收测试** | **92.0% 通过率，Phase 1.6 验收基本完成** |
+
+---
+
+## Session 19 — 2026-02-20/21：Sprint 2.3 多模型适配器实现
+
+### 19.1 目标
+
+实现 Sprint 2.3 多模型适配器系统：支持 Anthropic / AWS Bedrock / Google Gemini / Alibaba Qwen 四个提供商，模型清单从 application.yml 外部化配置，用户可覆盖系统配置（API Key 加密存储），前端提供模型选择器和设置弹窗。
+
+### 19.2 实施内容
+
+#### 阶段 1：多模型 Adapter 实现
+
+| 操作 | 文件 | 说明 |
+|------|------|------|
+| 新增 | `adapters/model-adapter/src/.../QwenAdapter.kt` | DashScope OpenAI 兼容 API 适配器，支持 tool calling |
+| 新增 | `adapters/model-adapter/src/.../GeminiAdapter.kt` | Google Gemini REST API 适配器，支持 function calling |
+| 重写 | `adapters/model-adapter/src/.../BedrockAdapter.kt` | AWS SDK Converse API，同步伪流式 |
+| 新增 | `adapters/model-adapter/src/.../ModelRegistry.kt` | 中央注册表：模型发现、路由、健康检查 |
+| 修改 | `adapters/model-adapter/build.gradle.kts` | 添加 AWS SDK bedrockruntime 依赖 |
+
+#### 阶段 2：模型 ID 更新到最新版本
+
+| 操作 | 文件 | 说明 |
+|------|------|------|
+| 修改 | `ClaudeAdapter.kt` | claude-opus-4-6, claude-sonnet-4-6, claude-haiku-4-5-20251001 |
+| 修改 | `BedrockAdapter.kt` | anthropic.claude-opus-4-6-v1 等 |
+| 修改 | `GeminiAdapter.kt` | gemini-2.5-pro, gemini-2.5-flash, gemini-2.5-flash-lite |
+| 修改 | `QwenAdapter.kt` | qwen3.5-plus（新增）, qwen-plus, qwen-turbo, qwen-long |
+| 修改 | `ClaudeAgentService.kt` | 默认模型 → claude-sonnet-4-6 |
+
+#### 阶段 3：application.yml 外部化配置
+
+| 操作 | 文件 | 说明 |
+|------|------|------|
+| 新增 | `web-ide/backend/src/.../config/ModelProperties.kt` | @ConfigurationProperties(prefix="forge.models") |
+| 修改 | `application.yml` | forge.models 配置段：5 提供商 + 模型清单 + 加密密钥 |
+| 重写 | `ClaudeConfig.kt` | 从 ModelProperties 驱动 Adapter 创建，支持 customModels |
+| 修改 | `web-ide/backend/build.gradle.kts` | 添加 configuration-processor |
+| 修改 | 4 个 Adapter | 添加 customModels 可选构造参数 |
+
+#### 阶段 4：用户模型配置全栈（加密存储）
+
+| 操作 | 文件 | 说明 |
+|------|------|------|
+| 新增 | `db/migration/V2__create_user_model_configs.sql` | Flyway 迁移：user_model_configs 表 |
+| 新增 | `entity/UserModelConfigEntity.kt` | JPA 实体 |
+| 新增 | `repository/UserModelConfigRepository.kt` | Spring Data JPA Repository |
+| 新增 | `service/EncryptionService.kt` | AES-256-GCM 加密服务 |
+| 新增 | `service/UserModelConfigService.kt` | 业务逻辑 + 视图层 DTO |
+| 新增 | `controller/UserModelConfigController.kt` | REST API: GET/PUT/DELETE /api/user/model-configs |
+
+#### 阶段 5：前端
+
+| 操作 | 文件 | 说明 |
+|------|------|------|
+| 新增 | `frontend/src/lib/model-api.ts` | 模型 + 用户配置 API 客户端 |
+| 新增 | `frontend/src/components/chat/ModelSelector.tsx` | 模型选择下拉框（按提供商分组） |
+| 新增 | `frontend/src/components/chat/ModelSettingsDialog.tsx` | 用户模型配置弹窗（5 提供商） |
+| 修改 | `frontend/src/components/chat/AiChatSidebar.tsx` | 集成 ModelSelector + Settings 按钮 |
+| 新增 | `controller/ModelController.kt` | REST: GET /api/models, /api/models/providers, /api/models/health |
+
+### 19.3 测试
+
+| 测试文件 | 数量 | 状态 |
+|----------|------|------|
+| `QwenAdapterTest.kt` | 9 | ✅ 全通过 |
+| `GeminiAdapterTest.kt` | 10 | ✅ 全通过 |
+| `ModelRegistryTest.kt` | 12 | ✅ 全通过 |
+| `ClaudeAdapterToolCallingTest.kt` | 11 | ✅ 全通过（模型 ID 更新） |
+| `EncryptionServiceTest.kt` | 9 | ✅ 全通过 |
+| `UserModelConfigServiceTest.kt` | 8 | ✅ 全通过 |
+| **model-adapter 合计** | **42** | ✅ |
+| **backend 新增** | **17** | ✅ |
+| frontend `npm run build` | — | ✅ 零错误 |
+
+### 19.4 Bug 及修复
+
+| Bug | 根因 | 修复 |
+|-----|------|------|
+| BedrockAdapter `converseStream` 不存在 | 同步 client 无 stream 方法 | 改用 sync `converse()` + 伪流式事件 |
+| BedrockAdapter `Number` 类型不匹配 | `putNumber()` 不接受 Kotlin Number | 显式 when 分支 Int/Long/Double/Float |
+| BedrockAdapter `intValueExact()` 不存在 | SdkNumber 无此方法 | 改用 `stringValue()` + parse |
+| ClaudeAdapter `!!` 警告 | 非空断言多余 | 移除 `!!` |
+
+### 19.5 经验沉淀
+
+1. **AWS SDK 同步 vs 异步**：BedrockRuntimeClient（同步）没有 `converseStream`，只有 BedrockRuntimeAsyncClient 才有。但异步 client 引入 CompletableFuture 复杂度，伪流式是更简洁的选择
+2. **Adapter 可配置模型列表**：通过 `customModels: List<ModelInfo>? = null` 参数实现，null 时回退内置默认。最小化侵入现有代码
+3. **AES-256-GCM 加密模式**：每次加密必须使用不同的随机 IV（12 字节），确保相同明文产生不同密文。密文格式 = Base64(iv + ciphertext + authTag)
+
+### 19.6 项目统计快照（Session 19）
+
+| 指标 | 数值 |
+|------|------|
+| 总文件数 | ~345+ |
+| Git Commits | 34+ |
+| Sessions | 19 |
+| 单元测试 | **164**（+17 backend，model-adapter 42） |
+| 模型提供商 | **5**（anthropic, aws-bedrock, google, dashscope, openai） |
+| 模型总数 | **16**（YAML 配置） |
+| Skills 加载 | 32 (5 profiles) |
+| MCP 工具 | 9 |
+| Docker 容器 | 4 |
+| 知识库文档 | 13 |
+| E2E 验收测试 | 87 用例，80/87 通过（92.0%） |
+| Bug 追踪 | 20 个（19 已修复，1 挂起） |
+| Phase 0~1.6 | ✅ 完成 |
+| Sprint 2.3 | ✅ 多模型适配器完成 |
