@@ -2,13 +2,20 @@ package com.forge.webide.service
 
 import com.forge.webide.model.McpContent
 import com.forge.webide.model.McpToolCallResponse
+import com.forge.webide.service.skill.SkillCategory
+import com.forge.webide.service.skill.SkillDefinition
+import com.forge.webide.service.skill.SkillLoader
+import com.forge.webide.service.skill.SkillScript
+import com.forge.webide.service.skill.SkillSubFile
+import com.forge.webide.service.skill.SkillContentType
 import io.mockk.every
 import io.mockk.mockk
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
-import java.io.File
+import java.nio.file.Files
 import java.nio.file.Path
 import javax.sql.DataSource
 
@@ -23,6 +30,7 @@ class McpProxyServiceTest {
     private val baselineService = mockk<BaselineService>(relaxed = true)
     private val dataSource = mockk<DataSource>(relaxed = true)
     private val workspaceService = WorkspaceService()
+    private val skillLoader = mockk<SkillLoader>(relaxed = true)
 
     private lateinit var service: McpProxyService
 
@@ -31,7 +39,7 @@ class McpProxyServiceTest {
 
     @BeforeEach
     fun setup() {
-        service = McpProxyService(baselineService, dataSource, workspaceService)
+        service = McpProxyService(baselineService, dataSource, workspaceService, skillLoader)
     }
 
     // --- Default Tool Tests ---
@@ -40,7 +48,7 @@ class McpProxyServiceTest {
     fun `listTools returns default tools when no servers configured`() {
         val tools = service.listTools()
 
-        assertThat(tools).hasSizeGreaterThanOrEqualTo(9)
+        assertThat(tools).hasSizeGreaterThanOrEqualTo(12) // 9 original + 3 new skill tools
         assertThat(tools.map { it.name }).contains(
             "search_knowledge",
             "read_file",
@@ -50,7 +58,10 @@ class McpProxyServiceTest {
             "list_baselines",
             "workspace_write_file",
             "workspace_read_file",
-            "workspace_list_files"
+            "workspace_list_files",
+            "read_skill",
+            "run_skill_script",
+            "list_skills"
         )
     }
 
@@ -169,9 +180,6 @@ class McpProxyServiceTest {
     fun `callTool search_knowledge with empty query does not reject as missing param`() {
         val result = service.callTool("search_knowledge", mapOf("query" to ""))
 
-        // Empty query is valid — used by Context Picker to list all documents.
-        // In test env, knowledge-base dir may not exist (returns dir-not-found error),
-        // but the important thing is it doesn't reject empty query as "required".
         if (result.isError) {
             assertThat(result.content[0].text).doesNotContain("required")
         }
@@ -193,7 +201,7 @@ class McpProxyServiceTest {
         service.invalidateCache()
 
         val tools = service.listTools()
-        assertThat(tools).hasSizeGreaterThanOrEqualTo(9)
+        assertThat(tools).hasSizeGreaterThanOrEqualTo(12)
     }
 
     // --- Workspace Tool Tests ---
@@ -285,7 +293,6 @@ class McpProxyServiceTest {
         val result = service.callTool("workspace_list_files", emptyMap(), ws.id)
 
         assertThat(result.isError).isFalse()
-        // Default workspace has files like src/index.ts, package.json, etc.
         assertThat(result.content[0].text).contains("src")
         assertThat(result.content[0].text).contains("package.json")
     }
@@ -297,8 +304,249 @@ class McpProxyServiceTest {
             "content" to "test"
         ), null)
 
-        // Without workspaceId, it should fall through to regular callTool which returns unknown tool
         assertThat(result.isError).isTrue()
+    }
+
+    // --- Skill Tool Tests (Phase 4) ---
+
+    @Nested
+    inner class ReadSkillTool {
+
+        @Test
+        fun `read_skill returns SKILL_md content for valid skill`() {
+            every { skillLoader.loadSkill("code-generation") } returns SkillDefinition(
+                name = "code-generation",
+                description = "Code generation skill",
+                content = "# Code Generation\n\nDesign-first approach.",
+                sourcePath = "${tempDir}/forge-superagent/skills/code-generation/SKILL.md",
+                category = SkillCategory.DELIVERY
+            )
+
+            val result = service.callTool("read_skill", mapOf("skill_name" to "code-generation"))
+
+            assertThat(result.isError).isFalse()
+            assertThat(result.content[0].text).contains("Code Generation")
+            assertThat(result.content[0].text).contains("Design-first approach")
+        }
+
+        @Test
+        fun `read_skill returns error for unknown skill`() {
+            every { skillLoader.loadSkill("nonexistent") } returns null
+
+            val result = service.callTool("read_skill", mapOf("skill_name" to "nonexistent"))
+
+            assertThat(result.isError).isTrue()
+            assertThat(result.content[0].text).contains("not found")
+        }
+
+        @Test
+        fun `read_skill requires skill_name parameter`() {
+            val result = service.callTool("read_skill", emptyMap())
+
+            assertThat(result.isError).isTrue()
+            assertThat(result.content[0].text).contains("skill_name")
+        }
+
+        @Test
+        fun `read_skill prevents path traversal in file parameter`() {
+            val result = service.callTool("read_skill", mapOf(
+                "skill_name" to "code-generation",
+                "file" to "../../../etc/passwd"
+            ))
+
+            assertThat(result.isError).isTrue()
+            assertThat(result.content[0].text).containsIgnoringCase("path traversal")
+        }
+
+        @Test
+        fun `read_skill reads sub-file from skill directory`() {
+            // Create a skill directory with a sub-file
+            val skillDir = tempDir.resolve("test-skill")
+            Files.createDirectories(skillDir.resolve("examples"))
+            Files.writeString(skillDir.resolve("SKILL.md"), "# Test Skill")
+            Files.writeString(skillDir.resolve("examples/pattern.md"), "# Pattern Example\n\nSample code here.")
+
+            every { skillLoader.loadSkill("test-skill") } returns SkillDefinition(
+                name = "test-skill",
+                description = "Test",
+                content = "# Test Skill",
+                sourcePath = "${skillDir}/SKILL.md",
+                subFiles = listOf(SkillSubFile("examples/pattern.md", "Pattern example", SkillContentType.EXAMPLE))
+            )
+
+            val result = service.callTool("read_skill", mapOf(
+                "skill_name" to "test-skill",
+                "file" to "examples/pattern.md"
+            ))
+
+            assertThat(result.isError).isFalse()
+            assertThat(result.content[0].text).contains("Pattern Example")
+            assertThat(result.content[0].text).contains("Sample code here")
+        }
+    }
+
+    @Nested
+    inner class ListSkillsTool {
+
+        @Test
+        fun `list_skills returns all skills metadata`() {
+            every { skillLoader.loadSkillMetadataCatalog(null, null) } returns listOf(
+                SkillDefinition(
+                    name = "kotlin-conventions",
+                    description = "Kotlin conventions",
+                    content = "",
+                    sourcePath = "test",
+                    category = SkillCategory.FOUNDATION,
+                    version = "1.0"
+                ),
+                SkillDefinition(
+                    name = "code-generation",
+                    description = "Code generation",
+                    content = "",
+                    sourcePath = "test",
+                    category = SkillCategory.DELIVERY,
+                    scripts = listOf(SkillScript("scripts/check.py", "Check code", "python"))
+                )
+            )
+
+            val result = service.callTool("list_skills", emptyMap())
+
+            assertThat(result.isError).isFalse()
+            assertThat(result.content[0].text).contains("kotlin-conventions")
+            assertThat(result.content[0].text).contains("code-generation")
+            assertThat(result.content[0].text).contains("foundation")
+            assertThat(result.content[0].text).contains("delivery")
+            assertThat(result.content[0].text).contains("scripts/check.py")
+        }
+
+        @Test
+        fun `list_skills filters by category`() {
+            every { skillLoader.loadSkillMetadataCatalog(null, SkillCategory.FOUNDATION) } returns listOf(
+                SkillDefinition(
+                    name = "kotlin-conventions",
+                    description = "Kotlin conventions",
+                    content = "",
+                    sourcePath = "test",
+                    category = SkillCategory.FOUNDATION
+                )
+            )
+
+            val result = service.callTool("list_skills", mapOf("category" to "FOUNDATION"))
+
+            assertThat(result.isError).isFalse()
+            assertThat(result.content[0].text).contains("kotlin-conventions")
+            assertThat(result.content[0].text).contains("1") // count
+        }
+
+        @Test
+        fun `list_skills returns error for invalid category`() {
+            val result = service.callTool("list_skills", mapOf("category" to "INVALID"))
+
+            assertThat(result.isError).isTrue()
+            assertThat(result.content[0].text).contains("Invalid category")
+        }
+    }
+
+    @Nested
+    inner class RunSkillScriptTool {
+
+        @Test
+        fun `run_skill_script requires skill_name parameter`() {
+            val result = service.callTool("run_skill_script", mapOf("script" to "scripts/check.py"))
+
+            assertThat(result.isError).isTrue()
+            assertThat(result.content[0].text).contains("skill_name")
+        }
+
+        @Test
+        fun `run_skill_script requires script parameter`() {
+            val result = service.callTool("run_skill_script", mapOf("skill_name" to "test"))
+
+            assertThat(result.isError).isTrue()
+            assertThat(result.content[0].text).contains("script")
+        }
+
+        @Test
+        fun `run_skill_script prevents path traversal`() {
+            val result = service.callTool("run_skill_script", mapOf(
+                "skill_name" to "test",
+                "script" to "../../../malicious.py"
+            ))
+
+            assertThat(result.isError).isTrue()
+            assertThat(result.content[0].text).containsIgnoringCase("path traversal")
+        }
+
+        @Test
+        fun `run_skill_script returns error for unknown skill`() {
+            every { skillLoader.loadSkill("nonexistent") } returns null
+
+            val result = service.callTool("run_skill_script", mapOf(
+                "skill_name" to "nonexistent",
+                "script" to "scripts/check.py"
+            ))
+
+            assertThat(result.isError).isTrue()
+            assertThat(result.content[0].text).contains("not found")
+        }
+
+        @Test
+        fun `run_skill_script returns error when script not in skill definition`() {
+            every { skillLoader.loadSkill("test-skill") } returns SkillDefinition(
+                name = "test-skill",
+                description = "Test",
+                content = "",
+                sourcePath = "${tempDir}/test/SKILL.md",
+                scripts = emptyList()
+            )
+
+            val result = service.callTool("run_skill_script", mapOf(
+                "skill_name" to "test-skill",
+                "script" to "scripts/unknown.py"
+            ))
+
+            assertThat(result.isError).isTrue()
+            assertThat(result.content[0].text).contains("not found")
+        }
+    }
+
+    // --- Skill Tool Definition Tests ---
+
+    @Test
+    fun `read_skill tool has proper schema`() {
+        val tools = service.listTools()
+        val readSkill = tools.first { it.name == "read_skill" }
+
+        assertThat(readSkill.description).contains("SKILL.md")
+        @Suppress("UNCHECKED_CAST")
+        val properties = readSkill.inputSchema["properties"] as Map<String, Any?>
+        assertThat(properties).containsKey("skill_name")
+        assertThat(properties).containsKey("file")
+    }
+
+    @Test
+    fun `run_skill_script tool has proper schema`() {
+        val tools = service.listTools()
+        val runScript = tools.first { it.name == "run_skill_script" }
+
+        assertThat(runScript.description).contains("script")
+        @Suppress("UNCHECKED_CAST")
+        val properties = runScript.inputSchema["properties"] as Map<String, Any?>
+        assertThat(properties).containsKey("skill_name")
+        assertThat(properties).containsKey("script")
+        assertThat(properties).containsKey("args")
+    }
+
+    @Test
+    fun `list_skills tool has proper schema`() {
+        val tools = service.listTools()
+        val listSkills = tools.first { it.name == "list_skills" }
+
+        assertThat(listSkills.description).contains("metadata")
+        @Suppress("UNCHECKED_CAST")
+        val properties = listSkills.inputSchema["properties"] as Map<String, Any?>
+        assertThat(properties).containsKey("profile")
+        assertThat(properties).containsKey("category")
     }
 
     // --- formatResult Tests ---

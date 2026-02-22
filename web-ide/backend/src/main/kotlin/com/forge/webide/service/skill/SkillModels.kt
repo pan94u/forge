@@ -1,7 +1,43 @@
 package com.forge.webide.service.skill
 
 /**
+ * Skill category determines management behavior:
+ * - SYSTEM: core agent instructions, cannot be disabled
+ * - FOUNDATION: language/framework conventions, can be disabled
+ * - DELIVERY: delivery stage skills, can be disabled
+ * - KNOWLEDGE: domain knowledge skills, can be disabled
+ * - CUSTOM: user-created skills, can be created/modified/deleted
+ */
+enum class SkillCategory { SYSTEM, FOUNDATION, DELIVERY, KNOWLEDGE, CUSTOM }
+
+enum class SkillContentType { REFERENCE, EXAMPLE, TEMPLATE, SCRIPT }
+
+/**
+ * A sub-file within a Skill directory (Level 3 content).
+ */
+data class SkillSubFile(
+    val path: String,
+    val description: String,
+    val type: SkillContentType
+)
+
+/**
+ * An executable script within a Skill's scripts/ directory.
+ */
+data class SkillScript(
+    val path: String,
+    val description: String,
+    val language: String,
+    val executionHint: String = "run"
+)
+
+/**
  * A loaded Skill definition parsed from a SKILL.md file.
+ *
+ * Supports 3-level progressive disclosure (Anthropic Agent Skills standard):
+ * - Level 1: Metadata (name + description) — always in system prompt
+ * - Level 2: SKILL.md content — read on-demand via read_skill tool
+ * - Level 3: Sub-files + scripts — read/executed on-demand
  */
 data class SkillDefinition(
     val name: String,
@@ -11,7 +47,15 @@ data class SkillDefinition(
     val stage: String? = null,
     val type: String? = null,
     val content: String,
-    val sourcePath: String
+    val sourcePath: String,
+    // Progressive disclosure extensions
+    val version: String = "1.0",
+    val author: String = "",
+    val category: SkillCategory = SkillCategory.CUSTOM,
+    val subFiles: List<SkillSubFile> = emptyList(),
+    val scripts: List<SkillScript> = emptyList(),
+    val enabled: Boolean = true,
+    val isUserCreated: Boolean = false
 ) {
     /** Check if this skill matches a given profile by stage mapping. */
     fun matchesProfile(profileName: String): Boolean {

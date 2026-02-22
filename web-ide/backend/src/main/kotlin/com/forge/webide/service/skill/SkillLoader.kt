@@ -14,6 +14,11 @@ import java.util.concurrent.ConcurrentHashMap
 /**
  * Loads Skill and Profile definitions from the plugins directory.
  *
+ * Supports 3-level progressive disclosure (Anthropic Agent Skills standard):
+ * - Level 1: Metadata (name + description) — injected into system prompt
+ * - Level 2: SKILL.md content — served on-demand via read_skill MCP tool
+ * - Level 3: Sub-files + scripts — served/executed on-demand
+ *
  * Scans:
  * - `{base-path}/forge-foundation/skills/{name}/SKILL.md` (Foundation Skills)
  * - `{base-path}/forge-superagent/skills/{name}/SKILL.md` (Delivery Skills)
@@ -60,6 +65,9 @@ class SkillLoader(
      *
      * Additionally loads skills whose tags match keywords in the user message,
      * filtered by stage compatibility with the current profile.
+     *
+     * Phase 4: No longer applies content-based pruning. System prompt only contains
+     * metadata (~100 tokens/skill), so all matching skills are returned.
      */
     fun loadSkillsForProfile(profile: ProfileDefinition, message: String = ""): List<SkillDefinition> {
         val totalSkillCount = skillCache.size
@@ -93,47 +101,32 @@ class SkillLoader(
             }
         }
 
-        val filtered = result.distinctBy { it.name }
+        // 3. Filter to enabled + unique skills only
+        val filtered = result
+            .filter { it.enabled }
+            .distinctBy { it.name }
 
         logger.info("Filtering skills for profile: {}", profile.name)
         logger.info("Loaded {} skills (filtered from {})", filtered.size, totalSkillCount)
 
-        // Guard: cap total skill content to avoid rate limit (30K tokens ≈ 80K chars)
-        // Profile-specific skills are kept first, foundation skills are pruned if over budget
-        val maxContentChars = 60_000
-        val totalChars = filtered.sumOf { it.content.length }
-        if (totalChars > maxContentChars) {
-            logger.warn("Skill content {} chars exceeds {}. Pruning foundation skills.", totalChars, maxContentChars)
-            // Partition: profile-specific skills first, foundation skills second
-            val profileSkills = filtered.filter { !it.sourcePath.contains("forge-foundation") }
-            val foundationSkills = filtered.filter { it.sourcePath.contains("forge-foundation") }
-                .sortedByDescending { skill ->
-                    // Prioritize skills whose name appears in the message
-                    val nameWords = skill.name.split("-")
-                    nameWords.count { message.lowercase().contains(it.lowercase()) }
-                }
+        return filtered
+    }
 
-            val kept = mutableListOf<SkillDefinition>()
-            var charBudget = maxContentChars
+    /**
+     * Return metadata-only catalog of all skills (Level 1).
+     * Used by the list_skills MCP tool.
+     */
+    fun loadSkillMetadataCatalog(profileName: String? = null, category: SkillCategory? = null): List<SkillDefinition> {
+        var skills = skillCache.values.toList()
 
-            // Always keep profile-specific skills
-            for (skill in profileSkills) {
-                kept.add(skill)
-                charBudget -= skill.content.length
-            }
-
-            // Fill remaining budget with most relevant foundation skills
-            for (skill in foundationSkills) {
-                if (charBudget - skill.content.length < 0) break
-                kept.add(skill)
-                charBudget -= skill.content.length
-            }
-
-            logger.info("Pruned from {} to {} skills ({} chars)", filtered.size, kept.size, maxContentChars - charBudget)
-            return kept
+        if (profileName != null) {
+            skills = skills.filter { it.matchesProfile(profileName) }
+        }
+        if (category != null) {
+            skills = skills.filter { it.category == category }
         }
 
-        return filtered
+        return skills.sortedBy { it.name }
     }
 
     /**
@@ -148,6 +141,14 @@ class SkillLoader(
             }
             tagMatch && skill.matchesProfile(profileName)
         }
+    }
+
+    /**
+     * Resolve the base plugins directory path.
+     */
+    fun resolvePluginsPath(): Path {
+        val path = Paths.get(basePath)
+        return if (path.isAbsolute) path else Paths.get(System.getProperty("user.dir")).resolve(path)
     }
 
     fun reloadAll() {
@@ -193,11 +194,6 @@ class SkillLoader(
         )
     }
 
-    private fun resolvePluginsPath(): Path {
-        val path = Paths.get(basePath)
-        return if (path.isAbsolute) path else Paths.get(System.getProperty("user.dir")).resolve(path)
-    }
-
     private fun loadSkillsFromDirectory(skillsRoot: Path) {
         try {
             Files.list(skillsRoot)
@@ -208,7 +204,8 @@ class SkillLoader(
                         try {
                             val skill = parseSkillFile(skillFile)
                             skillCache[skill.name] = skill
-                            logger.debug("Loaded skill: {} from {}", skill.name, skillFile)
+                            logger.debug("Loaded skill: {} (category={}, subFiles={}, scripts={})",
+                                skill.name, skill.category, skill.subFiles.size, skill.scripts.size)
                         } catch (e: Exception) {
                             logger.warn("Failed to parse skill file {}: {}", skillFile, e.message)
                         }
@@ -250,6 +247,8 @@ class SkillLoader(
         val trigger = yamlMap["trigger"]?.toString()
         val stage = yamlMap["stage"]?.toString()
         val type = yamlMap["type"]?.toString()
+        val version = yamlMap["version"]?.toString() ?: "1.0"
+        val author = yamlMap["author"]?.toString() ?: ""
 
         @Suppress("UNCHECKED_CAST")
         val tags: List<String> = when (val tagsVal = yamlMap["tags"]) {
@@ -257,6 +256,14 @@ class SkillLoader(
             is String -> tagsVal.split(",").map { it.trim() }
             else -> emptyList()
         }
+
+        // Auto-detect category from frontmatter or source path
+        val category = detectCategory(yamlMap["category"]?.toString(), path)
+
+        // Scan sub-directories for Level 3 content
+        val skillDir = path.parent
+        val subFiles = scanSubFiles(skillDir)
+        val scripts = scanScripts(skillDir)
 
         return SkillDefinition(
             name = name,
@@ -266,8 +273,142 @@ class SkillLoader(
             stage = stage,
             type = type,
             content = body.trim(),
-            sourcePath = path.toString()
+            sourcePath = path.toString(),
+            version = version,
+            author = author,
+            category = category,
+            subFiles = subFiles,
+            scripts = scripts
         )
+    }
+
+    /**
+     * Detect skill category from frontmatter value or source path.
+     */
+    private fun detectCategory(frontmatterCategory: String?, path: Path): SkillCategory {
+        // Explicit frontmatter value takes precedence
+        if (!frontmatterCategory.isNullOrBlank()) {
+            return try {
+                SkillCategory.valueOf(frontmatterCategory.uppercase())
+            } catch (e: IllegalArgumentException) {
+                logger.warn("Unknown skill category '{}' in {}, falling back to auto-detect", frontmatterCategory, path)
+                detectCategoryFromPath(path)
+            }
+        }
+        return detectCategoryFromPath(path)
+    }
+
+    private fun detectCategoryFromPath(path: Path): SkillCategory {
+        val pathStr = path.toString()
+        return when {
+            pathStr.contains("forge-foundation") -> SkillCategory.FOUNDATION
+            pathStr.contains("forge-superagent") -> SkillCategory.DELIVERY
+            pathStr.contains("forge-deployment") -> SkillCategory.DELIVERY
+            pathStr.contains("forge-knowledge") -> SkillCategory.KNOWLEDGE
+            else -> SkillCategory.CUSTOM
+        }
+    }
+
+    /**
+     * Scan a skill directory for sub-files in standard directories:
+     * examples/, reference/, templates/, patterns/
+     */
+    private fun scanSubFiles(skillDir: Path): List<SkillSubFile> {
+        val subDirMappings = mapOf(
+            "examples" to SkillContentType.EXAMPLE,
+            "reference" to SkillContentType.REFERENCE,
+            "templates" to SkillContentType.TEMPLATE,
+            "patterns" to SkillContentType.REFERENCE
+        )
+
+        val result = mutableListOf<SkillSubFile>()
+
+        for ((dirName, contentType) in subDirMappings) {
+            val subDir = skillDir.resolve(dirName)
+            if (Files.isDirectory(subDir)) {
+                try {
+                    Files.list(subDir)
+                        .filter { Files.isRegularFile(it) && it.toString().endsWith(".md") }
+                        .forEach { file ->
+                            val relativePath = "$dirName/${file.fileName}"
+                            val desc = extractFirstLineDescription(file)
+                            result.add(SkillSubFile(relativePath, desc, contentType))
+                        }
+                } catch (e: Exception) {
+                    logger.debug("Failed to scan sub-directory {}: {}", subDir, e.message)
+                }
+            }
+        }
+
+        return result
+    }
+
+    /**
+     * Scan a skill directory for executable scripts in scripts/.
+     */
+    private fun scanScripts(skillDir: Path): List<SkillScript> {
+        val scriptsDir = skillDir.resolve("scripts")
+        if (!Files.isDirectory(scriptsDir)) return emptyList()
+
+        val scriptExtensions = mapOf(
+            "py" to "python",
+            "sh" to "bash",
+            "kt" to "kotlin",
+            "kts" to "kotlin"
+        )
+
+        val result = mutableListOf<SkillScript>()
+
+        try {
+            Files.list(scriptsDir)
+                .filter { Files.isRegularFile(it) }
+                .forEach { file ->
+                    val ext = file.fileName.toString().substringAfterLast('.', "")
+                    val language = scriptExtensions[ext]
+                    if (language != null) {
+                        val relativePath = "scripts/${file.fileName}"
+                        val desc = extractFirstLineDescription(file)
+                        result.add(SkillScript(
+                            path = relativePath,
+                            description = desc,
+                            language = language
+                        ))
+                    }
+                }
+        } catch (e: Exception) {
+            logger.debug("Failed to scan scripts directory {}: {}", scriptsDir, e.message)
+        }
+
+        return result
+    }
+
+    /**
+     * Extract a description from the first comment line of a file.
+     * Supports # comments (Python/Bash/YAML) and // comments (Kotlin).
+     * Falls back to the filename without extension.
+     */
+    private fun extractFirstLineDescription(path: Path): String {
+        return try {
+            val firstLines = Files.readAllLines(path).take(3)
+            for (line in firstLines) {
+                val trimmed = line.trim()
+                // Python/Bash/Markdown: # comment
+                if (trimmed.startsWith("# ") && !trimmed.startsWith("# !")) {
+                    return trimmed.removePrefix("# ").trim()
+                }
+                // Kotlin/Java: // comment
+                if (trimmed.startsWith("// ")) {
+                    return trimmed.removePrefix("// ").trim()
+                }
+                // Python docstring: """...""" or triple-quoted
+                if (trimmed.startsWith("\"\"\"") && trimmed.endsWith("\"\"\"") && trimmed.length > 6) {
+                    return trimmed.removeSurrounding("\"\"\"").trim()
+                }
+            }
+            path.fileName.toString().substringBeforeLast('.')
+        } catch (e: Exception) {
+            path.fileName.toString().substringBeforeLast('.')
+        }
     }
 
     internal fun parseProfileFile(path: Path): ProfileDefinition {

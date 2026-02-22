@@ -8,13 +8,16 @@ import org.springframework.stereotype.Service
  * Assembles a dynamic system prompt from a Profile, its loaded Skills,
  * and the SuperAgent instructions.
  *
+ * Phase 4: Only injects Level 1 metadata (name + description) for each skill.
+ * Full skill content is served on-demand via read_skill MCP tool.
+ *
  * Structure:
  * [1] SuperAgent role definition (core paragraphs from CLAUDE.md)
  * [2] Current Profile OODA guidance
- * [3] Loaded Skills content (each as an independent section)
+ * [3] Available Skills metadata (name + description only)
  * [4] Baseline execution rules
  * [5] HITL checkpoint rules
- * [6] Available MCP tools list
+ * [6] Available MCP tools list + progressive loading protocol
  */
 @Service
 class SystemPromptAssembler(
@@ -60,9 +63,11 @@ Always be concise but thorough in your responses."""
         // [2] Active profile context
         sections.add(buildProfileSection(profile))
 
-        // [3] Loaded skills
-        val skillsSections = buildSkillsSections(skills)
-        sections.addAll(skillsSections)
+        // [3] Available Skills — Level 1 metadata only
+        val skillsSection = buildSkillsSections(skills)
+        if (skillsSection.isNotBlank()) {
+            sections.add(skillsSection)
+        }
 
         // [4] Baseline rules
         if (profile.baselines.isNotEmpty()) {
@@ -74,7 +79,7 @@ Always be concise but thorough in your responses."""
             sections.add(buildHitlSection(profile))
         }
 
-        // [6] Available MCP tools
+        // [6] Available MCP tools + progressive loading protocol
         val toolsSection = buildToolsSection()
         if (toolsSection.isNotBlank()) {
             sections.add(toolsSection)
@@ -82,13 +87,13 @@ Always be concise but thorough in your responses."""
 
         val assembled = sections.joinToString("\n\n---\n\n")
 
-        // Truncate if exceeding limit
+        // Truncate if exceeding limit (unlikely with metadata-only skills)
         if (assembled.length > MAX_PROMPT_CHARS) {
             logger.warn(
-                "Assembled prompt exceeds limit ({} chars > {}), truncating skills",
+                "Assembled prompt exceeds limit ({} chars > {}), truncating",
                 assembled.length, MAX_PROMPT_CHARS
             )
-            return truncatePrompt(profile, skills, superAgentIntro)
+            return assembled.take(MAX_PROMPT_CHARS)
         }
 
         logger.debug(
@@ -160,10 +165,30 @@ Always be concise but thorough in your responses."""
         return sb.toString().trim()
     }
 
-    private fun buildSkillsSections(skills: List<SkillDefinition>): List<String> {
-        return skills.map { skill ->
-            "## Skill: ${skill.name}\n\n${skill.content}"
+    /**
+     * Build skills section with Level 1 metadata only.
+     * Full content is served on-demand via read_skill MCP tool.
+     */
+    private fun buildSkillsSections(skills: List<SkillDefinition>): String {
+        if (skills.isEmpty()) return ""
+
+        val sb = StringBuilder()
+        sb.appendLine("## Available Skills")
+        sb.appendLine()
+        sb.appendLine("以下 Skills 已为当前 Profile 加载。使用 `read_skill` 工具读取详细指南，使用 `run_skill_script` 执行脚本。")
+        sb.appendLine()
+
+        for (skill in skills) {
+            sb.appendLine("- **${skill.name}** [${skill.category.name.lowercase()}]: ${skill.description}")
+            if (skill.subFiles.isNotEmpty()) {
+                sb.appendLine("  Sub-files: ${skill.subFiles.joinToString(", ") { it.path }}")
+            }
+            if (skill.scripts.isNotEmpty()) {
+                sb.appendLine("  Scripts: ${skill.scripts.joinToString(", ") { it.path }}")
+            }
         }
+
+        return sb.toString().trim()
     }
 
     private fun buildBaselineSection(profile: ProfileDefinition): String {
@@ -201,6 +226,17 @@ Always be concise but thorough in your responses."""
             for (tool in tools) {
                 sb.appendLine("- **${tool.name}**: ${tool.description}")
             }
+
+            // Progressive loading protocol
+            sb.appendLine()
+            sb.appendLine("### Skill 渐进式使用协议")
+            sb.appendLine()
+            sb.appendLine("1. **发现**: 从 Available Skills 列表了解有哪些 Skill 可用")
+            sb.appendLine("2. **选择**: 根据任务需求选择相关 Skill")
+            sb.appendLine("3. **读取**: 使用 `read_skill(skill_name)` 读取 SKILL.md 核心指南")
+            sb.appendLine("4. **深入**: 如需详细示例或参考，读取子文件 `read_skill(skill_name, \"examples/xxx.md\")`")
+            sb.appendLine("5. **执行**: 如 Skill 提供脚本，使用 `run_skill_script` 执行确定性操作")
+            sb.appendLine("6. **原则**: 不要猜测 Skill 内容，始终先 read 再使用")
 
             // Add delivery behavior guidance for workspace tools
             val hasWorkspaceTools = tools.any { it.name == "workspace_write_file" }
@@ -254,33 +290,5 @@ Always be concise but thorough in your responses."""
             logger.debug("Could not load MCP tools for prompt: {}", e.message)
             ""
         }
-    }
-
-    /**
-     * Truncate by dropping low-priority skill content until under the limit.
-     */
-    private fun truncatePrompt(
-        profile: ProfileDefinition,
-        skills: List<SkillDefinition>,
-        roleDefinition: String
-    ): String {
-        val sections = mutableListOf<String>()
-        if (roleDefinition.isNotBlank()) sections.add(roleDefinition)
-        sections.add(buildProfileSection(profile))
-
-        var currentLength = sections.sumOf { it.length }
-
-        // Add skills in order until we'd exceed the limit
-        for (skill in skills) {
-            val skillSection = "## Skill: ${skill.name}\n\n${skill.content}"
-            if (currentLength + skillSection.length + 10 > MAX_PROMPT_CHARS) {
-                sections.add("## Note: Some skills were truncated due to prompt size limits.")
-                break
-            }
-            sections.add(skillSection)
-            currentLength += skillSection.length + 10
-        }
-
-        return sections.joinToString("\n\n---\n\n")
     }
 }

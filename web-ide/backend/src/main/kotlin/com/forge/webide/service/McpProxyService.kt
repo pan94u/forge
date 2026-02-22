@@ -5,12 +5,17 @@ import com.forge.webide.model.FileType
 import com.forge.webide.model.McpContent
 import com.forge.webide.model.McpTool
 import com.forge.webide.model.McpToolCallResponse
+import com.forge.webide.service.skill.SkillCategory
+import com.forge.webide.service.skill.SkillLoader
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
 import org.springframework.web.reactive.function.client.WebClient
 import java.io.File
+import java.nio.file.Files
+import java.nio.file.Path
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.TimeUnit
 import javax.sql.DataSource
 
 /**
@@ -29,7 +34,8 @@ import javax.sql.DataSource
 class McpProxyService(
     private val baselineService: BaselineService,
     private val dataSource: DataSource,
-    private val workspaceService: WorkspaceService
+    private val workspaceService: WorkspaceService,
+    private val skillLoader: SkillLoader
 ) {
 
     private val logger = LoggerFactory.getLogger(McpProxyService::class.java)
@@ -529,10 +535,13 @@ class McpProxyService(
                 "run_baseline" -> handleRunBaseline(arguments)
                 "query_schema" -> handleQuerySchema(arguments)
                 "list_baselines" -> handleListBaselines()
+                "read_skill" -> handleReadSkill(arguments)
+                "run_skill_script" -> handleRunSkillScript(arguments)
+                "list_skills" -> handleListSkills(arguments)
                 else -> McpToolCallResponse(
                     content = listOf(McpContent(
                         type = "text",
-                        text = "Unknown tool: $toolName. Available tools: search_knowledge, read_file, get_service_info, run_baseline, query_schema, list_baselines"
+                        text = "Unknown tool: $toolName. Available tools: search_knowledge, read_file, get_service_info, run_baseline, query_schema, list_baselines, read_skill, run_skill_script, list_skills"
                     )),
                     isError = true
                 )
@@ -870,6 +879,209 @@ class McpProxyService(
         }
     }
 
+    // ---- Skill progressive loading tools (Phase 4) ----
+
+    /**
+     * Read a skill's SKILL.md or sub-file content (Level 2 + Level 3).
+     */
+    private fun handleReadSkill(arguments: Map<String, Any?>): McpToolCallResponse {
+        val skillName = arguments["skill_name"] as? String
+            ?: return errorResponse("'skill_name' parameter is required")
+
+        val file = arguments["file"] as? String ?: "SKILL.md"
+
+        // Security: prevent path traversal
+        if (file.contains("..")) {
+            return errorResponse("Path traversal not allowed")
+        }
+
+        val skill = skillLoader.loadSkill(skillName)
+            ?: return errorResponse("Skill '$skillName' not found. Use list_skills to see available skills.")
+
+        // If requesting SKILL.md, return the cached content directly
+        if (file == "SKILL.md") {
+            return McpToolCallResponse(
+                content = listOf(McpContent(type = "text", text = skill.content)),
+                isError = false
+            )
+        }
+
+        // For sub-files, resolve from the skill's source directory
+        val skillDir = Path.of(skill.sourcePath).parent
+        val targetFile = skillDir.resolve(file)
+
+        // Security: ensure resolved path is within skill directory
+        val normalizedTarget = targetFile.normalize()
+        val normalizedSkillDir = skillDir.normalize()
+        if (!normalizedTarget.startsWith(normalizedSkillDir)) {
+            return errorResponse("Path traversal not allowed: file must be within skill directory")
+        }
+
+        if (!Files.isRegularFile(targetFile)) {
+            val availableFiles = skill.subFiles.map { it.path } + skill.scripts.map { it.path }
+            return errorResponse(
+                "File '$file' not found in skill '$skillName'. " +
+                    "Available files: ${availableFiles.joinToString(", ").ifEmpty { "none" }}"
+            )
+        }
+
+        val content = try {
+            val raw = Files.readString(targetFile)
+            if (raw.length > 50_000) {
+                raw.take(50_000) + "\n\n[... truncated at 50KB ...]"
+            } else {
+                raw
+            }
+        } catch (e: Exception) {
+            return errorResponse("Failed to read file: ${e.message}")
+        }
+
+        return McpToolCallResponse(
+            content = listOf(McpContent(type = "text", text = content)),
+            isError = false
+        )
+    }
+
+    /**
+     * Execute a skill's script and return stdout + exitCode (Level 3).
+     * Script code does NOT enter context — only the output does.
+     */
+    private fun handleRunSkillScript(arguments: Map<String, Any?>): McpToolCallResponse {
+        val skillName = arguments["skill_name"] as? String
+            ?: return errorResponse("'skill_name' parameter is required")
+
+        val scriptPath = arguments["script"] as? String
+            ?: return errorResponse("'script' parameter is required (e.g. 'scripts/validate.py')")
+
+        // Security: prevent path traversal
+        if (scriptPath.contains("..")) {
+            return errorResponse("Path traversal not allowed")
+        }
+
+        val skill = skillLoader.loadSkill(skillName)
+            ?: return errorResponse("Skill '$skillName' not found")
+
+        // Verify script exists in skill definition
+        val scriptDef = skill.scripts.find { it.path == scriptPath }
+            ?: return errorResponse(
+                "Script '$scriptPath' not found in skill '$skillName'. " +
+                    "Available scripts: ${skill.scripts.joinToString(", ") { it.path }.ifEmpty { "none" }}"
+            )
+
+        val skillDir = Path.of(skill.sourcePath).parent
+        val scriptFile = skillDir.resolve(scriptPath)
+
+        // Security: ensure resolved path is within skill directory
+        val normalizedScript = scriptFile.normalize()
+        val normalizedSkillDir = skillDir.normalize()
+        if (!normalizedScript.startsWith(normalizedSkillDir)) {
+            return errorResponse("Path traversal not allowed")
+        }
+
+        if (!Files.isRegularFile(scriptFile)) {
+            return errorResponse("Script file not found: $scriptPath")
+        }
+
+        // Build command based on language
+        val command = when (scriptDef.language) {
+            "python" -> listOf("python3", scriptFile.toString())
+            "bash" -> listOf("bash", scriptFile.toString())
+            "kotlin" -> listOf("kotlin", scriptFile.toString())
+            else -> return errorResponse("Unsupported script language: ${scriptDef.language}")
+        }
+
+        // Add optional args
+        @Suppress("UNCHECKED_CAST")
+        val args = when (val argsVal = arguments["args"]) {
+            is List<*> -> argsVal.filterIsInstance<String>()
+            is String -> argsVal.split(" ")
+            else -> emptyList()
+        }
+
+        val fullCommand = command + args
+
+        return try {
+            logger.info("Executing skill script: {} (skill={})", scriptPath, skillName)
+            val process = ProcessBuilder(fullCommand)
+                .directory(skillDir.toFile())
+                .redirectErrorStream(false)
+                .start()
+
+            val completed = process.waitFor(60, TimeUnit.SECONDS)
+            if (!completed) {
+                process.destroyForcibly()
+                return errorResponse("Script execution timed out after 60 seconds")
+            }
+
+            val stdout = process.inputStream.bufferedReader().readText().take(50_000)
+            val stderr = process.errorStream.bufferedReader().readText().take(10_000)
+            val exitCode = process.exitValue()
+
+            val output = buildString {
+                appendLine("Script: $scriptPath")
+                appendLine("Exit code: $exitCode")
+                if (stdout.isNotBlank()) {
+                    appendLine()
+                    appendLine("Output:")
+                    appendLine(stdout)
+                }
+                if (stderr.isNotBlank()) {
+                    appendLine()
+                    appendLine("Errors:")
+                    appendLine(stderr)
+                }
+            }
+
+            McpToolCallResponse(
+                content = listOf(McpContent(type = "text", text = output)),
+                isError = exitCode != 0
+            )
+        } catch (e: Exception) {
+            logger.error("Script execution failed: skill={}, script={}: {}", skillName, scriptPath, e.message)
+            errorResponse("Script execution failed: ${e.message}")
+        }
+    }
+
+    /**
+     * List all available skills with metadata (Level 1 query).
+     */
+    private fun handleListSkills(arguments: Map<String, Any?>): McpToolCallResponse {
+        val profileFilter = arguments["profile"] as? String
+        val categoryFilter = arguments["category"] as? String
+
+        val category = if (!categoryFilter.isNullOrBlank()) {
+            try {
+                SkillCategory.valueOf(categoryFilter.uppercase())
+            } catch (e: IllegalArgumentException) {
+                return errorResponse("Invalid category: $categoryFilter. Valid: ${SkillCategory.entries.joinToString()}")
+            }
+        } else null
+
+        val skills = skillLoader.loadSkillMetadataCatalog(profileFilter, category)
+
+        val output = buildString {
+            appendLine("Available Skills (${skills.size}):")
+            appendLine()
+            for (skill in skills) {
+                appendLine("- **${skill.name}** [${skill.category.name.lowercase()}]")
+                appendLine("  ${skill.description}")
+                if (skill.subFiles.isNotEmpty()) {
+                    appendLine("  Sub-files: ${skill.subFiles.joinToString(", ") { it.path }}")
+                }
+                if (skill.scripts.isNotEmpty()) {
+                    appendLine("  Scripts: ${skill.scripts.joinToString(", ") { "${it.path} (${it.language})" }}")
+                }
+                appendLine("  Version: ${skill.version} | Enabled: ${skill.enabled}")
+                appendLine()
+            }
+        }
+
+        return McpToolCallResponse(
+            content = listOf(McpContent(type = "text", text = output)),
+            isError = false
+        )
+    }
+
     // ---- Tool definitions ----
 
     private fun getDefaultTools(): List<McpTool> {
@@ -970,6 +1182,42 @@ class McpProxyService(
                 inputSchema = mapOf(
                     "type" to "object",
                     "properties" to mapOf<String, Any>()
+                )
+            ),
+            McpTool(
+                name = "read_skill",
+                description = "Read a skill's SKILL.md guide or sub-file content. Use this to load detailed skill instructions before applying them. Pass only skill_name to read the main guide, or specify a file path (e.g. 'examples/pattern.md') to read a sub-file.",
+                inputSchema = mapOf(
+                    "type" to "object",
+                    "properties" to mapOf(
+                        "skill_name" to mapOf("type" to "string", "description" to "Name of the skill to read (e.g. 'code-generation', 'kotlin-conventions')"),
+                        "file" to mapOf("type" to "string", "description" to "Sub-file path relative to skill directory (default: 'SKILL.md'). Examples: 'examples/entity-pattern.md', 'reference/rules.md'")
+                    ),
+                    "required" to listOf("skill_name")
+                )
+            ),
+            McpTool(
+                name = "run_skill_script",
+                description = "Execute a skill's script and return the output. Scripts provide deterministic validation and generation operations. The script code does NOT enter your context — only stdout/stderr and exit code are returned.",
+                inputSchema = mapOf(
+                    "type" to "object",
+                    "properties" to mapOf(
+                        "skill_name" to mapOf("type" to "string", "description" to "Name of the skill containing the script"),
+                        "script" to mapOf("type" to "string", "description" to "Script path relative to skill directory (e.g. 'scripts/validate.py')"),
+                        "args" to mapOf("type" to "array", "items" to mapOf("type" to "string"), "description" to "Optional arguments to pass to the script")
+                    ),
+                    "required" to listOf("skill_name", "script")
+                )
+            ),
+            McpTool(
+                name = "list_skills",
+                description = "List all available skills with their metadata (name, description, category, sub-files, scripts). Use this to discover what skills are available before reading them.",
+                inputSchema = mapOf(
+                    "type" to "object",
+                    "properties" to mapOf(
+                        "profile" to mapOf("type" to "string", "description" to "Filter by profile name (e.g. 'development-profile')"),
+                        "category" to mapOf("type" to "string", "description" to "Filter by category", "enum" to listOf("SYSTEM", "FOUNDATION", "DELIVERY", "KNOWLEDGE", "CUSTOM"))
+                    )
                 )
             ),
             McpTool(

@@ -36,14 +36,19 @@ class SystemPromptAssemblerTest {
             description = "Kotlin coding conventions",
             tags = listOf("kotlin"),
             content = "# Kotlin Conventions\n\nUse data classes for DTOs.",
-            sourcePath = "test/kotlin-conventions/SKILL.md"
+            sourcePath = "test/kotlin-conventions/SKILL.md",
+            category = SkillCategory.FOUNDATION
         ),
         SkillDefinition(
             name = "code-generation",
             description = "Code generation skill",
             tags = listOf("code"),
             content = "# Code Generation\n\nGenerate code from design.",
-            sourcePath = "test/code-generation/SKILL.md"
+            sourcePath = "test/code-generation/SKILL.md",
+            category = SkillCategory.DELIVERY,
+            scripts = listOf(
+                SkillScript("scripts/compile_check.py", "Check compilation", "python")
+            )
         )
     )
 
@@ -124,13 +129,45 @@ class SystemPromptAssemblerTest {
         }
 
         @Test
-        fun `should include skill content sections`() {
+        fun `should include skill metadata but NOT full content`() {
             val prompt = assembler.assemble(testProfile, testSkills)
 
-            assertThat(prompt).contains("Skill: kotlin-conventions")
-            assertThat(prompt).contains("Use data classes for DTOs.")
-            assertThat(prompt).contains("Skill: code-generation")
-            assertThat(prompt).contains("Generate code from design.")
+            // Level 1 metadata: name + description should appear
+            assertThat(prompt).contains("kotlin-conventions")
+            assertThat(prompt).contains("Kotlin coding conventions")
+            assertThat(prompt).contains("code-generation")
+            assertThat(prompt).contains("Code generation skill")
+
+            // Full skill content should NOT appear in system prompt
+            assertThat(prompt).doesNotContain("Use data classes for DTOs.")
+            assertThat(prompt).doesNotContain("Generate code from design.")
+
+            // Available Skills section header should exist
+            assertThat(prompt).contains("Available Skills")
+        }
+
+        @Test
+        fun `should include skill scripts in metadata`() {
+            val prompt = assembler.assemble(testProfile, testSkills)
+
+            assertThat(prompt).contains("scripts/compile_check.py")
+        }
+
+        @Test
+        fun `should include skill category in metadata`() {
+            val prompt = assembler.assemble(testProfile, testSkills)
+
+            assertThat(prompt).contains("[foundation]")
+            assertThat(prompt).contains("[delivery]")
+        }
+
+        @Test
+        fun `should include progressive loading protocol`() {
+            val prompt = assembler.assemble(testProfile, testSkills)
+
+            assertThat(prompt).contains("read_skill")
+            assertThat(prompt).contains("run_skill_script")
+            assertThat(prompt).contains("渐进式使用协议")
         }
 
         @Test
@@ -258,15 +295,24 @@ class SystemPromptAssemblerTest {
             val prompt = assembler.assemble(testProfile, emptyList())
 
             assertThat(prompt).contains("Active Profile")
-            assertThat(prompt).doesNotContain("Skill:")
+            // The "## Available Skills" section header should not appear when no skills loaded
+            assertThat(prompt).doesNotContain("## Available Skills")
         }
 
         @Test
-        fun `prompt size should grow with more skills`() {
-            val oneSkill = assembler.assemble(testProfile, testSkills.take(1))
-            val twoSkills = assembler.assemble(testProfile, testSkills)
+        fun `prompt with metadata-only skills should be small`() {
+            val prompt = assembler.assemble(testProfile, testSkills)
 
-            assertThat(twoSkills.length).isGreaterThan(oneSkill.length)
+            // With metadata-only skills, prompt should be much smaller than content-based
+            // Previously ~55K for 7 skills, now should be < 5K for the skills section
+            val skillsSectionStart = prompt.indexOf("## Available Skills")
+            val skillsSectionEnd = prompt.indexOf("---", skillsSectionStart + 1).let {
+                if (it > 0) it else prompt.length
+            }
+            val skillsSection = prompt.substring(skillsSectionStart, skillsSectionEnd)
+
+            // Skills section should be < 1K for 2 test skills
+            assertThat(skillsSection.length).isLessThan(1000)
         }
     }
 }
