@@ -3373,3 +3373,69 @@ HitlAction.APPROVE -> {
 - 全流程验证：规划 ✅ → 设计 ✅（baseline 双通过）→ 开发（待继续）
 - 设计阶段首次 baseline 全通过（architecture + api-contract）
 - 遗留问题：设计阶段 baseline 通过后 HITL 未触发，需排查
+
+---
+
+## Session 25 — 2026-02-22：多模型适配重构 — 用户自配 Provider + 动态 Adapter
+
+### 25.1 目标
+
+重新定义多模型适配为 Forge 的核心生态位：用户通过 UI 自行配置 API Key，后端按请求动态创建 Adapter，彻底移除环境变量级别的模型配置依赖。
+
+### 25.2 实施内容
+
+#### 文件变更表
+
+| 操作 | 文件 | 说明 |
+|------|------|------|
+| 新建 | `config/ProviderDefaultModels.kt` | 5 大 Provider 静态模型列表，`MODEL_TO_PROVIDER` 映射 |
+| 新建 | `service/DynamicAdapterFactory.kt` | 按 userId+model 动态创建 Adapter，从用户 DB 配置读取 Key |
+| 新建 | `db/migration/V5__add_custom_models.sql` | user_model_configs 添加 custom_models 列 |
+| 修改 | `config/ClaudeConfig.kt` | 简化为只提供 WebClient bean，移除启动时 Adapter 创建 |
+| 修改 | `entity/UserModelConfigEntity.kt` | 新增 `customModels: String` 字段 |
+| 修改 | `service/UserModelConfigService.kt` | 新增 `getDecryptedConfig()`、`getModelsForUser()`，支持 customModels |
+| 修改 | `controller/ModelController.kt` | 移除 ModelRegistry 依赖，新增 `GET /api/models/available` |
+| 修改 | `service/ClaudeAgentService.kt` | 替换固定 claudeAdapter 为 DynamicAdapterFactory，streamMessage 增加 model+userId 参数 |
+| 修改 | `websocket/ChatWebSocketHandler.kt` | 从 payload 提取 model 字段，传给 streamMessage |
+| 修改 | `service/EncryptionService.kt` | 移除 System.getenv() fallback，统一由 Spring 属性系统管理 |
+| 修改 | `resources/application.yml` | 内嵌开发默认 FORGE_ENCRYPTION_KEY，生产须覆盖 |
+| 修改 | `build.gradle.kts` | 新增 spring-dotenv，bootRun workingDir 指向项目根目录 |
+| 修改 | `test/ClaudeAgentServiceTest.kt` | 适配 DynamicAdapterFactory mock |
+| 修改 | `test/UserModelConfigServiceTest.kt` | getDecryptedApiKey → getDecryptedConfig |
+| 修改 | `frontend/src/lib/claude-client.ts` | streamMessage 增加 model 参数，通过 WebSocket 传出 |
+| 修改 | `frontend/src/lib/model-api.ts` | 新增 fetchAvailableModels()、customModels 字段 |
+| 修改 | `frontend/src/components/chat/ModelSelector.tsx` | 改用 /api/models/available，refreshKey 触发重载，空态引导配置 |
+| 修改 | `frontend/src/components/chat/ModelSettingsDialog.tsx` | 全部重写：Provider 开关 + 默认模型展示 + 自定义 Model ID 增删 |
+| 修改 | `frontend/src/components/chat/AiChatSidebar.tsx` | 传 selectedModel 给 streamMessage，保存后刷新 ModelSelector |
+
+### 25.3 Bug 修复
+
+| Bug | 根因 | 修复 |
+|-----|------|------|
+| `/api/models/available` 404 | 后端未重启，旧实例无新端点 | 重启后端 |
+| 加密 Key 报错"当前 3 字节" | `EncryptionService` 的 `System.getenv()` fallback 绕过 Spring，读到 shell 里残留的短值 | 移除 fallback，Spring property placeholder 统一管理；`application.yml` 内嵌 32 字节开发默认 Key |
+| `UserModelConfigServiceTest` 编译失败 | `getDecryptedApiKey()` 已删除，测试未同步更新 | 3 处测试改为调用 `getDecryptedConfig()`，断言 `config.apiKey` |
+| V3 Flyway migration 冲突 | 新建的 `V3__add_custom_models.sql` 与已有 `V3__create_execution_records.sql` 版本号重复 | 重命名为 `V5__add_custom_models.sql` |
+
+### 25.4 经验沉淀
+
+1. **System.getenv() 与 Spring 属性系统冲突**：用 `@Value` 注入时，若在 Java 代码里再做 `System.getenv()` fallback，会绕过 Spring 的属性解析链（包括 spring-dotenv、application.yml 默认值），直接读取 shell 残留变量。正确做法：在 `application.yml` 用 `${VAR:default}` 内嵌默认值，代码只依赖 `@Value` 注入结果。
+2. **Gradle bootRun workingDir 与 spring-dotenv**：`bootRun` 的工作目录默认是子项目目录（`web-ide/backend/`），而 `.env` 通常在项目根。需在 `build.gradle.kts` 里设 `bootRun { workingDir = rootProject.projectDir }`，或将开发默认值直接内嵌 `application.yml`。
+3. **Flyway 版本号全局唯一**：新增 migration 前必须检查已有脚本版本号，防止冲突：`ls src/main/resources/db/migration/`。
+4. **动态 Adapter 模式**：将 Adapter 从 Spring Bean（启动时创建）改为 Factory（请求时创建），实现了 per-user、per-request 的 API Key 隔离，是多租户模型接入的标准模式。
+
+### Git 提交
+
+| Commit | 说明 |
+|--------|------|
+| `ceb130d` | feat: 多模型适配重构 — 用户自配 Provider，动态 Adapter 按需创建 |
+
+### 项目统计快照（Session 25）
+
+| 指标 | 数值 |
+|------|------|
+| 单元测试 | **137 全部通过** |
+| 前端构建 | TypeScript 无错误 |
+| 支持 Provider | **5**（Anthropic / Google / Alibaba / AWS Bedrock / OpenAI Compatible） |
+| Git Commits | 42+ |
+| Sessions | **25** |
