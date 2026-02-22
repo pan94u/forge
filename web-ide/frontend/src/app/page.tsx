@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import {
@@ -13,6 +13,7 @@ import {
   Activity,
 } from "lucide-react";
 import { workspaceApi, type Workspace } from "@/lib/workspace-api";
+import { isAuthenticated, getRedirectAfterLogin } from "@/lib/sso-client";
 
 interface ActivityItem {
   id: string;
@@ -73,6 +74,14 @@ function formatTimeAgo(timestamp: string): string {
 }
 
 export default function DashboardPage() {
+  // Redirect to login if not authenticated
+  useEffect(() => {
+    if (!isAuthenticated()) {
+      sessionStorage.setItem("forge_redirect_after_login", "/");
+      window.location.href = "/login";
+    }
+  }, []);
+
   const {
     data: workspaces,
     isLoading: workspacesLoading,
