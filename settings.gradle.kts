@@ -28,3 +28,9 @@ include(":adapters:runtime-adapter")
 // ── Evaluation & Testing ─────────────────────────────────────────────────────
 include(":agent-eval")
 include(":skill-tests")
+
+// ── User Service (Account/Auth/SSO) ───────────────────────────────────────────
+include(":services:user-service")
+
+// ── API Gateway ───────────────────────────────────────────────────────────────
+include(":services:gateway")

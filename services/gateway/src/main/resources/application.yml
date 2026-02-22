@@ -1,0 +1,43 @@
+spring:
+  application:
+    name: gateway-service
+  cloud:
+    compatibility-verifier:
+      enabled: false
+    gateway:
+      routes:
+        # User Service 路由 - 直接在代码中配置
+      default-filters:
+        - AddRequestHeader=X-Forwarded-For, "${caller.ip}"
+        - DedupeResponseHeader=Access-Control-Allow-Origin Access-Control-Allow-Credentials
+
+      globalcors:
+        cors-configurations:
+          '[/**]':
+            allowed-origins-patterns: "*"
+            allowed-methods: GET,POST,PUT,DELETE,OPTIONS
+            allowed-headers: "*"
+            allow-credentials: true
+            max-age: 3600
+
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+
+server:
+  port: 9443
+
+app:
+  jwt:
+    secret: ${JWT_SECRET:your_jwt_secret_key_at_least_32_chars_here}
+    issuer: forge-platform
+  redis:
+    host: ${REDIS_HOST:localhost}
+    port: ${REDIS_PORT:6379}
+
+logging:
+  level:
+    root: INFO
+    com.forge.gateway: DEBUG
+    org.springframework.cloud.gateway: INFO

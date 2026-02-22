@@ -1,0 +1,3 @@
+-- 修复 IP 地址列类型：INET -> VARCHAR(45)
+ALTER TABLE users ALTER COLUMN last_login_ip TYPE VARCHAR(45);
+ALTER TABLE login_logs ALTER COLUMN ip_address TYPE VARCHAR(45);

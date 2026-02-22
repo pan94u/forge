@@ -16,6 +16,50 @@ services:
       retries: 15
       start_period: 30s
 
+  # ---------------------------------------------------------------------------
+  # Redis — Cache and session storage
+  # ---------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ---------------------------------------------------------------------------
+  # forge-user-service — User authentication service
+  # ---------------------------------------------------------------------------
+  forge-user-service:
+    build:
+      context: ../../services/user-service
+      dockerfile: Dockerfile
+    ports:
+      - "8086:8086"
+    environment:
+      SPRING_PROFILES_ACTIVE: local
+      DB_URL: jdbc:postgresql://postgres:5432/forge
+      DB_USERNAME: forge
+      DB_PASSWORD: forge_local_dev
+      SPRING_DATA_REDIS_HOST: redis
+      JWT_SECRET: ${JWT_SECRET:-your_jwt_secret_key_at_least_32_chars_here}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-your_jwt_refresh_secret_key_at_least_32_chars}
+      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:}
+      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:}
+      GITHUB_REDIRECT_URI: ${GITHUB_REDIRECT_URI:}
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8086/actuator/health"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
   knowledge-mcp:
     build:
       context: ../../mcp-servers/forge-knowledge-mcp

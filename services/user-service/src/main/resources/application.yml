@@ -1,0 +1,84 @@
+spring:
+  application:
+    name: user-service
+
+  datasource:
+    url: jdbc:postgresql://localhost:5432/forge
+    username: postgres
+    password: 123456
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+      idle-timeout: 300000
+      connection-timeout: 20000
+      max-lifetime: 1200000
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      timeout: 5000ms
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+    validate-on-migrate: true
+
+server:
+  port: 8086
+  error:
+    include-message: always
+    include-binding-errors: always
+
+app:
+  host: 0.0.0.0
+  port: 8086
+
+  jwt:
+    secret: ${JWT_SECRET:your_jwt_secret_key_at_least_32_chars_here}
+    refresh-secret: ${JWT_REFRESH_SECRET:your_jwt_refresh_secret_key_at_least_32_chars}
+    expiration-ms: 900000
+    refresh-expiration-ms: 604800000
+
+  security:
+    bcrypt-rounds: 12
+    max-login-attempts: 5
+    lockout-duration-minutes: 30
+
+  rate-limit:
+    enabled: true
+    anonymous-rpm: 60
+    authenticated-rpm: 1000
+    api-rpm: 5000
+
+  github:
+    client-id: ${GITHUB_CLIENT_ID:}
+    client-secret: ${GITHUB_CLIENT_SECRET:}
+    redirectUri: ${GITHUB_REDIRECT_URI:}
+
+logging:
+  level:
+    root: INFO
+    com.forge.user: DEBUG
+    org.springframework.security: INFO
+    org.hibernate.SQL: WARN
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: when-authorized

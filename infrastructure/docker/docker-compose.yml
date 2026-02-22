@@ -259,3 +259,110 @@ services:
       timeout: 5s
       retries: 5
       start_period: 60s
+
+  # ---------------------------------------------------------------------------
+  # forge-user-service — User authentication and authorization service
+  # ---------------------------------------------------------------------------
+  forge-user-service:
+    image: forge-platform/user-service:latest
+    build:
+      context: ../../services/user-service
+      dockerfile: Dockerfile
+    container_name: forge-user-service
+    restart: unless-stopped
+    networks:
+      - forge-network
+    ports:
+      - "8086:8086"
+    environment:
+      SERVER_PORT: "8086"
+      SPRING_PROFILES_ACTIVE: local
+      DB_URL: jdbc:postgresql://postgres:5432/forge
+      DB_USERNAME: forge
+      DB_PASSWORD: forge_local_dev
+      SPRING_DATA_REDIS_HOST: redis
+      JWT_SECRET: ${JWT_SECRET:-your_jwt_secret_key_at_least_32_chars_here}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-your_jwt_refresh_secret_key_at_least_32_chars}
+      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:}
+      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:}
+      GITHUB_REDIRECT_URI: ${GITHUB_REDIRECT_URI:}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8086/actuator/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # ---------------------------------------------------------------------------
+  # forge-gateway — API Gateway for routing and authentication
+  # ---------------------------------------------------------------------------
+  forge-gateway:
+    image: forge-platform/gateway:latest
+    build:
+      context: ../../services/gateway
+      dockerfile: Dockerfile
+    container_name: forge-gateway
+    restart: unless-stopped
+    networks:
+      - forge-network
+    ports:
+      - "9443:9443"
+    environment:
+      SPRING_PROFILES_ACTIVE: local
+      SPRING_CLOUD_GATEWAY_ROUTES: ""  # Routes configured in application.yml
+      JWT_SECRET: ${JWT_SECRET:-your_jwt_secret_key_at_least_32_chars_here}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+    depends_on:
+      forge-user-service:
+        condition: service_healthy
+      forge-web-ide-backend:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9443/actuator/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # ---------------------------------------------------------------------------
+  # Redis — Cache and session storage
+  # ---------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: forge-redis
+    restart: unless-stopped
+    networks:
+      - forge-network
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres-data:
+    driver: local
+  knowledge-mcp-data:
+    driver: local
+  artifact-mcp-data:
+    driver: local
+  redis-data:
+    driver: local
+
+networks:
+  forge-network:
+    driver: bridge
+    name: forge-network
