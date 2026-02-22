@@ -5,6 +5,9 @@ description: >
   structured error responses, retry strategies, circuit breakers.
 trigger: when implementing error handling, try/catch, or exception classes
 tags: [error-handling, exceptions, resilience, retry, circuit-breaker]
+version: "2.0"
+scope: platform
+category: foundation
 ---
 
 # Error Handling

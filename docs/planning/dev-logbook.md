@@ -3439,3 +3439,126 @@ Level 3: 子文件 + 可执行脚本（按需读取/执行，无上限）
 - Phase 4 计划：4 Sprint，预计 4 个 Session
 - 规划基线版本：v1.9
 - 关键指标目标：system prompt 55K→1K（Skill 部分），MCP 工具 11→14
+
+---
+
+## Session 26 — 2026-02-22：Phase 4 Sprint 4.1 实现 — Metadata 架构 + 渐进式加载
+
+**日期**：2026-02-22
+**目标**：将 Skill 从全量注入 system prompt 改为 metadata 发现 → 按需加载的 3 层架构
+
+### 26.1 实施内容
+
+| 操作 | 文件 | 说明 |
+|------|------|------|
+| 修改 | `SkillModels.kt` | 新增 `SkillScope`, `SkillSubFile`, `SkillScript`, `SkillCategory` 枚举和数据类 |
+| 修改 | `SkillLoader.kt` | 新增 `loadSkillMetadataCatalog()`, 扫描子目录/脚本, 解析 scope/category frontmatter |
+| 修改 | `SystemPromptAssembler.kt` | 重写 `buildSkillsSections()` — 只注入 Level 1 Metadata（name + description + scripts 列表），添加渐进式加载协议 |
+| 修改 | `McpProxyService.kt` | +3 MCP 工具：`read_skill` / `run_skill_script` / `list_skills` |
+| 修改 | `McpProxyServiceTest.kt` | 适配新构造函数 |
+| 修改 | `SystemPromptAssemblerTest.kt` | 适配 metadata-only 格式断言 |
+
+### 26.2 关键数据
+
+- System prompt (development-profile): 96K → **25K chars** (-74%)
+- System prompt (design-profile): 43K → **20K chars** (-53%)
+- MCP 工具: 9 → **12** (+`read_skill` / `run_skill_script` / `list_skills`)
+- Skill metadata 部分: ~55K → **~1K chars**
+
+### 26.3 Git
+
+- Commit: `444592c feat: Sprint 4.1 — Skill Metadata 架构 + 渐进式加载`
+
+---
+
+## Session 27 — 2026-02-22：Phase 4 Sprint 4.2-4.4 — 质量治理 + 管理 UI + 度量
+
+**日期**：2026-02-22
+**目标**：Skill 质量清理、管理 API + 前端 UI、使用追踪与度量、端到端手工验收
+
+### 27.1 Sprint 4.2 — Skill 质量治理 + 内容重构
+
+| 操作 | 文件/目录 | 说明 |
+|------|----------|------|
+| 删除 | `domain-order/`, `domain-payment/`, `domain-inventory/` | 移除 3 个 D 级假数据 Skill |
+| 删除 | `prd-writing/`, `requirement-analysis/` | 合并为 `requirement-engineering/` |
+| 删除 | `test-execution/` | 内容合并入 `testing-standards/` |
+| 新建 | `delivery-methodology/` | 方法论 Skill：SKILL.md + 4 参考文档 + 2 脚本 |
+| 新建 | `requirement-engineering/SKILL.md` | 合并后的需求工程 Skill |
+| 精简 | `detailed-design/`, `deployment-ops/`, `test-case-writing/` | C 级 Skill 精简，移除冗余通用内容 |
+| 精简 | `java-conventions/`, `kotlin-conventions/`, `spring-boot-patterns/` | 移除重复内容，保留项目约定 |
+| 修改 | 全部 Skill frontmatter | 添加 `scope`/`category`/`version` 字段 |
+| 修改 | 5 个 Profile YAML | 更新 skills 列表 |
+
+**Skill 数量变化**: 32 → **28**（-3 D 级, -3 合并, +1 delivery-methodology, +1 requirement-engineering）
+
+### 27.2 Sprint 4.3 — Skill 管理 API + 前端 UI
+
+**后端**:
+
+| 操作 | 文件 | 说明 |
+|------|------|------|
+| 新建 | `SkillController.kt` | 9 个 REST 端点：CRUD + enable/disable + content + scripts + stats |
+| 新建 | `SkillManagementService.kt` | 三层存储（PLATFORM/WORKSPACE/CUSTOM），脚本执行（60s 超时） |
+| 新建 | `SkillPreferenceEntity.kt` | Skill 启用/禁用偏好持久化 |
+| 新建 | `SkillPreferenceRepository.kt` | JPA Repository |
+| 新建 | `SkillAnalyticsController` | 独立控制器 `/api/skill-analytics`（避免 `/{name}` 路径冲突） |
+
+**前端**:
+
+| 操作 | 文件 | 说明 |
+|------|------|------|
+| 新建 | `skill-api.ts` | TypeScript API 客户端 |
+| 新建 | `SkillList.tsx` | 左侧列表 + 搜索 + Tag 过滤 |
+| 新建 | `SkillDetailPanel.tsx` | 右侧详情 + 子文件展开 + 脚本执行 |
+| 新建 | `SkillCreateForm.tsx` | 创建自定义 Skill 表单 |
+| 新建 | `app/skills/page.tsx` | Skills 管理页面（4 Tab: All/Platform/Workspace/Custom） |
+| 修改 | `Sidebar.tsx` | 新增 Skills 导航入口（Sparkles 图标） |
+
+### 27.3 Sprint 4.4 — 学习循环 + 度量
+
+| 操作 | 文件 | 说明 |
+|------|------|------|
+| 新建 | `SkillUsageEntity.kt` | 使用追踪 JPA Entity |
+| 新建 | `SkillUsageRepository.kt` | 分析查询（按 skill/时间聚合） |
+| 新建 | `SkillFeedbackService.kt` | SkillAnalyticsService（提供统计/排行/建议/触发器） |
+| 修改 | `McpProxyService.kt` | 在 `read_skill` / `run_skill_script` 中注入使用追踪 |
+
+### 27.4 手工验收测试
+
+**curl API 测试**: 14 TC 全部 PASS
+
+**端到端测试**（「印章管理系统」工作区）:
+
+| 阶段 | Profile | Skills | Turns | 产出 | 结果 |
+|------|---------|--------|-------|------|------|
+| 设计 | design-profile (关键字 '设计') | 4/28 | 8/8 + 4 后续 | 4 设计文档 + STAGE-SUMMARY | PASS |
+| 开发 | development-profile (默认) | 8/28 | 5/8 (rate limit) | package.json + prisma/schema.prisma | PARTIAL |
+
+**发现的问题**:
+- P0: Alpine 无 python3，脚本执行失败（Agent 优雅降级）
+- P1: Rate limit 无指数退避重试
+- P2: 8 轮 turn 限制对复杂设计任务偏紧
+
+**详细报告**: `docs/phase4-manual-test-report.md`
+
+### 27.5 遇到的 Bug 及修复
+
+| Bug | 根因 | 修复 |
+|-----|------|------|
+| Bean 名冲突 `SkillFeedbackService` | `service.learning` 和 `service.skill` 两个包同名类 | 重命名为 `SkillAnalyticsService` |
+| McpProxyServiceTest 编译失败 | 新增 `skillUsageRepository` 构造参数 | 添加 mock |
+| SystemPromptAssemblerTest 断言失败 | 格式从 `[foundation]` 改为 `platform/foundation` | 更新断言 |
+
+### 27.6 统计快照
+
+- Phase 4 状态：**✅ 完成**
+- Skill 总数：32 → **28**（-3 D 级, -3 合并, +1 delivery-methodology, +1 requirement-engineering）
+- 方法论 Skill：0 → **1**（delivery-methodology）
+- 可执行脚本：0 → **~19 个**
+- MCP 工具：9 → **12**（+read_skill / run_skill_script / list_skills）
+- System prompt: ~55K → **20-25K chars**（-54~63%）
+- REST API 端点：新增 9 个（/api/skills CRUD + analytics）
+- 前端页面：新增 /skills 路由
+- 单元测试：147 passing
+- 设计基线版本：v6 → **v7**

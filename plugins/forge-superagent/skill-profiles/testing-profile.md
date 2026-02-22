@@ -2,8 +2,8 @@
 name: testing-profile
 description: "Skill Profile for the Testing delivery stage. Focused on test case design, test execution, coverage analysis, and quality reporting."
 skills:
+  - delivery-methodology
   - test-case-writing
-  - test-execution
   - testing-standards
 baselines:
   - code-style-baseline

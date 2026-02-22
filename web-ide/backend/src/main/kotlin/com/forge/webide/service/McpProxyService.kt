@@ -1,12 +1,15 @@
 package com.forge.webide.service
 
+import com.forge.webide.entity.SkillUsageEntity
 import com.forge.webide.model.FileNode
 import com.forge.webide.model.FileType
 import com.forge.webide.model.McpContent
 import com.forge.webide.model.McpTool
 import com.forge.webide.model.McpToolCallResponse
+import com.forge.webide.repository.SkillUsageRepository
 import com.forge.webide.service.skill.SkillCategory
 import com.forge.webide.service.skill.SkillLoader
+import com.forge.webide.service.skill.SkillScope
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
@@ -35,7 +38,8 @@ class McpProxyService(
     private val baselineService: BaselineService,
     private val dataSource: DataSource,
     private val workspaceService: WorkspaceService,
-    private val skillLoader: SkillLoader
+    private val skillLoader: SkillLoader,
+    private val skillUsageRepository: SkillUsageRepository
 ) {
 
     private val logger = LoggerFactory.getLogger(McpProxyService::class.java)
@@ -261,6 +265,27 @@ class McpProxyService(
             content = listOf(McpContent(type = "text", text = "Error: $message")),
             isError = true
         )
+    }
+
+    private fun trackSkillUsage(
+        skillName: String,
+        action: String,
+        scriptType: String? = null,
+        success: Boolean = true
+    ) {
+        try {
+            skillUsageRepository.save(
+                SkillUsageEntity(
+                    sessionId = "",
+                    skillName = skillName,
+                    action = action,
+                    scriptType = scriptType,
+                    success = success
+                )
+            )
+        } catch (e: Exception) {
+            logger.debug("Failed to track skill usage: {}", e.message)
+        }
     }
 
     private fun formatFileTree(nodes: List<FileNode>, indent: String = ""): String {
@@ -900,6 +925,7 @@ class McpProxyService(
 
         // If requesting SKILL.md, return the cached content directly
         if (file == "SKILL.md") {
+            trackSkillUsage(skillName, "READ")
             return McpToolCallResponse(
                 content = listOf(McpContent(type = "text", text = skill.content)),
                 isError = false
@@ -936,6 +962,7 @@ class McpProxyService(
             return errorResponse("Failed to read file: ${e.message}")
         }
 
+        trackSkillUsage(skillName, "READ")
         return McpToolCallResponse(
             content = listOf(McpContent(type = "text", text = content)),
             isError = false
@@ -1032,11 +1059,13 @@ class McpProxyService(
                 }
             }
 
+            trackSkillUsage(skillName, "SCRIPT_RUN", scriptDef.scriptType.name, exitCode == 0)
             McpToolCallResponse(
                 content = listOf(McpContent(type = "text", text = output)),
                 isError = exitCode != 0
             )
         } catch (e: Exception) {
+            trackSkillUsage(skillName, "SCRIPT_RUN", scriptDef.scriptType.name, false)
             logger.error("Script execution failed: skill={}, script={}: {}", skillName, scriptPath, e.message)
             errorResponse("Script execution failed: ${e.message}")
         }
@@ -1048,6 +1077,7 @@ class McpProxyService(
     private fun handleListSkills(arguments: Map<String, Any?>): McpToolCallResponse {
         val profileFilter = arguments["profile"] as? String
         val categoryFilter = arguments["category"] as? String
+        val scopeFilter = arguments["scope"] as? String
 
         val category = if (!categoryFilter.isNullOrBlank()) {
             try {
@@ -1057,21 +1087,32 @@ class McpProxyService(
             }
         } else null
 
-        val skills = skillLoader.loadSkillMetadataCatalog(profileFilter, category)
+        val scope = if (!scopeFilter.isNullOrBlank()) {
+            try {
+                SkillScope.valueOf(scopeFilter.uppercase())
+            } catch (e: IllegalArgumentException) {
+                return errorResponse("Invalid scope: $scopeFilter. Valid: ${SkillScope.entries.joinToString()}")
+            }
+        } else null
+
+        val skills = skillLoader.loadSkillMetadataCatalog(profileFilter, category, scope)
 
         val output = buildString {
             appendLine("Available Skills (${skills.size}):")
             appendLine()
             for (skill in skills) {
-                appendLine("- **${skill.name}** [${skill.category.name.lowercase()}]")
+                appendLine("- **${skill.name}** [${skill.scope.name.lowercase()}/${skill.category.name.lowercase()}]")
                 appendLine("  ${skill.description}")
+                if (skill.tags.isNotEmpty()) {
+                    appendLine("  Tags: ${skill.tags.joinToString(", ")}")
+                }
                 if (skill.subFiles.isNotEmpty()) {
                     appendLine("  Sub-files: ${skill.subFiles.joinToString(", ") { it.path }}")
                 }
                 if (skill.scripts.isNotEmpty()) {
-                    appendLine("  Scripts: ${skill.scripts.joinToString(", ") { "${it.path} (${it.language})" }}")
+                    appendLine("  Scripts: ${skill.scripts.joinToString(", ") { "${it.path} (${it.scriptType.name.lowercase()}/${it.language})" }}")
                 }
-                appendLine("  Version: ${skill.version} | Enabled: ${skill.enabled}")
+                appendLine("  Version: ${skill.version} | Scope: ${skill.scope.name.lowercase()} | Enabled: ${skill.enabled}")
                 appendLine()
             }
         }
@@ -1211,12 +1252,13 @@ class McpProxyService(
             ),
             McpTool(
                 name = "list_skills",
-                description = "List all available skills with their metadata (name, description, category, sub-files, scripts). Use this to discover what skills are available before reading them.",
+                description = "List all available skills with their metadata (name, description, scope, category, tags, sub-files, scripts). Use this to discover what skills are available before reading them.",
                 inputSchema = mapOf(
                     "type" to "object",
                     "properties" to mapOf(
                         "profile" to mapOf("type" to "string", "description" to "Filter by profile name (e.g. 'development-profile')"),
-                        "category" to mapOf("type" to "string", "description" to "Filter by category", "enum" to listOf("SYSTEM", "FOUNDATION", "DELIVERY", "KNOWLEDGE", "CUSTOM"))
+                        "category" to mapOf("type" to "string", "description" to "Filter by category", "enum" to listOf("SYSTEM", "FOUNDATION", "DELIVERY", "KNOWLEDGE", "CUSTOM")),
+                        "scope" to mapOf("type" to "string", "description" to "Filter by scope (ownership)", "enum" to listOf("PLATFORM", "WORKSPACE", "CUSTOM"))
                     )
                 )
             ),

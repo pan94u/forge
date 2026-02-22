@@ -5,6 +5,9 @@ description: >
   Micrometer metrics, distributed tracing, structured JSON logging.
 trigger: when configuring logging, adding metrics, tracing, or health checks
 tags: [logging, observability, metrics, tracing, micrometer, mdc]
+version: "2.0"
+scope: platform
+category: foundation
 ---
 
 # Logging & Observability

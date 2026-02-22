@@ -8,6 +8,7 @@ import com.forge.webide.service.skill.SkillLoader
 import com.forge.webide.service.skill.SkillScript
 import com.forge.webide.service.skill.SkillSubFile
 import com.forge.webide.service.skill.SkillContentType
+import com.forge.webide.repository.SkillUsageRepository
 import io.mockk.every
 import io.mockk.mockk
 import org.assertj.core.api.Assertions.assertThat
@@ -31,6 +32,7 @@ class McpProxyServiceTest {
     private val dataSource = mockk<DataSource>(relaxed = true)
     private val workspaceService = WorkspaceService()
     private val skillLoader = mockk<SkillLoader>(relaxed = true)
+    private val skillUsageRepository = mockk<SkillUsageRepository>(relaxed = true)
 
     private lateinit var service: McpProxyService
 
@@ -39,7 +41,7 @@ class McpProxyServiceTest {
 
     @BeforeEach
     fun setup() {
-        service = McpProxyService(baselineService, dataSource, workspaceService, skillLoader)
+        service = McpProxyService(baselineService, dataSource, workspaceService, skillLoader, skillUsageRepository)
     }
 
     // --- Default Tool Tests ---

@@ -5,6 +5,9 @@ description: >
   N+1 prevention, transaction boundaries, indexing strategy.
 trigger: when working with JPA, SQL, Flyway, database schemas, or repositories
 tags: [database, jpa, flyway, sql, schema, transactions]
+version: "2.0"
+scope: platform
+category: foundation
 ---
 
 # Database Patterns

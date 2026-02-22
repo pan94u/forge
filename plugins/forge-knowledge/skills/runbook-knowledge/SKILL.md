@@ -1,6 +1,8 @@
 ---
 name: runbook-knowledge
-version: 1.0.0
+version: "2.0"
+scope: platform
+category: knowledge
 profile: knowledge
 description: "Provides knowledge about operational runbooks, incident response, and troubleshooting procedures"
 tags:

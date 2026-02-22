@@ -6,6 +6,7 @@ import jakarta.annotation.PostConstruct
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
+import java.io.File
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
@@ -116,7 +117,11 @@ class SkillLoader(
      * Return metadata-only catalog of all skills (Level 1).
      * Used by the list_skills MCP tool.
      */
-    fun loadSkillMetadataCatalog(profileName: String? = null, category: SkillCategory? = null): List<SkillDefinition> {
+    fun loadSkillMetadataCatalog(
+        profileName: String? = null,
+        category: SkillCategory? = null,
+        scope: SkillScope? = null
+    ): List<SkillDefinition> {
         var skills = skillCache.values.toList()
 
         if (profileName != null) {
@@ -124,6 +129,9 @@ class SkillLoader(
         }
         if (category != null) {
             skills = skills.filter { it.category == category }
+        }
+        if (scope != null) {
+            skills = skills.filter { it.scope == scope }
         }
 
         return skills.sortedBy { it.name }
@@ -260,6 +268,9 @@ class SkillLoader(
         // Auto-detect category from frontmatter or source path
         val category = detectCategory(yamlMap["category"]?.toString(), path)
 
+        // Auto-detect scope from frontmatter or source path
+        val scope = detectScope(yamlMap["scope"]?.toString(), path)
+
         // Scan sub-directories for Level 3 content
         val skillDir = path.parent
         val subFiles = scanSubFiles(skillDir)
@@ -277,6 +288,7 @@ class SkillLoader(
             version = version,
             author = author,
             category = category,
+            scope = scope,
             subFiles = subFiles,
             scripts = scripts
         )
@@ -296,6 +308,32 @@ class SkillLoader(
             }
         }
         return detectCategoryFromPath(path)
+    }
+
+    /**
+     * Detect skill scope from frontmatter value or source path.
+     * plugins/ → PLATFORM, workspace/.skills/ → WORKSPACE, else → CUSTOM
+     */
+    private fun detectScope(frontmatterScope: String?, path: Path): SkillScope {
+        if (!frontmatterScope.isNullOrBlank()) {
+            return try {
+                SkillScope.valueOf(frontmatterScope.uppercase())
+            } catch (e: IllegalArgumentException) {
+                logger.warn("Unknown skill scope '{}' in {}, falling back to auto-detect", frontmatterScope, path)
+                detectScopeFromPath(path)
+            }
+        }
+        return detectScopeFromPath(path)
+    }
+
+    internal fun detectScopeFromPath(path: Path): SkillScope {
+        val pathStr = path.toString()
+        return when {
+            pathStr.contains("plugins/") || pathStr.contains("plugins${File.separator}") -> SkillScope.PLATFORM
+            pathStr.contains(".skills/custom/") || pathStr.contains(".skills${File.separator}custom${File.separator}") -> SkillScope.CUSTOM
+            pathStr.contains(".skills/") || pathStr.contains(".skills${File.separator}") -> SkillScope.WORKSPACE
+            else -> SkillScope.PLATFORM
+        }
     }
 
     private fun detectCategoryFromPath(path: Path): SkillCategory {
@@ -368,10 +406,12 @@ class SkillLoader(
                     if (language != null) {
                         val relativePath = "scripts/${file.fileName}"
                         val desc = extractFirstLineDescription(file)
+                        val scriptType = detectScriptType(file.fileName.toString(), desc)
                         result.add(SkillScript(
                             path = relativePath,
                             description = desc,
-                            language = language
+                            language = language,
+                            scriptType = scriptType
                         ))
                     }
                 }
@@ -380,6 +420,21 @@ class SkillLoader(
         }
 
         return result
+    }
+
+    /**
+     * Detect script type from filename and description.
+     * Names containing "extract", "mine", "scan", "generate" → EXTRACTION
+     * Names containing "validate", "check", "baseline", "verify" → VALIDATION
+     */
+    private fun detectScriptType(fileName: String, description: String): ScriptType {
+        val combined = "$fileName $description".lowercase()
+        val extractionKeywords = listOf("extract", "mine", "scan", "generate", "discover", "analyze", "profile", "drift")
+        val validationKeywords = listOf("validate", "check", "baseline", "verify", "lint", "guard")
+
+        if (extractionKeywords.any { combined.contains(it) }) return ScriptType.EXTRACTION
+        if (validationKeywords.any { combined.contains(it) }) return ScriptType.VALIDATION
+        return ScriptType.VALIDATION // default to validation
     }
 
     /**

@@ -2,6 +2,7 @@
 name: design-profile
 description: "Skill Profile for the Design delivery stage. Focused on architecture decisions, detailed design, and API contract definition."
 skills:
+  - delivery-methodology
   - architecture-design
   - detailed-design
   - api-design

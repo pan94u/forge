@@ -1,8 +1,10 @@
-# Forge Web IDE — 设计基线 v6
+# Forge Web IDE — 设计基线 v7
 
-> 基线日期: 2026-02-21 | Sprint 2.2 验收测试 24/24 通过后更新（v5.1 → v6）
+> 基线日期: 2026-02-22 | Phase 4 全部完成后更新（v6 → v7）
 > 本文档冻结当前已验证的 UI/API/数据模型/架构设计细节，作为未来修改的对照基准。
 > 任何对本文档覆盖范围的修改，必须先意识到偏离、再决定是否接受。
+>
+> **v7 变更摘要**: Phase 4 — Skill 架构改造：渐进式加载（system prompt 55K→20-25K，Level 1 metadata + 按需 read_skill/run_skill_script）、Skill 质量治理（32→28 个，移除 3 D 级 + 合并 3 + 新建 delivery-methodology）、Skill 管理 API（9 REST 端点 CRUD + enable/disable + 脚本执行）、前端 /skills 管理页面（3 Tab + Tag 过滤）、使用追踪 + 分析度量（SkillUsageEntity + SkillAnalyticsService）、MCP 工具 9→12（+read_skill/run_skill_script/list_skills）。
 >
 > **v6 变更摘要**: Sprint 2.2 — Skill 条件触发过滤（Profile stage/type + 关键词匹配 → 3~20 个 Skill 动态加载）、AgentLoop 底线自动检查（Act 后自动运行 baseline，失败最多重试 2 轮）、MCP 真实服务（knowledge-mcp 本地搜索 + database-mcp H2 完整 CRUD）、Docker 4→6 容器（+knowledge-mcp:8081 +database-mcp:8082）、McpProxyService callTool fallback 修复。
 >
@@ -25,6 +27,7 @@
 | `/` | Dashboard | `src/app/page.tsx` | 欢迎页 + 快捷操作 + 最近项目 + 活动动态 |
 | `/workspace/[id]` | IDE Workspace | `src/app/workspace/[id]/page.tsx` | 三面板 IDE：文件树 + 编辑器 + AI 聊天 |
 | `/knowledge` | Knowledge Base | `src/app/knowledge/page.tsx` | 四标签页：Docs / Architecture / Services / APIs |
+| `/skills` | Skill Management | `src/app/skills/page.tsx` | Skill 管理面板：4 Tab + Tag 过滤 + 详情/创建（v7 新增） |
 | `/workflows` | Workflow Editor | `src/app/workflows/page.tsx` | ReactFlow 可视化工作流编辑器 |
 | `/login` | Login | `src/app/login/page.tsx` | Keycloak SSO 登录入口（v5 新增） |
 | `/auth/callback` | Auth Callback | `src/app/auth/callback/page.tsx` | OIDC PKCE 回调处理（v5 新增） |
@@ -309,13 +312,16 @@ layout.tsx Auth Guard: isAuthenticated()?
 | POST | `/api/mcp/tools/call` | `McpToolCallRequest { name, arguments }` | `McpToolCallResponse` | 调用工具 |
 | POST | `/api/mcp/tools/cache/invalidate` | — | `{ status: "cache_invalidated" }` | 清除工具缓存 |
 
-**MCP 工具清单**（v4 创建，v5 更新：6 → 9 工具）:
+**MCP 工具清单**（v4 创建，v5: 6→9，v7: 9→12）:
 
 | 工具 | MCP Server | 说明 |
 |------|-----------|------|
 | `workspace_write_file` | backend (local) | 写入文件到 workspace（v5 新增） |
 | `workspace_read_file` | backend (local) | 读取 workspace 文件内容（v5 新增） |
 | `workspace_list_files` | backend (local) | 列出 workspace 文件树（v5 新增） |
+| `read_skill` | backend (local) | 按需读取 SKILL.md 或子文件内容（v7 新增） |
+| `run_skill_script` | backend (local) | 执行 Skill 脚本，60s 超时（v7 新增） |
+| `list_skills` | backend (local) | 列出可用 Skill metadata（v7 新增） |
 | `search_knowledge` | knowledge-mcp | 搜索知识库文档 |
 | `read_file` | knowledge-mcp | 读取知识库文件内容 |
 | `query_schema` | database-mcp | 查询数据库 schema |
@@ -348,6 +354,34 @@ layout.tsx Auth Guard: isAuthenticated()?
 | `knowledge` | KnowledgeController 知识库 | 否 |
 | `schema` | 数据库 schema 信息 | 否 |
 | `services` | 服务依赖图信息 | 否 |
+
+#### Skill Management API（v7 新增，`SkillController` → `/api/skills`）
+
+| 方法 | 路径 | 请求体 | 响应体 | 说明 |
+|------|------|--------|--------|------|
+| GET | `/api/skills` | — | `List<SkillView>` | 列出所有 Skill（支持 `?scope=` / `?category=` 过滤） |
+| GET | `/api/skills/{name}` | — | `SkillDetailView` | Skill 详情（含 subFiles + scripts） |
+| GET | `/api/skills/{name}/content/**` | — | `{ path, content }` | 读取子文件内容 |
+| POST | `/api/skills` | `CreateSkillRequest` | `SkillView` | 创建 CUSTOM Skill |
+| PUT | `/api/skills/{name}` | `UpdateSkillRequest` | 200 | 更新 CUSTOM Skill |
+| DELETE | `/api/skills/{name}` | — | 200/400 | 删除 Skill（PLATFORM 不可删） |
+| POST | `/api/skills/{name}/enable` | — | 200 | 启用 Skill for workspace |
+| POST | `/api/skills/{name}/disable` | — | 200 | 禁用 Skill for workspace |
+| POST | `/api/skills/{name}/scripts/**` | `RunScriptRequest?` | `ScriptResultView` | 执行 Skill 脚本（60s 超时） |
+| GET | `/api/skills/{name}/stats` | — | `SkillStatsView` | 使用统计 |
+
+#### Skill Analytics API（v7 新增，`SkillAnalyticsController` → `/api/skill-analytics`）
+
+| 方法 | 路径 | 参数 | 响应体 | 说明 |
+|------|------|------|--------|------|
+| GET | `/api/skill-analytics/skill-ranking` | `days=30` | `List<SkillRankingEntry>` | Skill 使用排行 |
+| GET | `/api/skill-analytics/skill-suggestions` | — | `List<SkillSuggestion>` | 进化建议（未使用/低成功率） |
+| GET | `/api/skill-analytics/skill-triggers` | `trigger` | `List<TriggerSuggestionView>` | 触发建议 |
+
+**Skill 三层存储**（v7 新增）:
+- **PLATFORM**: `plugins/` 目录（Docker volume，只读），不可删除/修改，可启用/禁用
+- **WORKSPACE**: `workspace/{workspaceId}/.skills/`，可编辑/删除
+- **CUSTOM**: `workspace/{workspaceId}/.skills/custom/`，完全 CRUD
 
 #### Actuator / Metrics API（v4 新增）
 
@@ -538,6 +572,34 @@ chat_sessions (1) ──→ (N) chat_messages (1) ──→ (N) tool_calls
      └─ updated_at           └─ created_at           ├─ output (TEXT)
                                                       ├─ status
                                                       └─ duration_ms
+```
+
+#### SkillPreferenceEntity（v7 新增）
+
+```kotlin
+@Entity @Table(name = "skill_preferences")
+class SkillPreferenceEntity(
+    @Id @GeneratedValue(strategy = GenerationType.IDENTITY) val id: Long = 0,
+    @Column(name = "workspace_id") val workspaceId: String,
+    @Column(name = "skill_name") val skillName: String,
+    @Column(name = "enabled") var enabled: Boolean = true
+)
+```
+
+#### SkillUsageEntity（v7 新增）
+
+```kotlin
+@Entity @Table(name = "skill_usage")
+class SkillUsageEntity(
+    @Id @GeneratedValue(strategy = GenerationType.IDENTITY) val id: Long = 0,
+    @Column(name = "session_id") val sessionId: String,
+    @Column(name = "skill_name") val skillName: String,
+    @Column(name = "action") val action: String,        // READ / SCRIPT_RUN
+    @Column(name = "script_type") val scriptType: String?,
+    @Column(name = "profile") val profile: String = "",
+    @Column(name = "success") val success: Boolean = true,
+    @Column(name = "created_at") val createdAt: Instant = Instant.now()
+)
 ```
 
 ### 3.3 Flyway 迁移
@@ -804,15 +866,18 @@ McpToolCallResponse { content: List<McpContent>, isError: Boolean }
 | 缓存写入 | `"system": [{"type":"text","text":"...","cache_control":{"type":"ephemeral"}}]` + `anthropic-beta: prompt-caching-2024-07-31` header | $0.090/次 (+25%) |
 | 缓存命中 | 同上（5 分钟窗口内自动命中） | **$0.0072/次 (-90%)** |
 
-**各 Profile System Prompt 规模**:
+**各 Profile System Prompt 规模**（v7 更新：渐进式加载后大幅缩小）:
 
-| Profile | 字符数 | ~Input Tokens | 加载 Skills 数 |
-|---------|--------|---------------|---------------|
-| development | 96,165 | ~24,000 | 17 |
-| design | 43,248 | ~10,800 | 3 |
-| testing | 38,504 | ~9,600 | 3 |
-| ops | 32,234 | ~8,000 | 3 |
-| planning | 29,595 | ~7,400 | 2 |
+| Profile | v6 字符数 | v7 字符数 | 降幅 | 加载 Skills 数 |
+|---------|----------|----------|------|---------------|
+| development | 96,165 | **25,219** | -74% | 8 |
+| design | 43,248 | **20,344** | -53% | 4 |
+| testing | ~38,500 | ~18,000 | ~-53% | 4 |
+| ops | ~32,200 | ~16,000 | ~-50% | 3 |
+| planning | ~29,600 | ~15,000 | ~-49% | 2 |
+
+> v7 核心改变：system prompt 只注入 Skill Level 1 metadata（name + description + scripts 列表），
+> Agent 通过 `read_skill` MCP 工具按需读取完整 SKILL.md 内容。
 
 ### 4.6 Spring Security 配置
 
@@ -871,7 +936,7 @@ McpToolCallResponse { content: List<McpContent>, isError: Boolean }
 | 2 | 容器启动 | ✅ | 6 容器 running, 全部 healthy（v6: 4→6） |
 | 3 | Nginx 路由 | ✅ | 前端 200, API 正常, /auth/ proxy 正常（v5: +keycloak 代理） |
 | 4 | 前端页面加载 | ✅ | `http://localhost:9000` 返回 200 |
-| 5 | 后端 API | ✅ | `/api/chat/skills`(32) + `/api/chat/profiles`(5) + `/api/mcp/tools`(9) |
+| 5 | 后端 API | ✅ | `/api/chat/skills`(28) + `/api/chat/profiles`(5) + `/api/mcp/tools`(12)（v7: 32→28 skills, 9→12 tools） |
 | 6 | AI Chat 流式响应 | ✅ | WebSocket + SSE 双通道均正常 |
 | 7 | OODA 阶段指示器 | ✅ | Observe→Orient→Decide→[Act→]Complete 流转正常 |
 | 8 | Profile Badge + Confidence | ✅ | 名称、skills 列表、confidence 圆点、路由原因均显示 |
@@ -880,7 +945,7 @@ McpToolCallResponse { content: List<McpContent>, isError: Boolean }
 | 11 | Profile 路由（默认回退） | ✅ | 1/1 — 无关消息回退到 development |
 | 12 | Prompt Caching | ✅ | 缓存命中后 system prompt 费用降 90% |
 | 13 | Agentic Loop 多轮 Tool Calling | ✅ | Turn 1 tool_use + Turn 2 content 正常 |
-| 14 | MCP 实连 | ✅ | 9 builtin + 9 外部发现（v6: knowledge-mcp 6 + database-mcp 3） |
+| 14 | MCP 实连 | ✅ | 12 builtin + 9 外部发现（v7: +read_skill/run_skill_script/list_skills） |
 | 15 | BaselineService 底线集成 | ✅ | run_baseline / list_baselines 工具可用 + AgentLoop 自动检查（v6） |
 | 16 | MetricsService 指标采集 | ✅ | 7 个 forge.* 自定义指标注册 |
 | 17 | Actuator/Prometheus 端点 | ✅ | `/actuator/metrics/forge.*` + `/actuator/prometheus` |
@@ -894,6 +959,13 @@ McpToolCallResponse { content: List<McpContent>, isError: Boolean }
 | 25 | 代码块 Apply 按钮 | ✅ | 代码块 → workspace 文件（v5 新增） |
 | 26 | 知识库 12+ 文档 | ✅ | +5 新增文档可搜索（v5 新增） |
 | 27 | 降级与容错 | ⏳ | 未测试 |
+| 28 | Skill 渐进式加载 | ✅ | system prompt 55K→20-25K，metadata-only（v7 新增） |
+| 29 | Skill 管理 API | ✅ | 9 端点 CRUD + enable/disable + 脚本执行 + 统计（v7 新增） |
+| 30 | Skill 管理前端 | ✅ | /skills 页面 4 Tab + Tag 过滤 + 详情/创建（v7 新增） |
+| 31 | Skill 质量治理 | ✅ | 32→28 个，D 级移除、C 级合并（v7 新增） |
+| 32 | Skill 使用追踪 | ✅ | SkillUsageEntity + SkillAnalyticsService（v7 新增） |
+| 33 | PLATFORM Skill 保护 | ✅ | 不可删除，返回 400（v7 新增） |
+| 34 | 端到端交付闭环 | ✅ | 设计 profile 完整闭环：搜索→设计→写文档→baseline→HITL→总结（v7 新增） |
 
 ### Phase 1.6 验收标准达成（v5）
 
@@ -924,6 +996,22 @@ McpToolCallResponse { content: List<McpContent>, isError: Boolean }
 | 5 | McpProxyService callTool fallback 正确 | ✅ toolCache 查找 |
 | 6 | Docker 6 容器全部 healthy | ✅ 一键启动 |
 
+### Phase 4 验收标准达成（v7 新增）
+
+| # | 标准 | 状态 |
+|---|------|------|
+| 1 | System prompt Skill 部分从 ~55K 降至 metadata-only (~1K) | ✅ |
+| 2 | 渐进式加载 3 层（metadata → SKILL.md → 子文件/脚本） | ✅ |
+| 3 | Skill 质量治理：32→28 个，全部 B 级以上 | ✅ |
+| 4 | delivery-methodology 方法论 Skill 新建 | ✅ |
+| 5 | ~19 个可执行脚本（验证 + 提取两类） | ✅ |
+| 6 | Skill 管理 API：9 REST 端点 CRUD | ✅ |
+| 7 | 前端 /skills 管理页面 | ✅ |
+| 8 | PLATFORM Skill 不可删除 | ✅ |
+| 9 | Skill 使用追踪 + 分析度量 | ✅ |
+| 10 | MCP 工具 9→12 | ✅ |
+| 11 | 端到端交付闭环手工验证 | ✅ |
+
 ### 单元测试
 
 **总计**: 147 tests, 0 failures
@@ -944,8 +1032,8 @@ McpToolCallResponse { content: List<McpContent>, isError: Boolean }
 | `EvalRunnerTest.kt` | 18 | 5 断言类型 + 有/无 adapter + profile/tag 过滤 |
 | model-adapter tests | 11 | ClaudeAdapter + StreamEvent + tool calling |
 
-**Skill 加载验证**: 32 skills, 5 profiles（v6: 条件触发过滤后 3~20 个）
-**MCP 工具验证**: 9 builtin + 9 外部发现（v6: knowledge-mcp 6 + database-mcp 3）
+**Skill 加载验证**: 28 skills, 5 profiles（v7: 渐进式加载 metadata-only，按需 read_skill）
+**MCP 工具验证**: 12 builtin + 9 外部发现（v7: +read_skill/run_skill_script/list_skills）
 
 ---
 
@@ -1048,11 +1136,13 @@ const [oodaPhase, setOodaPhase] = useState<OodaPhase | null>(null);
 
 ---
 
-> 基线版本: v5.1
+> 基线版本: v7
 > 初始冻结日期: 2026-02-18 (v1, Phase 1.5)
 > v2 更新日期: 2026-02-18 (Phase 2 E2E 验证后)
 > v3 更新日期: 2026-02-18 (Sprint 2A 验收通过后)
 > v4 更新日期: 2026-02-19 (Phase 2 全部完成 — Sprint 2B + 2C)
 > v5 更新日期: 2026-02-19 (Phase 1.6 全部完成 — AI 交付闭环 + Keycloak SSO + 编辑器增强)
 > v5.1 更新日期: 2026-02-20 (BUG-019/020 修复 — Apply 按钮始终可见 + ContextPicker 搜索键盘转发)
-> 下次评审: Phase 3 启动前
+> v6 更新日期: 2026-02-21 (Sprint 2.2 — Skill 条件触发 + AgentLoop 底线 + MCP 真实服务 + 6 容器)
+> v7 更新日期: 2026-02-22 (Phase 4 — Skill 架构改造：渐进式加载 + 质量治理 + 管理 UI + 度量)
+> 下次评审: Phase 5 启动前

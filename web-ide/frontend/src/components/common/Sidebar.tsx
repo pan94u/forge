@@ -13,6 +13,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Server,
+  Sparkles,
 } from "lucide-react";
 
 interface SidebarProps {
@@ -58,6 +59,12 @@ const navItems: NavItem[] = [
     icon: MessageSquare,
     label: "AI Chat",
     roles: ["developer", "product"],
+  },
+  {
+    href: "/skills",
+    icon: Sparkles,
+    label: "Skills",
+    roles: ["developer"],
   },
   {
     href: "/integrations",

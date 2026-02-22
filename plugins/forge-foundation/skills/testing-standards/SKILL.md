@@ -2,9 +2,14 @@
 name: testing-standards
 description: >
   Testing standards for enterprise applications. Covers naming conventions,
-  AAA structure, mock strategies, Testcontainers, coverage targets.
+  AAA structure, mock strategies, Testcontainers, coverage targets,
+  test execution order, flaky test detection, and test reporting.
 trigger: when writing tests or containing "Test" keyword in context
 tags: [testing, junit, mockk, testcontainers, coverage]
+version: "3.0"
+category: foundation
+scope: platform
+note: "Forge project conventions. Other projects may adapt to their testing stack."
 ---
 
 # Testing Standards
@@ -100,11 +105,11 @@ class OrderRepositoryIntegrationTest {
 
 | Layer | Target | Rationale |
 |-------|--------|-----------|
-| Service | ≥ 80% | Core business logic |
+| Service | >= 80% | Core business logic |
 | Controller | Integration test required | HTTP contract verification |
 | Repository | Integration test for custom queries | SQL correctness |
-| Domain model | ≥ 90% | Critical invariants |
-| Utility | ≥ 90% | Edge cases matter |
+| Domain model | >= 90% | Critical invariants |
+| Utility | >= 90% | Edge cases matter |
 
 ## Test Behavior, Not Implementation
 
@@ -124,3 +129,42 @@ fun should_callRepositorySaveMethod() {
     verify { orderRepository.save(any()) }  // too coupled to implementation
 }
 ```
+
+## Test Execution Order
+
+Run tests in this order for fastest feedback on failures:
+
+1. **Unit tests** — fastest, most isolated
+2. **Integration tests** — slower, requires infrastructure
+3. **Contract tests** — validates external API compatibility
+4. **End-to-end tests** — slowest, full system
+
+## Flaky Test Detection & Handling
+
+### Common Causes
+
+| Cause                       | Fix                                |
+|-----------------------------|------------------------------------|
+| Shared mutable state        | Isolate test data                  |
+| Time-dependent logic        | Mock the clock                     |
+| Race conditions             | Use Awaitility, not Thread.sleep   |
+| External service dependency | Mock external services             |
+| Port conflicts              | Use random ports                   |
+| Order-dependent tests       | Make tests independent             |
+| Database state leakage      | Use transactions or clean up       |
+
+### Handling Protocol
+
+1. **Immediate**: tag as `@Tag("flaky")` and exclude from CI blocking
+2. **Within 1 sprint**: investigate root cause and fix
+3. **If unfixable**: delete and replace with a reliable alternative
+4. **Never**: leave a flaky test in the main suite permanently
+
+## Test Report Structure
+
+Reports must include:
+- **Summary table**: total/passed/failed/skipped per category
+- **Failure categorization**: real bug vs. test issue vs. environment issue
+- **Coverage summary**: line + branch coverage by module, with pass/fail status
+- **Actionable recommendations**: what should be done next
+- **Baseline results**: automated quality gate pass/fail

@@ -157,8 +157,8 @@ class SystemPromptAssemblerTest {
         fun `should include skill category in metadata`() {
             val prompt = assembler.assemble(testProfile, testSkills)
 
-            assertThat(prompt).contains("[foundation]")
-            assertThat(prompt).contains("[delivery]")
+            assertThat(prompt).contains("platform/foundation")
+            assertThat(prompt).contains("platform/delivery")
         }
 
         @Test

@@ -1,6 +1,8 @@
 ---
 name: kubernetes-patterns
-version: 1.0.0
+version: "2.0"
+scope: platform
+category: delivery
 profile: deployment
 description: "Kubernetes deployment patterns, resource configuration, and operational best practices"
 tags:

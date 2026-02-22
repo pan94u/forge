@@ -1,6 +1,8 @@
 ---
 name: domain-model-knowledge
-version: 1.0.0
+version: "2.0"
+scope: platform
+category: knowledge
 profile: knowledge
 description: "Provides knowledge about the domain model, entities, relationships, and business rules"
 tags:

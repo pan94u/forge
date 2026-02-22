@@ -1,6 +1,8 @@
 ---
 name: internal-api-knowledge
-version: 1.0.0
+version: "2.0"
+scope: platform
+category: knowledge
 profile: knowledge
 description: "Provides knowledge about internal APIs, service contracts, and integration patterns"
 tags:

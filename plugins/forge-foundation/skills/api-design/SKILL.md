@@ -5,6 +5,9 @@ description: >
   RFC 7807 error responses, versioning, and OpenAPI.
 trigger: when designing or implementing REST APIs, controllers, or endpoints
 tags: [api, rest, openapi, http, pagination]
+version: "2.0"
+scope: platform
+category: foundation
 ---
 
 # REST API Design

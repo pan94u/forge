@@ -10,6 +10,21 @@ package com.forge.webide.service.skill
  */
 enum class SkillCategory { SYSTEM, FOUNDATION, DELIVERY, KNOWLEDGE, CUSTOM }
 
+/**
+ * Skill scope determines ownership and mutability:
+ * - PLATFORM: built-in, read-only (plugins/ directory)
+ * - WORKSPACE: workspace-level, editable (workspace/.skills/)
+ * - CUSTOM: user-created, full CRUD
+ */
+enum class SkillScope { PLATFORM, WORKSPACE, CUSTOM }
+
+/**
+ * Script type determines the script's role in the dual-loop architecture:
+ * - VALIDATION: quality gate scripts (compile check, layer violation, etc.)
+ * - EXTRACTION: knowledge extraction scripts (convention mining, rule extraction, etc.)
+ */
+enum class ScriptType { VALIDATION, EXTRACTION }
+
 enum class SkillContentType { REFERENCE, EXAMPLE, TEMPLATE, SCRIPT }
 
 /**
@@ -28,6 +43,7 @@ data class SkillScript(
     val path: String,
     val description: String,
     val language: String,
+    val scriptType: ScriptType = ScriptType.VALIDATION,
     val executionHint: String = "run"
 )
 
@@ -52,6 +68,7 @@ data class SkillDefinition(
     val version: String = "1.0",
     val author: String = "",
     val category: SkillCategory = SkillCategory.CUSTOM,
+    val scope: SkillScope = SkillScope.PLATFORM,
     val subFiles: List<SkillSubFile> = emptyList(),
     val scripts: List<SkillScript> = emptyList(),
     val enabled: Boolean = true,

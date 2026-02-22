@@ -179,12 +179,15 @@ Always be concise but thorough in your responses."""
         sb.appendLine()
 
         for (skill in skills) {
-            sb.appendLine("- **${skill.name}** [${skill.category.name.lowercase()}]: ${skill.description}")
+            sb.appendLine("- **${skill.name}** [${skill.scope.name.lowercase()}/${skill.category.name.lowercase()}]: ${skill.description}")
+            if (skill.tags.isNotEmpty()) {
+                sb.appendLine("  Tags: ${skill.tags.joinToString(", ")}")
+            }
             if (skill.subFiles.isNotEmpty()) {
                 sb.appendLine("  Sub-files: ${skill.subFiles.joinToString(", ") { it.path }}")
             }
             if (skill.scripts.isNotEmpty()) {
-                sb.appendLine("  Scripts: ${skill.scripts.joinToString(", ") { it.path }}")
+                sb.appendLine("  Scripts: ${skill.scripts.joinToString(", ") { "${it.path} (${it.scriptType.name.lowercase()})" }}")
             }
         }
 

@@ -8,6 +8,9 @@ trigger: when the user requests business rule extraction, domain logic analysis,
 tags: [business-rules, domain-logic, knowledge-mining, migration, analysis]
 profile: planning
 supported-languages: [java, kotlin, csharp, python, go, typescript]
+version: "2.0"
+scope: platform
+category: foundation
 ---
 
 # Business Rule Extraction

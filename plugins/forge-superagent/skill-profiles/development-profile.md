@@ -2,6 +2,7 @@
 name: development-profile
 description: "Skill Profile for the Development delivery stage. Loads core coding skills plus keyword-triggered domain/foundation skills on demand."
 skills:
+  - delivery-methodology
   - code-generation
   - kotlin-conventions
   - spring-boot-patterns

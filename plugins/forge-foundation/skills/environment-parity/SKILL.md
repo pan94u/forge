@@ -1,6 +1,8 @@
 ---
 name: environment-parity
-version: "1.0"
+version: "2.0"
+scope: platform
+category: foundation
 triggers:
   - "environment"
   - "docker"

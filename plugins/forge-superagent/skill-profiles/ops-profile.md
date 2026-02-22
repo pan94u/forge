@@ -2,6 +2,7 @@
 name: ops-profile
 description: "Skill Profile for the Operations delivery stage. Focused on deployment execution, infrastructure management, monitoring, and incident response."
 skills:
+  - delivery-methodology
   - deployment-ops
   - kubernetes-patterns
   - ci-cd-patterns

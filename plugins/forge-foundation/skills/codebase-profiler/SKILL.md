@@ -7,6 +7,9 @@ description: >
 trigger: when running /forge-profile or analyzing an existing codebase
 tags: [profiling, analysis, knowledge-mining, architecture]
 supported-languages: [java, kotlin, csharp, python, go, typescript]
+version: "2.0"
+scope: platform
+category: foundation
 ---
 
 # Codebase Profiler

@@ -2,8 +2,8 @@
 name: planning-profile
 description: "Skill Profile for the Planning delivery stage. Focused on requirement analysis, stakeholder alignment, and PRD authoring."
 skills:
-  - requirement-analysis
-  - prd-writing
+  - delivery-methodology
+  - requirement-engineering
 baselines: []
 hitl-checkpoint: "PRD human confirmation — present complete PRD for stakeholder review and approval before proceeding to Design."
 ---

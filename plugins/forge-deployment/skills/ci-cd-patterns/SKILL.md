@@ -1,6 +1,8 @@
 ---
 name: ci-cd-patterns
-version: 1.0.0
+version: "2.0"
+scope: platform
+category: delivery
 profile: deployment
 description: "CI/CD pipeline patterns, workflow configuration, and release automation best practices"
 tags:

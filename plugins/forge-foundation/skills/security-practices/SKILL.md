@@ -5,6 +5,9 @@ description: >
   parameterized queries, input validation, secret management, OWASP Top 10.
 trigger: when working with authentication, authorization, input validation, or security configuration
 tags: [security, spring-security, owasp, authentication, authorization]
+version: "2.0"
+scope: platform
+category: foundation
 ---
 
 # Security Practices

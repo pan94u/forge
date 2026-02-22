@@ -5,6 +5,9 @@ description: >
   dependency management, build cache, and custom tasks.
 trigger: when modifying build.gradle.kts, settings.gradle.kts, or version catalogs
 tags: [gradle, build, kotlin-dsl, dependencies, multi-module]
+version: "2.0"
+scope: platform
+category: foundation
 ---
 
 # Gradle Kotlin DSL
