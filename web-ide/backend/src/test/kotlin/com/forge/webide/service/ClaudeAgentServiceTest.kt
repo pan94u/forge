@@ -24,6 +24,7 @@ import java.util.concurrent.CopyOnWriteArrayList
 class ClaudeAgentServiceTest {
 
     private lateinit var claudeAdapter: ClaudeAdapter
+    private lateinit var dynamicAdapterFactory: DynamicAdapterFactory
     private lateinit var mcpProxyService: McpProxyService
     private lateinit var knowledgeGapDetectorService: KnowledgeGapDetectorService
     private lateinit var chatSessionRepository: ChatSessionRepository
@@ -48,6 +49,7 @@ class ClaudeAgentServiceTest {
     @BeforeEach
     fun setUp() {
         claudeAdapter = mockk()
+        dynamicAdapterFactory = mockk()
         mcpProxyService = mockk()
         knowledgeGapDetectorService = mockk(relaxed = true)
         chatSessionRepository = mockk(relaxed = true)
@@ -69,8 +71,12 @@ class ClaudeAgentServiceTest {
         every { systemPromptAssembler.assemble(any(), any()) } returns "You are a test assistant."
         every { systemPromptAssembler.fallbackPrompt() } returns "You are a test assistant."
 
+        // DynamicAdapterFactory: always return the mocked claudeAdapter
+        every { dynamicAdapterFactory.providerForModel(any()) } returns "anthropic"
+        every { dynamicAdapterFactory.createForUser(any(), any()) } returns claudeAdapter
+
         service = ClaudeAgentService(
-            claudeAdapter = claudeAdapter,
+            dynamicAdapterFactory = dynamicAdapterFactory,
             mcpProxyService = mcpProxyService,
             knowledgeGapDetectorService = knowledgeGapDetectorService,
             chatSessionRepository = chatSessionRepository,

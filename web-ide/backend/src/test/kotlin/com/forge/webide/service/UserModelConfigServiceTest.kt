@@ -134,7 +134,7 @@ class UserModelConfigServiceTest {
     }
 
     @Test
-    fun `getDecryptedApiKey returns decrypted key`() {
+    fun `getDecryptedConfig returns decrypted key`() {
         val encrypted = encryptionService.encrypt("my-secret-key")
         val entity = UserModelConfigEntity(
             id = "1",
@@ -145,18 +145,19 @@ class UserModelConfigServiceTest {
         )
         every { repository.findByUserIdAndProvider("user1", "anthropic") } returns entity
 
-        val key = service.getDecryptedApiKey("user1", "anthropic")
-        assertThat(key).isEqualTo("my-secret-key")
+        val config = service.getDecryptedConfig("user1", "anthropic")
+        assertThat(config).isNotNull()
+        assertThat(config!!.apiKey).isEqualTo("my-secret-key")
     }
 
     @Test
-    fun `getDecryptedApiKey returns null when not found`() {
+    fun `getDecryptedConfig returns null when not found`() {
         every { repository.findByUserIdAndProvider("user1", "anthropic") } returns null
-        assertThat(service.getDecryptedApiKey("user1", "anthropic")).isNull()
+        assertThat(service.getDecryptedConfig("user1", "anthropic")).isNull()
     }
 
     @Test
-    fun `getDecryptedApiKey returns null when disabled`() {
+    fun `getDecryptedConfig returns null when disabled`() {
         val entity = UserModelConfigEntity(
             id = "1",
             userId = "user1",
@@ -165,7 +166,7 @@ class UserModelConfigServiceTest {
             enabled = false
         )
         every { repository.findByUserIdAndProvider("user1", "anthropic") } returns entity
-        assertThat(service.getDecryptedApiKey("user1", "anthropic")).isNull()
+        assertThat(service.getDecryptedConfig("user1", "anthropic")).isNull()
     }
 
     @Test

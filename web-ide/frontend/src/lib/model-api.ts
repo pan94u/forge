@@ -43,6 +43,7 @@ export interface UserModelConfigView {
   baseUrl: string;
   region: string;
   enabled: boolean;
+  customModels: string[];
   updatedAt: string;
 }
 
@@ -52,6 +53,18 @@ export interface UserModelConfigRequest {
   baseUrl?: string;
   region?: string;
   enabled?: boolean;
+  customModels?: string[];
+}
+
+/**
+ * 获取当前用户已配置且启用的 Provider 的可用模型列表。
+ * ModelSelector 使用此端点，只显示用户可实际使用的模型。
+ */
+export async function fetchAvailableModels(): Promise<ModelInfo[]> {
+  const res = await fetch("/api/models/available");
+  if (!res.ok)
+    throw new Error(`Failed to fetch available models: ${res.status}`);
+  return res.json();
 }
 
 export async function fetchUserModelConfigs(): Promise<UserModelConfigView[]> {

@@ -27,6 +27,9 @@ class UserModelConfigEntity(
     @Column(name = "enabled")
     var enabled: Boolean = true,
 
+    @Column(name = "custom_models", columnDefinition = "TEXT")
+    var customModels: String = "[]",
+
     @Column(name = "created_at", nullable = false)
     val createdAt: Instant = Instant.now(),
 

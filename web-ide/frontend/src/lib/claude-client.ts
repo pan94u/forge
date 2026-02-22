@@ -66,17 +66,23 @@ class ClaudeClient {
   /**
    * Send a HITL response (approve/reject/modify) via the active WebSocket.
    */
-  sendHitlResponse(action: HitlAction, feedback?: string, modifiedPrompt?: string): void {
+  sendHitlResponse(
+    action: HitlAction,
+    feedback?: string,
+    modifiedPrompt?: string,
+  ): void {
     if (!this.activeWs || this.activeWs.readyState !== WebSocket.OPEN) {
       console.error("Cannot send HITL response: WebSocket not connected");
       return;
     }
-    this.activeWs.send(JSON.stringify({
-      type: "hitl_response",
-      action,
-      feedback,
-      modifiedPrompt,
-    }));
+    this.activeWs.send(
+      JSON.stringify({
+        type: "hitl_response",
+        action,
+        feedback,
+        modifiedPrompt,
+      }),
+    );
   }
 
   /**
@@ -89,7 +95,8 @@ class ClaudeClient {
     contexts: ChatContext[],
     onEvent: (event: StreamEvent) => void,
     signal?: AbortSignal,
-    workspaceId?: string
+    workspaceId?: string,
+    model?: string,
   ): Promise<void> {
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     const host = this.baseUrl || window.location.host;
@@ -114,7 +121,10 @@ class ClaudeClient {
       }
 
       const cleanup = () => {
-        if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
+        if (
+          ws.readyState === WebSocket.OPEN ||
+          ws.readyState === WebSocket.CONNECTING
+        ) {
           ws.close();
         }
       };
@@ -134,7 +144,8 @@ class ClaudeClient {
             content: message,
             contexts,
             workspaceId,
-          })
+            model: model ?? "claude-sonnet-4-6",
+          }),
         );
       };
 
@@ -179,7 +190,7 @@ class ClaudeClient {
     message: string,
     contexts: ChatContext[],
     onEvent: (event: StreamEvent) => void,
-    signal?: AbortSignal
+    signal?: AbortSignal,
   ): Promise<void> {
     const url = `${this.baseUrl}/api/chat/sessions/${sessionId}/stream`;
 
@@ -251,8 +262,11 @@ class ClaudeClient {
   async sendMessage(
     sessionId: string,
     message: string,
-    contexts: ChatContext[]
-  ): Promise<{ content: string; toolCalls: Array<{ name: string; output: string }> }> {
+    contexts: ChatContext[],
+  ): Promise<{
+    content: string;
+    toolCalls: Array<{ name: string; output: string }>;
+  }> {
     const url = `${this.baseUrl}/api/chat/sessions/${sessionId}/messages`;
 
     const response = await fetch(url, {
@@ -271,9 +285,7 @@ class ClaudeClient {
   /**
    * Get message history for a session.
    */
-  async getMessages(
-    sessionId: string
-  ): Promise<
+  async getMessages(sessionId: string): Promise<
     Array<{
       id: string;
       role: "user" | "assistant";

@@ -14,7 +14,6 @@ import com.forge.webide.service.skill.*
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.runBlocking
 import org.slf4j.LoggerFactory
-import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
 import java.time.Instant
 import java.util.UUID
@@ -33,7 +32,7 @@ import java.util.concurrent.TimeUnit
  */
 @Service
 class ClaudeAgentService(
-    private val claudeAdapter: ModelAdapter,
+    private val dynamicAdapterFactory: DynamicAdapterFactory,
     private val mcpProxyService: McpProxyService,
     private val knowledgeGapDetectorService: KnowledgeGapDetectorService,
     private val chatSessionRepository: ChatSessionRepository,
@@ -60,9 +59,6 @@ class ClaudeAgentService(
             "timestamp" to Instant.now().toString()
         ))
     }
-
-    @Value("\${forge.model.name:\${forge.claude.model:claude-sonnet-4-6}}")
-    private var model: String = "claude-sonnet-4-6"
 
     /**
      * Build a dynamic system prompt based on the user's message.
@@ -101,7 +97,9 @@ class ClaudeAgentService(
         sessionId: String,
         message: String,
         contexts: List<ContextReference>,
-        workspaceId: String
+        workspaceId: String,
+        model: String = "claude-sonnet-4-6",
+        userId: String = "anonymous"
     ): ChatMessageResponse {
         val fullMessage = buildContextualMessage(message, contexts)
         val history = loadConversationHistory(sessionId)
@@ -120,6 +118,9 @@ class ClaudeAgentService(
             val promptResult = buildDynamicSystemPrompt(message)
             logger.info("Profile: {}, Skills: {}", promptResult.activeProfile, promptResult.loadedSkills)
 
+            val provider = dynamicAdapterFactory.providerForModel(model)
+            val adapter = dynamicAdapterFactory.createForUser(userId, provider)
+
             val options = CompletionOptions(
                 model = model,
                 maxTokens = 4096,
@@ -128,7 +129,7 @@ class ClaudeAgentService(
 
             // Run single-turn completion
             val result = runBlocking {
-                val events = claudeAdapter.streamWithTools(messages, options, tools).toList()
+                val events = adapter.streamWithTools(messages, options, tools).toList()
                 collectStreamResult(events)
             }
 
@@ -159,6 +160,8 @@ class ClaudeAgentService(
         message: String,
         contexts: List<ContextReference>,
         workspaceId: String,
+        model: String = "claude-sonnet-4-6",
+        userId: String = "anonymous",
         onEvent: (Map<String, Any?>) -> Unit,
         onComplete: (ChatMessage) -> Unit,
         onError: (Exception) -> Unit
@@ -183,8 +186,18 @@ class ClaudeAgentService(
                 metricsService.recordOodaPhase("observe")
                 emitSubStep(onEvent, "解析用户意图（${message.length} 字符）")
 
+                // 创建 per-request adapter（从用户数据库配置）
+                val provider = dynamicAdapterFactory.providerForModel(model)
+                val adapter = try {
+                    dynamicAdapterFactory.createForUser(userId, provider)
+                } catch (e: ProviderNotConfiguredException) {
+                    onError(Exception(e.message))
+                    return@submit
+                }
+
                 val promptResult = buildDynamicSystemPrompt(message)
-                logger.info("Stream profile: {}, Skills: {}", promptResult.activeProfile, promptResult.loadedSkills)
+                logger.info("Stream profile: {}, Skills: {}, model: {}, provider: {}",
+                    promptResult.activeProfile, promptResult.loadedSkills, model, provider)
 
                 val options = CompletionOptions(
                     model = model,
@@ -222,6 +235,7 @@ class ClaudeAgentService(
                         messages = history + Message(role = Message.Role.USER, content = fullMessage),
                         options = options,
                         tools = tools,
+                        adapter = adapter,
                         onEvent = onEvent,
                         workspaceId = workspaceId
                     )
@@ -238,6 +252,7 @@ class ClaudeAgentService(
                         messages = history + Message(role = Message.Role.USER, content = fullMessage),
                         options = options,
                         tools = tools,
+                        adapter = adapter,
                         workspaceId = workspaceId,
                         onEvent = onEvent
                     )
@@ -279,6 +294,7 @@ class ClaudeAgentService(
                                     messages = modifiedMessages,
                                     options = options,
                                     tools = tools,
+                                    adapter = adapter,
                                     onEvent = onEvent,
                                     workspaceId = workspaceId
                                 )
@@ -370,6 +386,7 @@ class ClaudeAgentService(
         messages: List<Message>,
         options: CompletionOptions,
         tools: List<ToolDefinition>,
+        adapter: ModelAdapter,
         onEvent: (Map<String, Any?>) -> Unit,
         workspaceId: String = ""
     ): AgenticResult {
@@ -394,7 +411,7 @@ class ClaudeAgentService(
             val turnStartMs = System.currentTimeMillis()
 
             // Stream and emit events in real-time
-            claudeAdapter.streamWithTools(currentMessages, options, tools).collect { event ->
+            adapter.streamWithTools(currentMessages, options, tools).collect { event ->
                 if (!firstEventReceived) {
                     firstEventReceived = true
                     logger.debug("First event received for turn $turn in ${System.currentTimeMillis() - turnStartMs}ms: ${event::class.simpleName}")
@@ -586,7 +603,7 @@ class ClaudeAgentService(
             ))
 
             var summaryText = StringBuilder()
-            claudeAdapter.streamWithTools(currentMessages, options, emptyList()).collect { event ->
+            adapter.streamWithTools(currentMessages, options, emptyList()).collect { event ->
                 when (event) {
                     is StreamEvent.ContentDelta -> {
                         summaryText.append(event.text)
@@ -723,6 +740,7 @@ class ClaudeAgentService(
         messages: List<Message>,
         options: CompletionOptions,
         tools: List<ToolDefinition>,
+        adapter: ModelAdapter,
         workspaceId: String,
         onEvent: (Map<String, Any?>) -> Unit
     ): AgenticResult {
@@ -825,6 +843,7 @@ $failureContext
                     messages = fixMessages,
                     options = options,
                     tools = tools,
+                    adapter = adapter,
                     onEvent = onEvent,
                     workspaceId = workspaceId
                 )

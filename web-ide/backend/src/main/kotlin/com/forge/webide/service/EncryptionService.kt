@@ -37,13 +37,12 @@ class EncryptionService(
     }
 
     private val secretKey: SecretKey? by lazy {
-        val keyStr = encryptionKeyBase64.ifBlank { System.getenv("FORGE_ENCRYPTION_KEY") ?: "" }
-        if (keyStr.isBlank()) {
-            logger.warn("FORGE_ENCRYPTION_KEY 未设置，API Key 将以明文存储（仅适用于开发环境）")
+        if (encryptionKeyBase64.isBlank()) {
+            logger.warn("FORGE_ENCRYPTION_KEY 未设置，API Key 加密不可用")
             null
         } else {
             try {
-                val keyBytes = Base64.getDecoder().decode(keyStr)
+                val keyBytes = Base64.getDecoder().decode(encryptionKeyBase64)
                 require(keyBytes.size == KEY_LENGTH_BYTES) {
                     "加密密钥必须是 $KEY_LENGTH_BYTES 字节（当前 ${keyBytes.size} 字节）"
                 }

@@ -39,6 +39,9 @@ dependencies {
     // Model adapter — real Claude API streaming + tool calling
     implementation(project(":adapters:model-adapter"))
 
+    // Auto-load .env file in development
+    implementation("me.paulschwarz:spring-dotenv:4.0.0")
+
     // Database persistence — JPA + Flyway
     implementation("org.springframework.boot:spring-boot-starter-data-jpa")
     runtimeOnly("com.h2database:h2")
@@ -59,4 +62,9 @@ tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile> {
 
 tasks.withType<Test> {
     useJUnitPlatform()
+}
+
+// 让 bootRun 的工作目录指向项目根目录，使 spring-dotenv 能找到根目录的 .env 文件
+tasks.named<org.springframework.boot.gradle.tasks.run.BootRun>("bootRun") {
+    workingDir = rootProject.projectDir
 }

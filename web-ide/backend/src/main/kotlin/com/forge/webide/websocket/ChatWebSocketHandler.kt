@@ -111,6 +111,8 @@ class ChatWebSocketHandler(
     ) {
         val content = payload["content"] as? String ?: return
         val workspaceId = payload["workspaceId"] as? String ?: ""
+        val model = payload["model"] as? String ?: "claude-sonnet-4-6"
+        val userId = wsSession.principal?.name ?: "anonymous"
         val rawContexts = payload["contexts"] as? List<Map<String, Any?>> ?: emptyList()
 
         val contexts = rawContexts.map { ctx ->
@@ -121,7 +123,7 @@ class ChatWebSocketHandler(
             )
         }
 
-        logger.debug("Chat message received: session=$chatSessionId, workspace=$workspaceId, length=${content.length}")
+        logger.debug("Chat message received: session=$chatSessionId, workspace=$workspaceId, model=$model, length=${content.length}")
 
         // Stream the response back via the agentic loop
         claudeAgentService.streamMessage(
@@ -129,6 +131,8 @@ class ChatWebSocketHandler(
             message = content,
             contexts = contexts,
             workspaceId = workspaceId,
+            model = model,
+            userId = userId,
             onEvent = { event ->
                 // Forward all event types: content, tool_use_start, tool_use, tool_result, error
                 if (wsSession.isOpen) {

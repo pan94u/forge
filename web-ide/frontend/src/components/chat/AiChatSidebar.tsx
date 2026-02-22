@@ -76,6 +76,7 @@ export function AiChatSidebar({
   });
   const [showContextPicker, setShowContextPicker] = useState(false);
   const [showModelSettings, setShowModelSettings] = useState(false);
+  const [modelRefreshKey, setModelRefreshKey] = useState(0);
   const [selectedContexts, setSelectedContexts] = useState<ContextItem[]>([]);
   const [sessionId, setSessionId] = useState<string | null>(() => {
     if (typeof window === "undefined") return null;
@@ -91,9 +92,14 @@ export function AiChatSidebar({
   const [oodaPhase, setOodaPhase] = useState<OodaPhase | null>(null);
   const [activityLog, setActivityLog] = useState<SubStep[]>([]);
   const [showActivityLog, setShowActivityLog] = useState(false);
-  const [currentTurn, setCurrentTurn] = useState<{ turn: number; maxTurns: number } | null>(null);
+  const [currentTurn, setCurrentTurn] = useState<{
+    turn: number;
+    maxTurns: number;
+  } | null>(null);
   const [oodaDetail, setOodaDetail] = useState<string>("");
-  const [baselineResult, setBaselineResult] = useState<BaselineResult | null>(null);
+  const [baselineResult, setBaselineResult] = useState<BaselineResult | null>(
+    null,
+  );
   const [hitlPending, setHitlPending] = useState(false);
   const [hitlData, setHitlData] = useState<{
     profile: string;
@@ -271,7 +277,10 @@ export function AiChatSidebar({
             case "sub_step":
               setActivityLog((prev) => [
                 ...prev.slice(-49),
-                { message: event.message ?? "", timestamp: event.timestamp ?? new Date().toISOString() },
+                {
+                  message: event.message ?? "",
+                  timestamp: event.timestamp ?? new Date().toISOString(),
+                },
               ]);
               break;
             case "baseline_check":
@@ -405,6 +414,7 @@ export function AiChatSidebar({
         },
         abortController.signal,
         workspaceId,
+        selectedModel,
       );
     } catch (err) {
       if ((err as Error).name !== "AbortError") {
@@ -527,6 +537,8 @@ export function AiChatSidebar({
               setSelectedModel(modelId);
               localStorage.setItem("forge_selected_model", modelId);
             }}
+            onOpenSettings={() => setShowModelSettings(true)}
+            refreshKey={modelRefreshKey}
           />
           <button
             onClick={() => {
@@ -552,6 +564,7 @@ export function AiChatSidebar({
       <ModelSettingsDialog
         isOpen={showModelSettings}
         onClose={() => setShowModelSettings(false)}
+        onSaved={() => setModelRefreshKey((k) => k + 1)}
       />
 
       {/* Quality Panel Tab */}
@@ -562,7 +575,10 @@ export function AiChatSidebar({
       )}
 
       {/* Messages (Chat Tab) */}
-      <div ref={scrollRef} className={`flex-1 overflow-auto p-4 space-y-4 ${activeTab !== "chat" ? "hidden" : ""}`}>
+      <div
+        ref={scrollRef}
+        className={`flex-1 overflow-auto p-4 space-y-4 ${activeTab !== "chat" ? "hidden" : ""}`}
+      >
         {messages.length === 0 && (
           <div className="flex h-full items-center justify-center">
             <div className="text-center text-muted-foreground">
@@ -580,136 +596,161 @@ export function AiChatSidebar({
             workspaceId={workspaceId}
           />
         ))}
-        {(isStreaming || activityLog.length > 0) && (activeProfile || oodaPhase || activityLog.length > 0) && (
-          <div className="space-y-1.5 mx-1">
-            {/* OODA Phase Indicator — enhanced with Turn info */}
-            {oodaPhase && isStreaming && (
-              <div className="flex items-center gap-0.5">
-                {OODA_PHASES.map((p) => {
-                  const isActive = p.key === oodaPhase;
-                  const phaseIdx = OODA_PHASES.findIndex(
-                    (x) => x.key === oodaPhase,
-                  );
-                  const thisIdx = OODA_PHASES.findIndex((x) => x.key === p.key);
-                  const isPast = thisIdx < phaseIdx;
-                  const Icon = p.icon;
-                  return (
-                    <div
-                      key={p.key}
-                      className={`flex items-center gap-0.5 rounded px-1.5 py-0.5 text-xs transition-colors ${
-                        isActive
-                          ? "bg-primary/15 text-primary font-medium"
-                          : isPast
-                            ? "text-green-400"
-                            : "text-muted-foreground/40"
-                      }`}
-                      title={p.label}
-                    >
-                      <Icon className="h-3 w-3" />
-                      {isActive && <span>{p.label}</span>}
-                    </div>
-                  );
-                })}
-                {/* Turn counter */}
-                {currentTurn && (
-                  <span className="ml-1 text-xs text-muted-foreground">
-                    Turn {currentTurn.turn}/{currentTurn.maxTurns}
-                  </span>
-                )}
-                {/* Current tool name */}
-                {oodaDetail && oodaPhase === "act" && (
-                  <span className="ml-1 text-xs text-muted-foreground font-mono truncate max-w-[120px]">
-                    {oodaDetail}
-                  </span>
-                )}
-              </div>
-            )}
-            {/* Profile Badge */}
-            {activeProfile && isStreaming && (
-              <div className="flex items-center gap-1.5 text-xs text-muted-foreground border border-border rounded-md px-2 py-1 bg-muted/50">
-                {/* Confidence dot */}
-                <span
-                  className={`h-1.5 w-1.5 rounded-full flex-shrink-0 ${
-                    activeProfile.confidence >= 0.8
-                      ? "bg-green-400"
-                      : activeProfile.confidence >= 0.5
-                        ? "bg-yellow-400"
-                        : "bg-muted-foreground"
-                  }`}
-                  title={`Confidence: ${Math.round(activeProfile.confidence * 100)}%`}
-                />
-                <span className="font-medium text-primary">
-                  {activeProfile.name.replace("-profile", "")}
-                </span>
-                <span className="text-border">|</span>
-                <span className="truncate">
-                  {activeProfile.skills.slice(0, 3).join(", ")}
-                  {activeProfile.skills.length > 3 &&
-                    ` +${activeProfile.skills.length - 3}`}
-                </span>
-                {/* Routing reason */}
-                {activeProfile.reason && (
-                  <>
-                    <span className="text-border">|</span>
-                    <span className="truncate italic">
-                      {activeProfile.reason}
-                    </span>
-                  </>
-                )}
-              </div>
-            )}
-            {/* Baseline Result */}
-            {baselineResult && isStreaming && (
-              <div className={`flex items-center gap-1.5 text-xs border rounded-md px-2 py-1 ${
-                baselineResult.status === "passed" ? "border-green-500/30 bg-green-500/10 text-green-400"
-                : baselineResult.status === "failed" ? "border-red-500/30 bg-red-500/10 text-red-400"
-                : baselineResult.status === "running" ? "border-blue-500/30 bg-blue-500/10 text-blue-400"
-                : "border-yellow-500/30 bg-yellow-500/10 text-yellow-400"
-              }`}>
-                <span className="font-medium">
-                  {baselineResult.status === "passed" ? "✅ 底线通过" :
-                   baselineResult.status === "failed" ? "❌ 底线失败" :
-                   baselineResult.status === "running" ? "🔄 底线检查中..." :
-                   baselineResult.status === "exhausted" ? "⚠️ 底线重试耗尽" :
-                   `底线: ${baselineResult.status}`}
-                </span>
-                {baselineResult.attempt && (
-                  <span className="text-muted-foreground">
-                    (第 {baselineResult.attempt} 次)
-                  </span>
-                )}
-                {baselineResult.summary && (
-                  <span className="truncate max-w-[200px]">{baselineResult.summary}</span>
-                )}
-              </div>
-            )}
-            {/* Activity Log (collapsible) */}
-            {activityLog.length > 0 && (
-              <div className="border border-border rounded-md bg-muted/30">
-                <button
-                  onClick={() => setShowActivityLog(!showActivityLog)}
-                  className="flex w-full items-center gap-1 px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
-                >
-                  {showActivityLog ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
-                  <Activity className="h-3 w-3" />
-                  <span>活动日志 ({activityLog.length})</span>
-                </button>
-                {showActivityLog && (
-                  <div className="max-h-32 overflow-auto border-t border-border px-2 py-1 space-y-0.5">
-                    {activityLog.map((step, i) => (
-                      <div key={i} className="flex items-start gap-1 text-xs text-muted-foreground">
-                        <span className="flex-shrink-0 text-muted-foreground/60">
-                          {new Date(step.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
-                        </span>
-                        <span>{step.message}</span>
+        {(isStreaming || activityLog.length > 0) &&
+          (activeProfile || oodaPhase || activityLog.length > 0) && (
+            <div className="space-y-1.5 mx-1">
+              {/* OODA Phase Indicator — enhanced with Turn info */}
+              {oodaPhase && isStreaming && (
+                <div className="flex items-center gap-0.5">
+                  {OODA_PHASES.map((p) => {
+                    const isActive = p.key === oodaPhase;
+                    const phaseIdx = OODA_PHASES.findIndex(
+                      (x) => x.key === oodaPhase,
+                    );
+                    const thisIdx = OODA_PHASES.findIndex(
+                      (x) => x.key === p.key,
+                    );
+                    const isPast = thisIdx < phaseIdx;
+                    const Icon = p.icon;
+                    return (
+                      <div
+                        key={p.key}
+                        className={`flex items-center gap-0.5 rounded px-1.5 py-0.5 text-xs transition-colors ${
+                          isActive
+                            ? "bg-primary/15 text-primary font-medium"
+                            : isPast
+                              ? "text-green-400"
+                              : "text-muted-foreground/40"
+                        }`}
+                        title={p.label}
+                      >
+                        <Icon className="h-3 w-3" />
+                        {isActive && <span>{p.label}</span>}
                       </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        )}
+                    );
+                  })}
+                  {/* Turn counter */}
+                  {currentTurn && (
+                    <span className="ml-1 text-xs text-muted-foreground">
+                      Turn {currentTurn.turn}/{currentTurn.maxTurns}
+                    </span>
+                  )}
+                  {/* Current tool name */}
+                  {oodaDetail && oodaPhase === "act" && (
+                    <span className="ml-1 text-xs text-muted-foreground font-mono truncate max-w-[120px]">
+                      {oodaDetail}
+                    </span>
+                  )}
+                </div>
+              )}
+              {/* Profile Badge */}
+              {activeProfile && isStreaming && (
+                <div className="flex items-center gap-1.5 text-xs text-muted-foreground border border-border rounded-md px-2 py-1 bg-muted/50">
+                  {/* Confidence dot */}
+                  <span
+                    className={`h-1.5 w-1.5 rounded-full flex-shrink-0 ${
+                      activeProfile.confidence >= 0.8
+                        ? "bg-green-400"
+                        : activeProfile.confidence >= 0.5
+                          ? "bg-yellow-400"
+                          : "bg-muted-foreground"
+                    }`}
+                    title={`Confidence: ${Math.round(activeProfile.confidence * 100)}%`}
+                  />
+                  <span className="font-medium text-primary">
+                    {activeProfile.name.replace("-profile", "")}
+                  </span>
+                  <span className="text-border">|</span>
+                  <span className="truncate">
+                    {activeProfile.skills.slice(0, 3).join(", ")}
+                    {activeProfile.skills.length > 3 &&
+                      ` +${activeProfile.skills.length - 3}`}
+                  </span>
+                  {/* Routing reason */}
+                  {activeProfile.reason && (
+                    <>
+                      <span className="text-border">|</span>
+                      <span className="truncate italic">
+                        {activeProfile.reason}
+                      </span>
+                    </>
+                  )}
+                </div>
+              )}
+              {/* Baseline Result */}
+              {baselineResult && (
+                <div
+                  className={`flex items-center gap-1.5 text-xs border rounded-md px-2 py-1 ${
+                    baselineResult.status === "passed"
+                      ? "border-green-500/30 bg-green-500/10 text-green-400"
+                      : baselineResult.status === "failed"
+                        ? "border-red-500/30 bg-red-500/10 text-red-400"
+                        : baselineResult.status === "running"
+                          ? "border-blue-500/30 bg-blue-500/10 text-blue-400"
+                          : "border-yellow-500/30 bg-yellow-500/10 text-yellow-400"
+                  }`}
+                >
+                  <span className="font-medium">
+                    {baselineResult.status === "passed"
+                      ? "✅ 底线通过"
+                      : baselineResult.status === "failed"
+                        ? "❌ 底线失败"
+                        : baselineResult.status === "running"
+                          ? "🔄 底线检查中..."
+                          : baselineResult.status === "exhausted"
+                            ? "⚠️ 底线重试耗尽"
+                            : `底线: ${baselineResult.status}`}
+                  </span>
+                  {baselineResult.attempt && (
+                    <span className="text-muted-foreground">
+                      (第 {baselineResult.attempt} 次)
+                    </span>
+                  )}
+                  {baselineResult.summary && (
+                    <span className="truncate max-w-[200px]">
+                      {baselineResult.summary}
+                    </span>
+                  )}
+                </div>
+              )}
+              {/* Activity Log (collapsible) */}
+              {activityLog.length > 0 && (
+                <div className="border border-border rounded-md bg-muted/30">
+                  <button
+                    onClick={() => setShowActivityLog(!showActivityLog)}
+                    className="flex w-full items-center gap-1 px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
+                  >
+                    {showActivityLog ? (
+                      <ChevronDown className="h-3 w-3" />
+                    ) : (
+                      <ChevronRight className="h-3 w-3" />
+                    )}
+                    <Activity className="h-3 w-3" />
+                    <span>活动日志 ({activityLog.length})</span>
+                  </button>
+                  {showActivityLog && (
+                    <div className="max-h-32 overflow-auto border-t border-border px-2 py-1 space-y-0.5">
+                      {activityLog.map((step, i) => (
+                        <div
+                          key={i}
+                          className="flex items-start gap-1 text-xs text-muted-foreground"
+                        >
+                          <span className="flex-shrink-0 text-muted-foreground/60">
+                            {new Date(step.timestamp).toLocaleTimeString([], {
+                              hour: "2-digit",
+                              minute: "2-digit",
+                              second: "2-digit",
+                            })}
+                          </span>
+                          <span>{step.message}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
         {/* HITL Approval Panel */}
         {hitlPending && hitlData && (
           <HitlApprovalPanel
@@ -777,7 +818,9 @@ export function AiChatSidebar({
       )}
 
       {/* Input Area (chat tab only) */}
-      <div className={`border-t border-border p-3 ${activeTab !== "chat" ? "hidden" : ""}`}>
+      <div
+        className={`border-t border-border p-3 ${activeTab !== "chat" ? "hidden" : ""}`}
+      >
         <form onSubmit={handleSubmit} className="flex items-end gap-2">
           <div className="flex-1 relative">
             <textarea

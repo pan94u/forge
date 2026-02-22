@@ -2,7 +2,8 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import { ChevronDown, Cpu, Zap, Crown } from "lucide-react";
-import { fetchModels, type ModelInfo } from "@/lib/model-api";
+import { fetchAvailableModels, type ModelInfo } from "@/lib/model-api";
+import { Settings } from "lucide-react";
 
 const COST_ICON: Record<string, React.ElementType> = {
   LOW: Zap,
@@ -22,25 +23,36 @@ const PROVIDER_LABEL: Record<string, string> = {
 interface ModelSelectorProps {
   selectedModel: string;
   onModelChange: (modelId: string) => void;
+  onOpenSettings?: () => void;
+  refreshKey?: number;
 }
 
-export function ModelSelector({ selectedModel, onModelChange }: ModelSelectorProps) {
+export function ModelSelector({
+  selectedModel,
+  onModelChange,
+  onOpenSettings,
+  refreshKey,
+}: ModelSelectorProps) {
   const [models, setModels] = useState<ModelInfo[]>([]);
   const [isOpen, setIsOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    fetchModels()
+    setLoading(true);
+    fetchAvailableModels()
       .then(setModels)
       .catch(() => setModels([]))
       .finally(() => setLoading(false));
-  }, []);
+  }, [refreshKey]);
 
   // Close dropdown on outside click
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(e.target as Node)
+      ) {
         setIsOpen(false);
       }
     };
@@ -49,7 +61,10 @@ export function ModelSelector({ selectedModel, onModelChange }: ModelSelectorPro
   }, []);
 
   const currentModel = models.find((m) => m.id === selectedModel);
-  const displayName = currentModel?.displayName ?? selectedModel.split("/").pop() ?? "Select model";
+  const displayName =
+    currentModel?.displayName ??
+    selectedModel.split("/").pop() ??
+    "Select model";
 
   // Group models by provider
   const grouped = models.reduce<Record<string, ModelInfo[]>>((acc, model) => {
@@ -69,7 +84,16 @@ export function ModelSelector({ selectedModel, onModelChange }: ModelSelectorPro
   }
 
   if (models.length === 0) {
-    return null;
+    return (
+      <button
+        onClick={onOpenSettings}
+        className="flex items-center gap-1 rounded-md border border-dashed border-border px-2 py-1 text-xs text-muted-foreground hover:bg-accent transition-colors"
+        title="Configure model providers"
+      >
+        <Settings className="h-3 w-3" />
+        <span>Configure providers</span>
+      </button>
+    );
   }
 
   return (
@@ -79,11 +103,11 @@ export function ModelSelector({ selectedModel, onModelChange }: ModelSelectorPro
         className="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs hover:bg-accent transition-colors"
         title={`Current model: ${displayName}`}
       >
-        {currentModel && (
-          <CostIcon costTier={currentModel.costTier} />
-        )}
+        {currentModel && <CostIcon costTier={currentModel.costTier} />}
         <span className="max-w-[120px] truncate">{displayName}</span>
-        <ChevronDown className={`h-3 w-3 transition-transform ${isOpen ? "rotate-180" : ""}`} />
+        <ChevronDown
+          className={`h-3 w-3 transition-transform ${isOpen ? "rotate-180" : ""}`}
+        />
       </button>
 
       {isOpen && (

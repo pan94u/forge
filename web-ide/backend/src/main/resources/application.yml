@@ -135,7 +135,8 @@ forge:
   # 生成方式: openssl rand -base64 32
   # ---------------------------------------------------------------------------
   encryption:
-    key: ${FORGE_ENCRYPTION_KEY:}
+    # 开发默认值内嵌于此，生产环境必须通过 FORGE_ENCRYPTION_KEY 环境变量覆盖
+    key: ${FORGE_ENCRYPTION_KEY:3qMrLqqveiY8xuoE7Tr9Wszuo1ANFvPDFNexSpL4Qek=}
 
   # ---------------------------------------------------------------------------
   # CORS
