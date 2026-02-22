@@ -1,8 +1,12 @@
-# Forge Web IDE — 设计基线 v7
+# Forge Web IDE — 设计基线 v9
 
-> 基线日期: 2026-02-22 | Phase 4 全部完成后更新（v6 → v7）
+> 基线日期: 2026-02-22 | 全量交叉校验后更新（v8 → v9）
 > 本文档冻结当前已验证的 UI/API/数据模型/架构设计细节，作为未来修改的对照基准。
 > 任何对本文档覆盖范围的修改，必须先意识到偏离、再决定是否接受。
+>
+> **v9 变更摘要**: 全量代码交叉校验修正 — 补录 3 个缺失 Controller（ModelController 4端点 + UserModelConfigController 4端点 + DashboardController 3端点）、补录 Auth `/me/jwt` 端点、补录 3 个 SSE 事件类型（sub_step/hitl_checkpoint/baseline_check）、补录 3 个 JPA Entity（UserModelConfig/ExecutionRecord/HitlCheckpoint）、修正 Flyway V2/V3/V4 文件名、MCP 工具 14→16（+workspace_compile/workspace_test）、单元测试 147→157。REST 端点总数 39→68。
+>
+> **v8 变更摘要**: Phase 5 — 记忆与上下文管理系统：3 层记忆架构（Workspace Memory 始终注入 + Stage Memory Profile-scoped 聚合 + Session Summary 按需加载）、消息压缩 3 阶段（工具输出截断→早期摘要→全量总结，MAX_TOKENS=25K）、Rate Limit 指数退避（3 次重试 1s/2s/4s）、Memory REST API（6 端点）、MCP 工具 12→14（+update_workspace_memory/get_session_history）、前端 4-Tab 右侧面板（+Skills/+记忆）、Flyway V5 migration（5 张新表）、Docker python3。
 >
 > **v7 变更摘要**: Phase 4 — Skill 架构改造：渐进式加载（system prompt 55K→20-25K，Level 1 metadata + 按需 read_skill/run_skill_script）、Skill 质量治理（32→28 个，移除 3 D 级 + 合并 3 + 新建 delivery-methodology）、Skill 管理 API（9 REST 端点 CRUD + enable/disable + 脚本执行）、前端 /skills 管理页面（3 Tab + Tag 过滤）、使用追踪 + 分析度量（SkillUsageEntity + SkillAnalyticsService）、MCP 工具 9→12（+read_skill/run_skill_script/list_skills）。
 >
@@ -48,16 +52,16 @@
 │ Header (全局) — 角色切换 + 用户菜单(含 Sign out) + 命令面板(Cmd+K)   │
 ├──────────┬──────────────────────────────────┬───────────────────────┤
 │ File     │ Monaco Editor                    │ AI Chat Sidebar       │
-│ Explorer │   - 多标签页文件编辑               │   - 消息列表 + 自动滚动 │
-│          │   - 25+ 语言语法高亮              │   - @ 提及附加上下文    │
-│ (可折叠)  │   - Minimap + 括号匹配           │   - 流式响应展示       │
-│  CRUD:   │   - "AI Explain" 按钮             │   - Tool Call 展开    │
-│  +新建   │   - 未保存蓝色圆点 (v5)           │   - Profile Badge     │
-│  +重命名 │   - 5 秒自动保存 (v5)            │   - 代码块 Apply (v5)  │
-│  +删除   ├──────────────────────────────────┤   - 会话管理          │
-│  (v5)    │ Terminal Panel (可折叠底部)        │                       │
-│          │   - WebSocket 终端连接            │ (可折叠)               │
-│          │   - 彩色输出                      │                       │
+│ Explorer │   - 多标签页文件编辑               │  4-Tab (v8):          │
+│          │   - 25+ 语言语法高亮              │   [对话|质量|Skills|记忆]│
+│ (可折叠)  │   - Minimap + 括号匹配           │   - 消息列表 + 自动滚动 │
+│  CRUD:   │   - "AI Explain" 按钮             │   - @ 提及附加上下文    │
+│  +新建   │   - 未保存蓝色圆点 (v5)           │   - 流式响应展示       │
+│  +重命名 │   - 5 秒自动保存 (v5)            │   - Tool Call 展开    │
+│  +删除   ├──────────────────────────────────┤   - Profile Badge     │
+│  (v5)    │ Terminal Panel (可折叠底部)        │   - 代码块 Apply (v5)  │
+│          │   - WebSocket 终端连接            │   - Context Usage (v8) │
+│          │   - 彩色输出                      │ (可折叠)               │
 └──────────┴──────────────────────────────────┴───────────────────────┘
 ```
 
@@ -312,16 +316,20 @@ layout.tsx Auth Guard: isAuthenticated()?
 | POST | `/api/mcp/tools/call` | `McpToolCallRequest { name, arguments }` | `McpToolCallResponse` | 调用工具 |
 | POST | `/api/mcp/tools/cache/invalidate` | — | `{ status: "cache_invalidated" }` | 清除工具缓存 |
 
-**MCP 工具清单**（v4 创建，v5: 6→9，v7: 9→12）:
+**MCP 工具清单**（v4 创建，v5: 6→9，v7: 9→12，v8: 12→14，v9 补录: 14→16）:
 
 | 工具 | MCP Server | 说明 |
 |------|-----------|------|
 | `workspace_write_file` | backend (local) | 写入文件到 workspace（v5 新增） |
 | `workspace_read_file` | backend (local) | 读取 workspace 文件内容（v5 新增） |
 | `workspace_list_files` | backend (local) | 列出 workspace 文件树（v5 新增） |
+| `workspace_compile` | backend (local) | 编译/构建 workspace 项目，自动检测项目类型（v9 补录） |
+| `workspace_test` | backend (local) | 运行 workspace 测试，自动检测测试框架（v9 补录） |
 | `read_skill` | backend (local) | 按需读取 SKILL.md 或子文件内容（v7 新增） |
 | `run_skill_script` | backend (local) | 执行 Skill 脚本，60s 超时（v7 新增） |
 | `list_skills` | backend (local) | 列出可用 Skill metadata（v7 新增） |
+| `update_workspace_memory` | backend (local) | Agent 主动更新 workspace 记忆（v8 新增） |
+| `get_session_history` | backend (local) | 读取历史 session 摘要，参数 limit 默认 5（v8 新增） |
 | `search_knowledge` | knowledge-mcp | 搜索知识库文档 |
 | `read_file` | knowledge-mcp | 读取知识库文件内容 |
 | `query_schema` | database-mcp | 查询数据库 schema |
@@ -338,8 +346,8 @@ layout.tsx Auth Guard: isAuthenticated()?
 
 | 方法 | 路径 | 响应体 | 说明 |
 |------|------|--------|------|
-| GET | `/api/auth/config` | `{ realm, clientId, authServerUrl }` | 返回 Keycloak OIDC 配置 |
-| GET | `/api/auth/me` | `{ username, email, roles }` 或 401 | 返回当前用户信息 |
+| GET | `/api/auth/me` | `{ authenticated, username, email?, roles }` | 返回当前用户信息（Principal） |
+| GET | `/api/auth/me/jwt` | `{ authenticated, username, email, name, roles, sub }` | 返回 JWT Token 中的用户信息（v9 补录） |
 
 #### Context Search API（v5 新增，`ContextController` → `/api/context`）
 
@@ -382,6 +390,54 @@ layout.tsx Auth Guard: isAuthenticated()?
 - **PLATFORM**: `plugins/` 目录（Docker volume，只读），不可删除/修改，可启用/禁用
 - **WORKSPACE**: `workspace/{workspaceId}/.skills/`，可编辑/删除
 - **CUSTOM**: `workspace/{workspaceId}/.skills/custom/`，完全 CRUD
+
+#### Model API（v9 补录，`ModelController` → `/api/models`）
+
+| 方法 | 路径 | 响应体 | 说明 |
+|------|------|--------|------|
+| GET | `/api/models` | `List<ModelInfo>` | 列出所有可用模型（跨 provider） |
+| GET | `/api/models/providers` | `RegistrySummary` | 列出所有 provider 及模型数量 |
+| GET | `/api/models/providers/{provider}` | `List<ModelInfo>` | 获取指定 provider 的模型列表 |
+| GET | `/api/models/health` | `Map<String, Boolean>` | 所有 provider 健康检查 |
+
+#### User Model Config API（v9 补录，`UserModelConfigController` → `/api/user/model-configs`）
+
+| 方法 | 路径 | 请求体 | 响应体 | 说明 |
+|------|------|--------|--------|------|
+| GET | `/api/user/model-configs` | — | `List<UserModelConfigView>` | 获取当前用户所有 provider 配置 |
+| GET | `/api/user/model-configs/{provider}` | — | `UserModelConfigView` | 获取指定 provider 配置 |
+| PUT | `/api/user/model-configs/{provider}` | `UserModelConfigRequest` | `UserModelConfigView` | 保存/更新 provider 配置（API Key 加密存储） |
+| DELETE | `/api/user/model-configs/{provider}` | — | 204 | 删除 provider 配置 |
+
+#### Dashboard API（v9 补录，`DashboardController` → `/api/dashboard`）
+
+| 方法 | 路径 | 参数 | 响应体 | 说明 |
+|------|------|------|--------|------|
+| GET | `/api/dashboard/metrics` | — | `{ profileStats, toolCallStats, hitlStats, totalSessions, avgDurationMs }` | 聚合统计（最近 7 天） |
+| GET | `/api/dashboard/executions` | `limit=20` | `List<ExecutionRecord>` | 最近执行记录（分页） |
+| GET | `/api/dashboard/trends` | `days=7` | `List<{ date, sessions, avgDurationMs }>` | 每日执行趋势 |
+
+#### Memory API（v8 新增，`MemoryController` → `/api/memory`）
+
+| 方法 | 路径 | 请求体 | 响应体 | 说明 |
+|------|------|--------|--------|------|
+| GET | `/api/memory/workspace/{workspaceId}` | — | `{ workspaceId, content }` | 获取 workspace 记忆 |
+| PUT | `/api/memory/workspace/{workspaceId}` | `{ content }` | `{ workspaceId, content }` | 更新 workspace 记忆（max 4000 chars） |
+| GET | `/api/memory/stage/{workspaceId}` | — | `List<StageMemoryView>` | 获取所有 stage 记忆 |
+| GET | `/api/memory/stage/{workspaceId}/{profile}` | — | `StageMemoryView` | 获取特定 profile 的 stage 记忆 |
+| GET | `/api/memory/sessions/{workspaceId}` | `?limit=10` | `List<SessionSummaryView>` | 获取 session 摘要（按时间倒序） |
+| GET | `/api/memory/sessions/{workspaceId}/{sessionId}` | — | `SessionSummaryView` | 获取单个 session 摘要 |
+
+**3 层记忆架构**（v8 新增）:
+- **Layer 1 Workspace Memory**: 工作区级持久化知识（≈ CLAUDE.md），始终注入 system prompt，max 4000 chars ≈ 1K tokens
+- **Layer 2 Stage Memory**: Profile-scoped 跨 Session 聚合（completedWork/keyDecisions/unresolvedIssues/nextSteps），Session 结束后自动更新
+- **Layer 3 Session Summary**: 单次会话结构化摘要（summary/completedWork/artifacts/decisions/unresolved/nextSteps），最近 3 个注入 system prompt
+
+**消息压缩**（v8 新增）:
+- MAX_CONVERSATION_TOKENS = 25,000
+- Phase 1: 工具输出截断到 500 chars
+- Phase 2: 保留最近 3 轮，早期消息替换为摘要
+- Phase 3: Claude 生成全量总结（last resort）
 
 #### Actuator / Metrics API（v4 新增）
 
@@ -442,6 +498,7 @@ type StreamEvent =
       loadedSkills?: string[],                      //   加载的 skill 列表
       routingReason?: string,                       //   路由原因（如 "keyword '接口' (score=1, conf=0.6)"）
       confidence?: number }                         //   置信度 0.0-1.0
+  | { type: "sub_step", message?: string }          // 子步骤进度（如加载记忆、工具执行等）（v9 补录）
   | { type: "thinking", content?: string }          // AI 思考过程
   | { type: "content", content?: string }           // 文本输出增量
   | { type: "tool_use_start", toolCallId?: string, toolName?: string }  // Tool 调用开始
@@ -450,6 +507,19 @@ type StreamEvent =
   | { type: "file_changed",                         // 文件变更通知（v5 新增）
       path?: string,                                //   变更的文件路径
       action?: string }                             //   "created" | "modified"
+  | { type: "hitl_checkpoint",                       // HITL 人工审批检查点（v9 补录）
+      checkpointId?: string,                          //   检查点 ID
+      checkpoint?: string,                            //   检查点名称
+      deliverables?: string[],                        //   交付物列表
+      baselineResults?: object }                      //   底线检查结果
+  | { type: "baseline_check",                        // 底线检查状态（v9 补录）
+      status?: string,                                //   "running" | "passed" | "failed" | "exhausted"
+      baseline?: string,                              //   底线脚本名
+      output?: string }                               //   检查输出
+  | { type: "context_usage",                         // Context Window 使用率（v8 新增）
+      tokensUsed?: number,                            //   当前 token 用量
+      tokenBudget?: number,                           //   token 预算 (25000)
+      compressionPhase?: number }                     //   压缩阶段 (0=none, 1=truncate, 2=summarize, 3=full)
   | { type: "error", content?: string }             // 错误
   | { type: "done" }                                // 流结束
 ```
@@ -572,6 +642,76 @@ chat_sessions (1) ──→ (N) chat_messages (1) ──→ (N) tool_calls
      └─ updated_at           └─ created_at           ├─ output (TEXT)
                                                       ├─ status
                                                       └─ duration_ms
+
+user_model_configs          execution_records          hitl_checkpoints
+     │                        │                        │
+     ├─ id (PK)              ├─ id (PK)              ├─ id (PK)
+     ├─ user_id              ├─ session_id            ├─ session_id
+     ├─ provider             ├─ profile               ├─ profile
+     ├─ api_key_encrypted    ├─ skills_loaded         ├─ checkpoint
+     ├─ base_url             ├─ ooda_durations (JSON) ├─ deliverables (JSON)
+     ├─ region               ├─ tool_calls (JSON)     ├─ baseline_results
+     ├─ enabled              ├─ baseline_results      ├─ status
+     ├─ created_at           ├─ hitl_result           ├─ feedback
+     └─ updated_at           ├─ total_duration_ms     ├─ created_at
+                              ├─ total_turns           └─ resolved_at
+                              └─ created_at
+     UK(user_id, provider)
+```
+
+#### UserModelConfigEntity（v9 补录）
+
+```kotlin
+@Entity @Table(name = "user_model_configs")
+class UserModelConfigEntity(
+    @Id val id: String,                                     // UUID
+    @Column(name = "user_id") val userId: String,
+    @Column(name = "provider", length = 50) val provider: String,
+    @Column(name = "api_key_encrypted", length = 1024) var apiKeyEncrypted: String = "",  // AES 加密存储
+    @Column(name = "base_url", length = 512) var baseUrl: String = "",
+    @Column(name = "region", length = 50) var region: String = "",
+    @Column(name = "enabled") var enabled: Boolean = true,
+    @Column(name = "created_at") val createdAt: Instant = Instant.now(),
+    @Column(name = "updated_at") var updatedAt: Instant = Instant.now()
+)
+// UNIQUE(user_id, provider)
+```
+
+#### ExecutionRecordEntity（v9 补录）
+
+```kotlin
+@Entity @Table(name = "execution_records")
+class ExecutionRecordEntity(
+    @Id val id: String,                                     // UUID
+    @Column(name = "session_id") val sessionId: String,
+    @Column val profile: String,
+    @Column(name = "skills_loaded") val skillsLoaded: Int = 0,
+    @Column(name = "ooda_durations", columnDefinition = "TEXT") val oodaDurations: String = "{}",  // JSON
+    @Column(name = "tool_calls", columnDefinition = "TEXT") val toolCalls: String = "[]",          // JSON array
+    @Column(name = "baseline_results", columnDefinition = "TEXT") val baselineResults: String?,
+    @Column(name = "hitl_result") val hitlResult: String?,
+    @Column(name = "total_duration_ms") val totalDurationMs: Long = 0,
+    @Column(name = "total_turns") val totalTurns: Int = 0,
+    @Column(name = "created_at") val createdAt: Instant = Instant.now()
+)
+```
+
+#### HitlCheckpointEntity（v9 补录）
+
+```kotlin
+@Entity @Table(name = "hitl_checkpoints")
+class HitlCheckpointEntity(
+    @Id val id: String,                                     // UUID
+    @Column(name = "session_id") val sessionId: String,
+    @Column val profile: String,
+    @Column val checkpoint: String,
+    @Column(columnDefinition = "TEXT") val deliverables: String = "[]",  // JSON array
+    @Column(name = "baseline_results", columnDefinition = "TEXT") val baselineResults: String?,
+    @Column var status: String = "PENDING",                  // PENDING | APPROVED | REJECTED | TIMEOUT | MODIFY
+    @Column(columnDefinition = "TEXT") var feedback: String?,
+    @Column(name = "created_at") val createdAt: Instant = Instant.now(),
+    @Column(name = "resolved_at") var resolvedAt: Instant?
+)
 ```
 
 #### SkillPreferenceEntity（v7 新增）
@@ -602,16 +742,75 @@ class SkillUsageEntity(
 )
 ```
 
+#### SessionSummaryEntity（v8 新增）
+
+```kotlin
+@Entity @Table(name = "session_summaries")
+class SessionSummaryEntity(
+    @Id val id: String,                                     // UUID
+    @Column(name = "session_id", unique = true) val sessionId: String,
+    @Column(name = "workspace_id") val workspaceId: String,
+    @Column(name = "profile") val profile: String,
+    @Column(name = "summary", columnDefinition = "TEXT") var summary: String,
+    @Column(name = "completed_work", columnDefinition = "TEXT") var completedWork: String = "[]",  // JSON array
+    @Column(name = "artifacts", columnDefinition = "TEXT") var artifacts: String = "[]",
+    @Column(name = "decisions", columnDefinition = "TEXT") var decisions: String = "[]",
+    @Column(name = "unresolved", columnDefinition = "TEXT") var unresolved: String = "[]",
+    @Column(name = "next_steps", columnDefinition = "TEXT") var nextSteps: String = "[]",
+    @Column(name = "turn_count") val turnCount: Int = 0,
+    @Column(name = "tool_call_count") val toolCallCount: Int = 0,
+    @Column(name = "created_at") val createdAt: Instant = Instant.now()
+)
+```
+
+#### WorkspaceMemoryEntity（v8 新增）
+
+```kotlin
+@Entity @Table(name = "workspace_memories")
+class WorkspaceMemoryEntity(
+    @Id val id: String,                                     // UUID
+    @Column(name = "workspace_id", unique = true) val workspaceId: String,
+    @Column(name = "content", columnDefinition = "TEXT") var content: String = "",  // max 4000 chars
+    @Column(name = "version") var version: Int = 1,
+    @Column(name = "updated_at") var updatedAt: Instant = Instant.now()
+)
+```
+
+#### StageMemoryEntity（v8 新增）
+
+```kotlin
+@Entity @Table(name = "stage_memories", uniqueConstraints = [UniqueConstraint(columnNames = ["workspace_id", "profile"])])
+class StageMemoryEntity(
+    @Id val id: String,                                     // UUID
+    @Column(name = "workspace_id") val workspaceId: String,
+    @Column(name = "profile") val profile: String,
+    @Column(name = "completed_work", columnDefinition = "TEXT") var completedWork: String = "[]",
+    @Column(name = "key_decisions", columnDefinition = "TEXT") var keyDecisions: String = "[]",
+    @Column(name = "unresolved_issues", columnDefinition = "TEXT") var unresolvedIssues: String = "[]",
+    @Column(name = "next_steps", columnDefinition = "TEXT") var nextSteps: String = "[]",
+    @Column(name = "session_count") var sessionCount: Int = 0,
+    @Column(name = "updated_at") var updatedAt: Instant = Instant.now()
+)
+```
+
 ### 3.3 Flyway 迁移
 
 | 版本 | 文件 | 内容 |
 |------|------|------|
 | V1 | `V1__create_chat_tables.sql` | 创建 `chat_sessions` + `chat_messages` + `tool_calls` 三张表 + 索引 |
+| V2 | `V2__create_user_model_configs.sql` | 创建 `user_model_configs` 表（用户模型配置，API Key 加密存储）（v9 修正） |
+| V3 | `V3__create_execution_records.sql` | 创建 `execution_records` 表（执行遥测，质量面板）（v9 修正） |
+| V4 | `V4__create_hitl_checkpoints.sql` | 创建 `hitl_checkpoints` 表（人工审批检查点）（v9 修正） |
+| V5 | `V5__create_memory_tables.sql` | 创建 `skill_preferences` + `skill_usage`（v7 backfill）+ `session_summaries` + `workspace_memories` + `stage_memories`（v8 新增） |
 
 **索引**:
 - `idx_sessions_workspace` → `chat_sessions(workspace_id)`
 - `idx_messages_session` → `chat_messages(session_id)`
 - `idx_tool_calls_message` → `tool_calls(message_id)`
+- `idx_session_summaries_workspace` → `session_summaries(workspace_id)`（v8 新增）
+- `idx_session_summaries_ws_created` → `session_summaries(workspace_id, created_at)`（v8 新增）
+- `idx_workspace_memories_ws` → `workspace_memories(workspace_id)`（v8 新增）
+- `idx_stage_memories_ws_profile` → `stage_memories(workspace_id, profile)`（v8 新增）
 
 ### 3.4 数据库配置
 
@@ -922,13 +1121,13 @@ McpToolCallResponse { content: List<McpContent>, isError: Boolean }
 | 指标导出 | micrometer-registry-prometheus | /actuator/prometheus 端点（v4 新增） |
 | YAML 解析 | Jackson Dataformat YAML | Skill/Profile frontmatter 解析 |
 | 序列化 | Jackson + Kotlin Module | (Spring Boot managed) |
-| 测试 | JUnit 5 + MockK 1.13 + AssertJ | 147 tests passing |
+| 测试 | JUnit 5 + MockK 1.13 + AssertJ | 157 tests passing（v9 修正） |
 
 ---
 
 ## 五、验证状态
 
-> Sprint 2.2 全部完成后验证结果 (2026-02-21) — v6 更新
+> Phase 5 全部完成后验证结果 (2026-02-22) — v8 更新
 
 | # | 验证项 | 状态 | 说明 |
 |---|--------|------|------|
@@ -936,7 +1135,7 @@ McpToolCallResponse { content: List<McpContent>, isError: Boolean }
 | 2 | 容器启动 | ✅ | 6 容器 running, 全部 healthy（v6: 4→6） |
 | 3 | Nginx 路由 | ✅ | 前端 200, API 正常, /auth/ proxy 正常（v5: +keycloak 代理） |
 | 4 | 前端页面加载 | ✅ | `http://localhost:9000` 返回 200 |
-| 5 | 后端 API | ✅ | `/api/chat/skills`(28) + `/api/chat/profiles`(5) + `/api/mcp/tools`(12)（v7: 32→28 skills, 9→12 tools） |
+| 5 | 后端 API | ✅ | `/api/mcp/tools`(25，含外部 MCP)（v8: 12→14 builtin, +update_workspace_memory/get_session_history） |
 | 6 | AI Chat 流式响应 | ✅ | WebSocket + SSE 双通道均正常 |
 | 7 | OODA 阶段指示器 | ✅ | Observe→Orient→Decide→[Act→]Complete 流转正常 |
 | 8 | Profile Badge + Confidence | ✅ | 名称、skills 列表、confidence 圆点、路由原因均显示 |
@@ -945,7 +1144,7 @@ McpToolCallResponse { content: List<McpContent>, isError: Boolean }
 | 11 | Profile 路由（默认回退） | ✅ | 1/1 — 无关消息回退到 development |
 | 12 | Prompt Caching | ✅ | 缓存命中后 system prompt 费用降 90% |
 | 13 | Agentic Loop 多轮 Tool Calling | ✅ | Turn 1 tool_use + Turn 2 content 正常 |
-| 14 | MCP 实连 | ✅ | 12 builtin + 9 外部发现（v7: +read_skill/run_skill_script/list_skills） |
+| 14 | MCP 实连 | ✅ | 14 builtin + 11 外部发现（v8: +update_workspace_memory/get_session_history） |
 | 15 | BaselineService 底线集成 | ✅ | run_baseline / list_baselines 工具可用 + AgentLoop 自动检查（v6） |
 | 16 | MetricsService 指标采集 | ✅ | 7 个 forge.* 自定义指标注册 |
 | 17 | Actuator/Prometheus 端点 | ✅ | `/actuator/metrics/forge.*` + `/actuator/prometheus` |
@@ -966,6 +1165,14 @@ McpToolCallResponse { content: List<McpContent>, isError: Boolean }
 | 32 | Skill 使用追踪 | ✅ | SkillUsageEntity + SkillAnalyticsService（v7 新增） |
 | 33 | PLATFORM Skill 保护 | ✅ | 不可删除，返回 400（v7 新增） |
 | 34 | 端到端交付闭环 | ✅ | 设计 profile 完整闭环：搜索→设计→写文档→baseline→HITL→总结（v7 新增） |
+| 35 | 3 层记忆注入 | ✅ | Workspace Memory + Stage Memory + Session Summaries 注入 system prompt（v8 新增） |
+| 36 | Session Summary 自动生成 | ✅ | streamMessage 完成后异步 LLM 生成结构化 JSON 摘要（v8 新增） |
+| 37 | Memory REST API | ✅ | 6 端点 CRUD（workspace/stage/sessions），含字符限制和分页（v8 新增） |
+| 38 | 消息压缩 3 阶段 | ✅ | 工具截断→早期摘要→全量总结，MAX_TOKENS=25K（v8 新增） |
+| 39 | Rate Limit 指数退避 | ✅ | RateLimitException 捕获，3 次重试 1s/2s/4s（v8 新增） |
+| 40 | 4-Tab 右侧面板 | ✅ | 对话/质量/Skills/记忆 四个 Tab（v8 新增） |
+| 41 | Docker python3 | ✅ | Alpine apk add python3，Python 3.12.12（v8 新增） |
+| 42 | Flyway V5 Migration | ✅ | 5 张表创建成功（v8 新增） |
 
 ### Phase 1.6 验收标准达成（v5）
 
@@ -1012,9 +1219,27 @@ McpToolCallResponse { content: List<McpContent>, isError: Boolean }
 | 10 | MCP 工具 9→12 | ✅ |
 | 11 | 端到端交付闭环手工验证 | ✅ |
 
+### Phase 5 验收标准达成（v8 新增）
+
+| # | 标准 | 状态 |
+|---|------|------|
+| 1 | 3 层记忆架构注入 system prompt | ✅ memory=78c+427c+2sessions |
+| 2 | Session Summary 异步自动生成 | ✅ |
+| 3 | Workspace Memory CRUD + 4000 char 限制 | ✅ |
+| 4 | Stage Memory 从 Session Summary 自动聚合 | ✅ sessionCount=2 |
+| 5 | 消息压缩 3 阶段（TokenEstimator + MessageCompressor） | ✅ |
+| 6 | Rate Limit 指数退避（streamWithRetry） | ✅ |
+| 7 | Memory REST API 6 端点 | ✅ |
+| 8 | MCP 工具 12→14（+update_workspace_memory/get_session_history） | ✅ 25 tools total |
+| 9 | 前端 4-Tab（对话/质量/Skills/记忆） | ✅ |
+| 10 | Docker python3 可用 | ✅ Python 3.12.12 |
+| 11 | Flyway V5 Migration（5 张表） | ✅ |
+| 12 | System prompt 含 memory 后 < 30K chars | ✅ 27,261 chars |
+| 13 | 验收测试 38 TC，通过率 ≥ 90% | ✅ 94.7% (36/38) |
+
 ### 单元测试
 
-**总计**: 147 tests, 0 failures
+**总计**: 157 tests, 0 failures（v9 修正）
 
 | 测试文件 | 测试数 | 覆盖范围 |
 |---------|--------|---------|
@@ -1033,7 +1258,8 @@ McpToolCallResponse { content: List<McpContent>, isError: Boolean }
 | model-adapter tests | 11 | ClaudeAdapter + StreamEvent + tool calling |
 
 **Skill 加载验证**: 28 skills, 5 profiles（v7: 渐进式加载 metadata-only，按需 read_skill）
-**MCP 工具验证**: 12 builtin + 9 外部发现（v7: +read_skill/run_skill_script/list_skills）
+**MCP 工具验证**: 14 builtin + 11 外部发现 = 25 total（v8: +update_workspace_memory/get_session_history）
+**Memory 验证**: 3 层记忆注入 system prompt（v8: workspace=78c, stage=427c, sessions=2）
 
 ---
 
@@ -1136,7 +1362,7 @@ const [oodaPhase, setOodaPhase] = useState<OodaPhase | null>(null);
 
 ---
 
-> 基线版本: v7
+> 基线版本: v8
 > 初始冻结日期: 2026-02-18 (v1, Phase 1.5)
 > v2 更新日期: 2026-02-18 (Phase 2 E2E 验证后)
 > v3 更新日期: 2026-02-18 (Sprint 2A 验收通过后)
@@ -1145,4 +1371,5 @@ const [oodaPhase, setOodaPhase] = useState<OodaPhase | null>(null);
 > v5.1 更新日期: 2026-02-20 (BUG-019/020 修复 — Apply 按钮始终可见 + ContextPicker 搜索键盘转发)
 > v6 更新日期: 2026-02-21 (Sprint 2.2 — Skill 条件触发 + AgentLoop 底线 + MCP 真实服务 + 6 容器)
 > v7 更新日期: 2026-02-22 (Phase 4 — Skill 架构改造：渐进式加载 + 质量治理 + 管理 UI + 度量)
-> 下次评审: Phase 5 启动前
+> v8 更新日期: 2026-02-22 (Phase 5 — 记忆与上下文管理：3 层记忆架构 + 消息压缩 + Memory UI + Rate Limit 退避)
+> 下次评审: Phase 6 启动前

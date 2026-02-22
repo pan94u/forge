@@ -3562,3 +3562,113 @@ Level 3: 子文件 + 可执行脚本（按需读取/执行，无上限）
 - 前端页面：新增 /skills 路由
 - 单元测试：147 passing
 - 设计基线版本：v6 → **v7**
+
+---
+
+## Session 28 — Phase 5: 记忆与上下文管理系统（Sprint 5.1-5.4）
+
+> 日期: 2026-02-22 | 目标: 实现 3 层记忆架构 + 消息压缩 + Memory UI，解决跨 Session 上下文丢失问题
+
+### 28.1 Sprint 5.1 — Session Summary 引擎 + 数据模型
+
+**后端**:
+
+| 操作 | 文件 | 说明 |
+|------|------|------|
+| 新建 | `entity/SessionSummaryEntity.kt` | Layer 3: Session 结构化摘要（summary/completedWork/artifacts/decisions/unresolved/nextSteps） |
+| 新建 | `entity/WorkspaceMemoryEntity.kt` | Layer 1: Workspace 级持久化记忆（content TEXT, max 4000 chars） |
+| 新建 | `entity/StageMemoryEntity.kt` | Layer 2: Profile-scoped 阶段记忆（completedWork/keyDecisions/unresolvedIssues/nextSteps） |
+| 新建 | `repository/SessionSummaryRepository.kt` | findBySessionId, findByWorkspaceIdOrderByCreatedAtDesc |
+| 新建 | `repository/WorkspaceMemoryRepository.kt` | findByWorkspaceId |
+| 新建 | `repository/StageMemoryRepository.kt` | findByWorkspaceIdAndProfile, findByWorkspaceId |
+| 新建 | `service/memory/SessionSummaryService.kt` | LLM 驱动的 Session 摘要生成（异步），结构化 JSON 解析 |
+| 修改 | `ClaudeAgentService.kt` | 新增 4 个构造参数；streamMessage 末尾异步生成 summary |
+
+### 28.2 Sprint 5.2 — Workspace Memory + Stage Memory + 注入
+
+| 操作 | 文件 | 说明 |
+|------|------|------|
+| 新建 | `service/memory/WorkspaceMemoryService.kt` | Layer 1 CRUD，appendFromSummary 自动追加决策 |
+| 新建 | `service/memory/StageMemoryService.kt` | Layer 2 聚合，mergeJsonArrays 去重 + overwrite 最新状态 |
+| 新建 | `service/memory/MemoryContextLoader.kt` | 3 层记忆统一加载 → MemoryContext data class |
+| 修改 | `SystemPromptAssembler.kt` | 新增 assemble(profile, skills, memoryContext) 重载，注入 3 层记忆 |
+| 修改 | `McpProxyService.kt` | +2 MCP 工具（update_workspace_memory, get_session_history） |
+| 修改 | `ClaudeAgentService.kt` | buildDynamicSystemPrompt 加载 memory context |
+
+### 28.3 Sprint 5.3 — 消息压缩 + Token 管理
+
+| 操作 | 文件 | 说明 |
+|------|------|------|
+| 新建 | `service/memory/TokenEstimator.kt` | Token 估算（中文 ~0.67/char, 英文 ~0.25/char） |
+| 新建 | `service/memory/MessageCompressor.kt` | 3 阶段压缩：工具输出截断 → 早期消息摘要 → Claude 全量总结 |
+| 修改 | `ClaudeAgentService.kt` | agenticStream 每轮压缩 + context_usage 事件 + streamWithRetry 指数退避 |
+| 修改 | `claude-client.ts` | +context_usage StreamEvent 类型 |
+
+### 28.4 Sprint 5.4 — 前端 4-Tab + REST API + Bug 修复
+
+**后端**:
+
+| 操作 | 文件 | 说明 |
+|------|------|------|
+| 新建 | `controller/MemoryController.kt` | 6 个 REST 端点（GET/PUT workspace + GET stage + GET sessions） |
+| 新建 | `V5__create_memory_tables.sql` | 5 张表：skill_preferences, skill_usage（Phase 4 backfill）+ 3 张 memory 表 |
+| 修改 | `Dockerfile` | Alpine 安装 python3（Phase 4 遗留 P0） |
+
+**前端**:
+
+| 操作 | 文件 | 说明 |
+|------|------|------|
+| 新建 | `components/memory/MemoryPanel.tsx` | 记忆管理主面板（3 子 Tab: 工作区/阶段/会话） |
+| 新建 | `components/memory/StageMemoryView.tsx` | 阶段记忆卡片（按 profile 展开） |
+| 新建 | `components/memory/SessionHistoryView.tsx` | 会话历史时间线 |
+| 新建 | `components/skills/WorkspaceSkillPanel.tsx` | Workspace 上下文 Skill 嵌入面板 |
+| 修改 | `AiChatSidebar.tsx` | 2-Tab → 4-Tab（对话/质量/Skills/记忆） |
+
+### 28.5 遇到的 Bug 及修复
+
+| Bug | 根因 | 修复 |
+|-----|------|------|
+| MessageCompressor Smart Cast 失败 | `msg.toolResults` 跨模块属性无法 smart cast | 赋值给 local val 后再用 |
+| ClaudeAgentServiceTest 编译失败 | 新增 4 个构造参数 | 添加 `mockk(relaxed = true)` |
+| McpProxyServiceTest 编译失败 | 新增 2 个构造参数 | 添加 mock |
+| ChatRepositoryTest 9 个失败 | JPA validate 检测到 skill_preferences/skill_usage 表无 migration | V5 migration 补建 |
+| sendMessage 无 memory 注入 | 调用 `buildDynamicSystemPrompt(message)` 缺 workspaceId | 改为 `buildDynamicSystemPrompt(message, workspaceId)` |
+| BUG-030: 4-Tab 标签挤压 | Tab 标签和模型选择器挤同一行 | 改为两行布局 + "质量面板"缩为"质量" |
+
+### 28.6 验收测试
+
+**验收文档**: `docs/phase5-acceptance-test.md`
+
+| 场景 | TC 数 | 通过 | 部分 |
+|------|-------|------|------|
+| Session Summary 自动生成 | 4 | 4 | 0 |
+| Workspace Memory 读写 + 注入 | 4 | 4 | 0 |
+| Stage Memory 聚合 + 注入 | 4 | 4 | 0 |
+| 跨 Session 连续性 | 4 | 3 | 1 |
+| 消息压缩 3 阶段 | 3 | 3 | 0 |
+| Memory MCP 工具 | 3 | 2 | 1 |
+| Memory REST API | 4 | 4 | 0 |
+| 4-Tab 右侧面板 | 4 | 4 | 0 |
+| Workspace Skills 面板 | 3 | 3 | 0 |
+| Rate Limit 退避 + Docker | 2 | 2 | 0 |
+| 端到端多 Session 闭环 | 3 | 3 | 0 |
+| **合计** | **38** | **36** | **2** |
+
+**通过率: 94.7%**（36/38），2 个部分通过需实际项目场景充分验证。
+
+### 28.7 统计快照
+
+- Phase 5 状态：**✅ 完成**
+- 记忆层级：0 → **3 层**（Workspace Memory + Stage Memory + Session Summary）
+- MCP 工具：12 → **14**（+update_workspace_memory / get_session_history），前端显示 25 个（含外部 MCP）
+- System prompt: 20-25K → **25-28K chars**（+memory ~3-5K chars）
+- Memory REST API：新增 6 个端点（/api/memory/...）
+- Flyway migration: V1 → **V1-V5**（+V2 execution_records, +V3 hitl_checkpoints, +V4 workflows, +V5 memory 表）
+- 前端 Tab：2 → **4**（+Skills / +记忆）
+- 前端新组件：+4（MemoryPanel, StageMemoryView, SessionHistoryView, WorkspaceSkillPanel）
+- 消息压缩：MAX_CONVERSATION_TOKENS = **25,000**
+- Rate Limit 重试：最多 **3 次**，指数退避 1s/2s/4s
+- Docker python3：**Python 3.12.12**（Alpine apk add）
+- 单元测试：147 passing（+修复 9 个 ChatRepositoryTest）
+- 验收测试：38 TC，94.7% 通过
+- 设计基线版本：v7 → **v8**

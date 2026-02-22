@@ -26,7 +26,7 @@ docker compose -f docker-compose.trial.yml up --build -d
 
 # 访问 http://localhost:9000
 
-# 运行全量单元测试（当前 147 个）
+# 运行全量单元测试（当前 157 个）
 ./gradlew :web-ide:backend:test :adapters:model-adapter:test
 ./gradlew :agent-eval:test
 ```
@@ -71,7 +71,7 @@ Forge is a Gradle monorepo (Kotlin DSL) with the following modules:
 - **环境变量**: `ANTHROPIC_API_KEY`, `FORGE_SECURITY_ENABLED`, `FORGE_PLUGINS_PATH=/plugins`
 - **Volume 挂载**: `plugins/` 和 `knowledge-base/` 必须挂载为只读
 
-## MCP 工具清单（9 个）
+## MCP 工具清单（16 个）
 
 | 工具 | 来源 | 说明 |
 |------|------|------|
@@ -81,9 +81,16 @@ Forge is a Gradle monorepo (Kotlin DSL) with the following modules:
 | run_baseline | builtin | 运行 baseline 脚本（Docker Alpine 内不可用） |
 | query_schema | builtin | 查询数据库 schema |
 | list_baselines | builtin | 列出可用 baselines |
+| read_skill | builtin | 按需读取 SKILL.md 或子文件内容 |
+| run_skill_script | builtin | 执行 Skill 脚本，60s 超时 |
+| list_skills | builtin | 列出可用 Skill metadata |
 | workspace_write_file | workspace | 写文件到 workspace（需 workspaceId） |
 | workspace_read_file | workspace | 读取 workspace 文件 |
 | workspace_list_files | workspace | 列出 workspace 文件树 |
+| workspace_compile | workspace | 编译/构建项目，自动检测项目类型 |
+| workspace_test | workspace | 运行测试，自动检测测试框架 |
+| update_workspace_memory | memory | Agent 主动更新 workspace 记忆 |
+| get_session_history | memory | 读取历史 session 摘要 |
 
 **注意**: workspace 工具通过 `callTool(name, args, workspaceId)` 三参数版调用，workspaceId 从 arguments 中提取。
 
@@ -202,7 +209,7 @@ Forge is a Gradle monorepo (Kotlin DSL) with the following modules:
 - 预期用 `- [ ]` checkbox 格式
 - 末尾有汇总表 + 启动命令 + 关键观察点
 
-**核心原则**: 验收测试是写给人看的产品规格，同时也是可执行的运行时校验。147 个单元测试全过 ≠ 产品可用（Session 14 的 workspace 工具 bug 就是证明）。
+**核心原则**: 验收测试是写给人看的产品规格，同时也是可执行的运行时校验。157 个单元测试全过 ≠ 产品可用（Session 14 的 workspace 工具 bug 就是证明）。
 
 ### 纪律 4：防腐规则（持续改进）
 
@@ -221,8 +228,11 @@ Forge is a Gradle monorepo (Kotlin DSL) with the following modules:
 ## Git
 
 - **Remote**: `git@github.com:pan94u/forge.git`（branch: main）
+- **文档导航**: `docs/index.md`
 - **开发日志**: `docs/planning/dev-logbook.md`
-- **验收测试**: `docs/phase1.6-e2e-acceptance-test.md`
-- **方法论分析**: `docs/delivery-methodology-analysis.md`
-- **度量报告**: `docs/metrics-report-phase1.6.md`
-- **Phase 2 计划**: `docs/phase2-implementation-plan.md`
+- **设计基线**: `docs/baselines/design-baseline-v1.md`
+- **规划基线**: `docs/baselines/planning-baseline-v1.5.md`
+- **功能清单**: `docs/product/feature-list.md`
+- **验收测试**: `docs/acceptance-tests/`（phase1.6~5, sprint2.1~2.4）
+- **分析报告**: `docs/analysis/`（方法论、度量、Bug、状态评估）
+- **实施计划**: `docs/planning/implementation-plans/`（phase1~4）
