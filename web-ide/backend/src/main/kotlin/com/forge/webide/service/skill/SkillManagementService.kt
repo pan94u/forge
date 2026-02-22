@@ -143,7 +143,23 @@ class SkillManagementService(
         skillLoader.reloadAll()
 
         logger.info("Custom skill '{}' created in workspace '{}'", request.name, workspaceId)
+
+        // Return the view directly since SkillLoader may not scan workspace directories yet
         return listSkills(workspaceId).find { it.name == request.name }
+            ?: SkillView(
+                name = request.name,
+                description = request.description,
+                tags = request.tags,
+                scope = SkillScope.CUSTOM,
+                category = SkillCategory.CUSTOM,
+                version = "1.0",
+                author = "",
+                enabled = true,
+                subFileCount = 0,
+                scriptCount = 0,
+                subFiles = emptyList(),
+                scripts = emptyList()
+            )
     }
 
     /**
@@ -203,10 +219,12 @@ class SkillManagementService(
         if (scriptPath.contains("..")) return null
 
         val skill = skillLoader.loadSkill(name) ?: return null
-        val scriptDef = skill.scripts.find { it.path == scriptPath } ?: return null
+        // URL extracts 'adr_template.py' but definition stores 'scripts/adr_template.py'
+        val scriptDef = skill.scripts.find { it.path == scriptPath || it.path == "scripts/$scriptPath" }
+            ?: return null
 
         val skillDir = Path.of(skill.sourcePath).parent
-        val scriptFile = skillDir.resolve(scriptPath)
+        val scriptFile = skillDir.resolve(scriptDef.path)
         if (!scriptFile.normalize().startsWith(skillDir.normalize())) return null
         if (!Files.isRegularFile(scriptFile)) return null
 
