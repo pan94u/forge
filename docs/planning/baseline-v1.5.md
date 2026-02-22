@@ -1,6 +1,6 @@
 # Forge — 面向 AI 时代的智能交付平台
 
-> 规划基线 v1.8 | 基线日期: 2026-02-22 | 变更: v1.7→v1.8 Phase 3 验收完成（28 Bug 修复，全流程闭环验证），Phase 4 方向确定（Skill 渐进式披露架构改造）
+> 规划基线 v1.9 | 基线日期: 2026-02-22 | 变更: v1.8→v1.9 Phase 4 详细实施计划完成（对齐 Anthropic Agent Skills 标准：metadata-first 渐进式披露 + 可执行脚本 + 用户 Skill 管理 + 生态追踪）
 
 ---
 
@@ -144,7 +144,7 @@
 | Phase 1.6 | AI 交付闭环 + SSO + UX 增强 | ✅ | AI→Workspace 写文件 + Keycloak SSO + Context Picker + CRUD + 自动保存 | Claude Code |
 | Phase 2 | 质量基础设施 + OODA 增强 + 多模型 + 内部试用 | ✅ | Sprint 2.1（CI/Playwright/Bug 修复）+ Sprint 2.2（SkillLoader/MCP 真实服务）+ Sprint 2.3（多模型适配：Bedrock/Gemini/Qwen）+ Sprint 2.4（内部试用 + 反馈） | Claude Code |
 | Phase 3 | 人机协作闭环 + 方法论平台化 | ✅ | HITL 全量暂停点 + 执行透明度 + 编译/测试管道 + 质量度量面板 + 学习循环集成（execution-logger / skill-feedback-analyzer Spring 化） | Claude Code |
-| Phase 4 | Skill 架构改造 + 持续进化 | ⏳ | Skill 渐进式披露 + 内容精简 + 按需加载 + 多 Runtime + 进化环飞轮 | 任意 Runtime |
+| Phase 4 | Skill 架构改造（对齐 Anthropic 标准） | ⏳ | Sprint 4.1 Metadata 架构 + 渐进加载 → 4.2 可执行脚本 + 目录改造 → 4.3 管理 API + 前端 UI → 4.4 生态度量 + 文档 | 任意 Runtime |
 
 ### 3.5 跨栈迁移工作流
 
@@ -787,35 +787,45 @@ forge-platform/                          # Gradle Monorepo (Kotlin DSL)
 - Domain Skills 扩展 / convention-miner 跨语言增强
 - 50 名开发者 CLI 规模化部署
 
-### Phase 4：Skill 架构改造 + 持续进化 — ⏳ 待开始
+### Phase 4：Skill 架构改造 — 对齐 Anthropic Agent Skills 标准 — ⏳ 已规划
 
-**目标**：重构 Skill 加载架构为渐进式披露模式，解决 Phase 3 验收暴露的 system prompt 膨胀问题（106K→75K 仍偏大），同时推进平台进化能力。
+> 详细实施计划：`docs/phase4-implementation-plan.md`
 
-**核心问题（Phase 3 验收发现）**：
-- 所有 Skill 内容直接全量拼入 system prompt，无按需加载（架构缺陷）
-- 大量内容是 Claude 本身已知的通用知识（如 Kotlin data class 用法、Spring Boot 分层架构）
-- 无子文件拆分，所有内容堆在 SKILL.md 里
-- 32 个 Skill 文件，development-profile 即使精选 7 个仍有 75K chars
+**目标**：将 Forge Skill 架构从"system prompt 注入物"改造为**对齐 Anthropic 标准的渐进式披露生态**，实现 metadata-first 发现、按需加载、可执行脚本、用户可管理、效果可追踪。
 
-**Skill 改造方向（参考 Anthropic Skill 最佳实践 — 渐进式披露）**：
+**核心架构改造**（对齐 [Anthropic Agent Skills](https://platform.claude.com/docs/en/agents-and-tools/agent-skills/overview)）：
 
-| # | 方向 | 说明 |
-|---|------|------|
-| 1 | **Skill 渐进式披露** | 3 级架构：metadata（触发发现）→ SKILL.md < 500 行（核心指南）→ 子文件（详细参考，按需读取） |
-| 2 | **Skill 内容精简** | 删除 Claude 已知内容，只保留项目特有约定和决策（"只写 Claude 不知道的"） |
-| 3 | **按需加载机制** | Skill 内容通过 MCP tool 按需查询，而非全量注入 system prompt |
-| 4 | **子文件拆分** | 大 SKILL.md 拆为 SKILL.md（入口 < 500 行）+ examples/ + patterns/ 子目录 |
-| 5 | 多 Runtime 支持 | Claude Code / ForgeNative / 其他框架按需切换 |
-| 6 | 进化环飞轮验证 | 月度质量对比：知识库增长 / Skill 效果改善 / 底线通过率趋势 |
-| 7 | CI/CD 深度集成 | 底线检查嵌入 PR 流程 + 部署流水线 |
+```
+Level 1: Metadata（始终在 system prompt，~100 tokens/skill）
+  ↓ Agent 按需触发
+Level 2: SKILL.md 指令（< 500 行，通过 read_skill MCP 工具读取）
+  ↓ 需要深入参考
+Level 3: 子文件 + 可执行脚本（reference/ + examples/ + scripts/）
+```
+
+**4 个 Sprint**：
+
+| Sprint | 目标 | 关键产出 |
+|--------|------|----------|
+| 4.1 | Metadata 架构 + 渐进加载 | SkillDefinition 扩展、SystemPromptAssembler 改造（只注入 metadata）、+3 MCP 工具（read_skill / run_skill_script / list_skills） |
+| 4.2 | 可执行脚本 + 目录改造 | 15 个 SKILL.md 精简（只写 Claude 不知道的）、~20 个验证脚本（Python）、Anthropic 标准目录结构 |
+| 4.3 | Skill 管理 API + 前端 UI | REST CRUD API、用户 Skill 可视/可选/可创/可删、system Skill 保护 |
+| 4.4 | 生态追踪 + 验收 | 使用效果追踪（skill_usage 表）、排行榜/趋势 API、进化建议、24 TC 验收 |
+
+**预期效果**：
+- System prompt: ~78K → ~20K chars（75% 缩减）
+- Skill 可执行脚本: 0 → ~20 个
+- 用户 Skill 管理: 不可见 → 可视/可选/可创/可删
+- Skill 数量上限: ~10（受 prompt 限制）→ 无上限
+- MCP 工具数: 11 → 14
 
 **验收标准**：
-- [ ] CLI 周活 ≥ 60% 开发者
-- [ ] Web IDE 产品团队周活 ≥ 50%
-- [ ] 底线一次通过率 ≥ 85%
-- [ ] PR 周期缩短 ≥ 30%，审查时间缩短 ≥ 40%
-- [ ] 生产 Bug 率下降 ≥ 15%
-- [ ] 进化环飞轮可测量：Skill 效果逐月改善，知识库月增 ≥ 20 条
+- [ ] System prompt < 25K chars（所有 Profile）
+- [ ] Agent 通过 MCP 工具按需读取 Skill 内容
+- [ ] 可执行脚本提供确定性质量验证
+- [ ] 用户可创建/删除自定义 Skill
+- [ ] Skill 使用效果可追踪、可排名
+- [ ] 24 TC 验收测试通过
 
 ---
 
@@ -875,7 +885,7 @@ Phase 0       Phase 1          Phase 1.5         Phase 1.6            Phase 2   
 | Phase 2 Sprint 2.3 多模型适配 | ✅ 完成（5 Provider，13+ 模型，Bedrock/Gemini/Qwen） |
 | Phase 2 Sprint 2.4 内部试用 | ✅ 完成（试用执行 + 4 条核心反馈收集） |
 | Phase 3 人机协作闭环 | ✅ 完成（6 模块 16 步 + Session 23-24 验收：28 Bug 修复，规划→设计→开发全流程闭环验证通过） |
-| Phase 4 Skill 架构改造 | ⏳ 待开始（渐进式披露 + 内容精简 + 按需加载） |
+| Phase 4 Skill 架构改造 | ⏳ 待开始（对齐 Anthropic Agent Skills 标准：Metadata 渐进式披露 + 可执行脚本 + 用户 CRUD 管理 + 生态度量，详见 `docs/phase4-implementation-plan.md`） |
 
 ### 已识别 Gap
 

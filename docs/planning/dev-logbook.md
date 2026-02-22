@@ -3373,3 +3373,69 @@ HitlAction.APPROVE -> {
 - 全流程验证：规划 ✅ → 设计 ✅（baseline 双通过）→ 开发（待继续）
 - 设计阶段首次 baseline 全通过（architecture + api-contract）
 - 遗留问题：设计阶段 baseline 通过后 HITL 未触发，需排查
+
+---
+
+## Session 25 — Phase 4 规划：Skill 架构改造（对齐 Anthropic Agent Skills 标准）
+
+**日期**：2026-02-22
+**目标**：规划 Phase 4 实施方案，对齐 Anthropic 官方 Agent Skills 架构标准
+
+### 25.1 背景与问题分析
+
+Phase 3 验收暴露了 Skill 架构的根本缺陷：
+
+| 维度 | 当前实现 | Anthropic 标准 |
+|------|----------|----------------|
+| 加载方式 | 全量注入 system prompt（~55K chars） | Level 1 metadata → 按需读 SKILL.md → 按需读子文件 |
+| 可执行脚本 | 不支持（只有 Markdown） | scripts/ 目录，Agent 执行脚本获取确定性结果 |
+| 用户管理 | 不可见、不可选 | 可视/可选/可创/可删 |
+| 生态 | 静态 32 个文件 | 动态生态：使用效果追踪、优胜劣汰 |
+| 内容分层 | 单一 SKILL.md | SKILL.md + reference/ + examples/ + scripts/ |
+
+### 25.2 Anthropic Agent Skills 核心理念研究
+
+通过研究 Anthropic 官方文档（Overview + Best Practices），提炼出 3 层渐进式披露模型：
+
+```
+Level 1: Metadata（始终加载，~100 tokens/skill）
+  ↓ 用户请求匹配时
+Level 2: SKILL.md 指令（按需读取，< 5K tokens）
+  ↓ 需要详细参考时
+Level 3: 子文件 + 可执行脚本（按需读取/执行，无上限）
+```
+
+关键原则：
+- Skill = 文件系统目录（SKILL.md + 子文件 + scripts/）
+- Metadata 是发现机制：system prompt 只含 name + description
+- SKILL.md < 500 行：只写 Claude 不知道的项目特有知识
+- Scripts 提供确定性操作：代码保可靠性，指令保灵活性
+- Skills 对用户可视、可选、可创、可删（system foundation 除外）
+- Skills 是生态：优胜劣汰，使用效果驱动进化
+
+### 25.3 Phase 4 实施方案（4 个 Sprint）
+
+| Sprint | 名称 | 核心内容 | 预期产出 |
+|--------|------|----------|----------|
+| 4.1 | Metadata 架构 + 渐进加载 | SkillDefinition 扩展、SystemPromptAssembler 重写（55K→1K）、+3 MCP 工具 | System prompt 从 ~78K 降到 ~20K |
+| 4.2 | 可执行脚本 + 目录改造 | Skill 目录标准化、4 核心 Skill 各添加 3-5 脚本、15 个 SKILL.md 精简 | ~20 个可执行脚本 |
+| 4.3 | 管理 API + 前端 UI | SkillController CRUD、SkillManagementService、SkillPanel/DetailView/CreateForm | 用户可管理 Skill |
+| 4.4 | 生态度量 + 文档 | SkillUsageEntity 追踪、排行榜 API、效果可视化、验收测试 24 TC | 可度量的 Skill 生态 |
+
+详细实施方案：`docs/phase4-implementation-plan.md`
+
+### 25.4 文件变更表
+
+| 操作 | 文件 | 说明 |
+|------|------|------|
+| 新建 | `docs/phase4-implementation-plan.md` | Phase 4 完整实施计划 |
+| 更新 | `docs/planning/baseline-v1.5.md` | v1.8→v1.9，Phase 4 章节重写 + 路线图/里程碑更新 |
+| 更新 | `docs/planning/dev-logbook.md` | Session 25 |
+
+### 25.5 统计快照
+
+- Phase 3 状态：✅ 完成
+- Phase 4 状态：⏳ 规划完成，待实施
+- Phase 4 计划：4 Sprint，预计 4 个 Session
+- 规划基线版本：v1.9
+- 关键指标目标：system prompt 55K→1K（Skill 部分），MCP 工具 11→14
