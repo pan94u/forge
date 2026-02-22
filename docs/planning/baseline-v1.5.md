@@ -1,6 +1,6 @@
 # Forge — 面向 AI 时代的智能交付平台
 
-> 规划基线 v1.7 | 基线日期: 2026-02-21 | 变更: v1.6→v1.7 Phase 3 已实现（6 模块 16 步：HITL 暂停点 + 执行透明度 + 编译/测试管道 + 质量度量面板 + 学习循环集成）
+> 规划基线 v1.8 | 基线日期: 2026-02-22 | 变更: v1.7→v1.8 Phase 3 验收完成（28 Bug 修复，全流程闭环验证），Phase 4 方向确定（Skill 渐进式披露架构改造）
 
 ---
 
@@ -144,7 +144,7 @@
 | Phase 1.6 | AI 交付闭环 + SSO + UX 增强 | ✅ | AI→Workspace 写文件 + Keycloak SSO + Context Picker + CRUD + 自动保存 | Claude Code |
 | Phase 2 | 质量基础设施 + OODA 增强 + 多模型 + 内部试用 | ✅ | Sprint 2.1（CI/Playwright/Bug 修复）+ Sprint 2.2（SkillLoader/MCP 真实服务）+ Sprint 2.3（多模型适配：Bedrock/Gemini/Qwen）+ Sprint 2.4（内部试用 + 反馈） | Claude Code |
 | Phase 3 | 人机协作闭环 + 方法论平台化 | ✅ | HITL 全量暂停点 + 执行透明度 + 编译/测试管道 + 质量度量面板 + 学习循环集成（execution-logger / skill-feedback-analyzer Spring 化） | Claude Code |
-| Phase 4 | 全面上线 + 持续进化 | ⏳ | 多 Runtime 支持 + Skill 生态 + 进化环飞轮 + 垂域模型 | 任意 Runtime |
+| Phase 4 | Skill 架构改造 + 持续进化 | ⏳ | Skill 渐进式披露 + 内容精简 + 按需加载 + 多 Runtime + 进化环飞轮 | 任意 Runtime |
 
 ### 3.5 跨栈迁移工作流
 
@@ -787,18 +787,27 @@ forge-platform/                          # Gradle Monorepo (Kotlin DSL)
 - Domain Skills 扩展 / convention-miner 跨语言增强
 - 50 名开发者 CLI 规模化部署
 
-### Phase 4：全面上线 + 持续进化 — ⏳ 待开始
+### Phase 4：Skill 架构改造 + 持续进化 — ⏳ 待开始
 
-**目标**：平台全组织部署；方法论飞轮效应显现（进化环持续产出知识 → Skill 自动优化 → 交付质量持续提升）。
+**目标**：重构 Skill 加载架构为渐进式披露模式，解决 Phase 3 验收暴露的 system prompt 膨胀问题（106K→75K 仍偏大），同时推进平台进化能力。
+
+**核心问题（Phase 3 验收发现）**：
+- 所有 Skill 内容直接全量拼入 system prompt，无按需加载（架构缺陷）
+- 大量内容是 Claude 本身已知的通用知识（如 Kotlin data class 用法、Spring Boot 分层架构）
+- 无子文件拆分，所有内容堆在 SKILL.md 里
+- 32 个 Skill 文件，development-profile 即使精选 7 个仍有 75K chars
+
+**Skill 改造方向（参考 Anthropic Skill 最佳实践 — 渐进式披露）**：
 
 | # | 方向 | 说明 |
 |---|------|------|
-| 1 | 多 Runtime 支持 | Claude Code / ForgeNative / 其他框架（Bedrock Agent / LangGraph）按需切换 |
-| 2 | 跨栈迁移工具链成熟化 | codebase-profiler 全语言支持 + business-rule-extraction 产品化 |
-| 3 | Skill 生态开放 | 组织内 Skill 市场 → 跨组织共享 |
-| 4 | 进化环飞轮验证 | 月度质量对比报告：知识库增长 / Skill 效果改善 / 底线通过率趋势 |
-| 5 | CI/CD 深度集成 | 底线检查嵌入 PR 流程 + 部署流水线 |
-| 6 | 垂域模型探索 | 基于 execution-logger 累积数据微调领域模型 |
+| 1 | **Skill 渐进式披露** | 3 级架构：metadata（触发发现）→ SKILL.md < 500 行（核心指南）→ 子文件（详细参考，按需读取） |
+| 2 | **Skill 内容精简** | 删除 Claude 已知内容，只保留项目特有约定和决策（"只写 Claude 不知道的"） |
+| 3 | **按需加载机制** | Skill 内容通过 MCP tool 按需查询，而非全量注入 system prompt |
+| 4 | **子文件拆分** | 大 SKILL.md 拆为 SKILL.md（入口 < 500 行）+ examples/ + patterns/ 子目录 |
+| 5 | 多 Runtime 支持 | Claude Code / ForgeNative / 其他框架按需切换 |
+| 6 | 进化环飞轮验证 | 月度质量对比：知识库增长 / Skill 效果改善 / 底线通过率趋势 |
+| 7 | CI/CD 深度集成 | 底线检查嵌入 PR 流程 + 部署流水线 |
 
 **验收标准**：
 - [ ] CLI 周活 ≥ 60% 开发者
@@ -865,8 +874,8 @@ Phase 0       Phase 1          Phase 1.5         Phase 1.6            Phase 2   
 | Phase 2 Sprint 2.2 OODA + MCP 真实服务 | ✅ 完成（6 容器 + SkillLoader 增强 + 底线自动检查，24/24 验收通过） |
 | Phase 2 Sprint 2.3 多模型适配 | ✅ 完成（5 Provider，13+ 模型，Bedrock/Gemini/Qwen） |
 | Phase 2 Sprint 2.4 内部试用 | ✅ 完成（试用执行 + 4 条核心反馈收集） |
-| Phase 3 人机协作闭环 | ✅ 完成（6 模块 16 步：HITL 暂停点 + 执行透明度 + 编译/测试管道 + 质量面板 + 学习循环，24 验收用例） |
-| Phase 4 全面上线 | ⏳ 待开始 |
+| Phase 3 人机协作闭环 | ✅ 完成（6 模块 16 步 + Session 23-24 验收：28 Bug 修复，规划→设计→开发全流程闭环验证通过） |
+| Phase 4 Skill 架构改造 | ⏳ 待开始（渐进式披露 + 内容精简 + 按需加载） |
 
 ### 已识别 Gap
 
