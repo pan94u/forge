@@ -26,7 +26,7 @@ docker compose -f docker-compose.trial.yml up --build -d
 
 # 访问 http://localhost:9000
 
-# 运行全量单元测试（当前 157 个）
+# 运行全量单元测试（当前 156 个）
 ./gradlew :web-ide:backend:test :adapters:model-adapter:test
 ./gradlew :agent-eval:test
 ```
@@ -51,7 +51,7 @@ Forge is a Gradle monorepo (Kotlin DSL) with the following modules:
 3. **Baseline guarantees quality floor**: Baseline scripts must pass regardless of model
 4. **Dual-loop architecture**: Delivery Loop (what) + Learning Loop (getting better)
 5. **Adapter isolation**: Skills/baselines stable; models/runtime swappable via adapters
-6. **MCP 工具聚合**: 5 MCP Server × 20 细粒度工具 → McpProxyService 9 聚合工具
+6. **MCP 工具聚合**: 5 MCP Server × 20 细粒度工具 → McpProxyService 17 聚合工具（5 handler 拆分路由）
 7. **本地构建 + Docker 打包**: 不在 Docker 内编译（网络不可靠），本地 bootJar/npm build 后 Docker 只 COPY 产物
 
 ## Language & Conventions
@@ -71,7 +71,7 @@ Forge is a Gradle monorepo (Kotlin DSL) with the following modules:
 - **环境变量**: `ANTHROPIC_API_KEY`, `FORGE_SECURITY_ENABLED`, `FORGE_PLUGINS_PATH=/plugins`
 - **Volume 挂载**: `plugins/` 和 `knowledge-base/` 必须挂载为只读
 
-## MCP 工具清单（16 个）
+## MCP 工具清单（17 个）
 
 | 工具 | 来源 | 说明 |
 |------|------|------|
@@ -91,6 +91,7 @@ Forge is a Gradle monorepo (Kotlin DSL) with the following modules:
 | workspace_test | workspace | 运行测试，自动检测测试框架 |
 | update_workspace_memory | memory | Agent 主动更新 workspace 记忆 |
 | get_session_history | memory | 读取历史 session 摘要 |
+| analyze_codebase | memory | 对 workspace 执行结构分析，返回 JSON |
 
 **注意**: workspace 工具通过 `callTool(name, args, workspaceId)` 三参数版调用，workspaceId 从 arguments 中提取。
 
@@ -109,7 +110,7 @@ Forge is a Gradle monorepo (Kotlin DSL) with the following modules:
 - No circular dependencies between modules
 - Plugins are standalone Markdown/JSON — no Kotlin compilation needed
 
-## 已知陷阱（从 18 个 Session 提炼）
+## 已知陷阱（从 29 个 Session 提炼）
 
 - **JDK 版本**: 必须 21+，系统默认可能是 8，用 `JAVA_HOME` 显式指定
 - **Profile 命名**: 带 `-profile` 后缀（如 `development-profile`，非 `development`）
@@ -121,7 +122,7 @@ Forge is a Gradle monorepo (Kotlin DSL) with the following modules:
 - **Kotlin 枚举序列化**: `enum class` 默认序列化为大写（`DIRECTORY`），前端期望小写（`directory`）。所有枚举必须加 `@JsonValue` 返回小写。**新增枚举时立即全局排查** `grep -r "enum class" --include="*.kt"`
 - **空字符串 vs null**: Kotlin `String?` 从 HTTP query param 接收时，`q=`（空串）和不传 `q`（null）不同。`?: default` 只处理 null，需用 `isNullOrBlank()` 同时处理两者
 
-## 交付方法论（从 18 Session 实践总结）
+## 交付方法论（从 29 Session 实践总结）
 
 > 核心理念：**用文档对抗 AI 遗忘，用验收测试对抗质量腐化，用双基线对抗设计偏移。**
 > 详细分析：`docs/delivery-methodology-analysis.md`
@@ -170,8 +171,8 @@ Forge is a Gradle monorepo (Kotlin DSL) with the following modules:
 ### 纪律 2：Baseline 交叉校验（防止腐化）
 
 **两份 Baseline 的定位不同**:
-- **设计基线** `docs/design-baseline-v1.md`（当前 v5）：**实现驱动**，每个 Phase 结束后根据实际实现来更新，记录"我们造了什么"
-- **规划基线** `docs/planning/baseline-v1.5.md`：**设计驱动**，由开发者和 Claude 共同讨论设计来更新，记录"我们要造什么"
+- **设计基线** `docs/baselines/design-baseline-v1.md`（当前 v10）：**实现驱动**，每个 Phase 结束后根据实际实现来更新，记录"我们造了什么"
+- **规划基线** `docs/baselines/planning-baseline-v1.5.md`（当前 v2.0）：**设计驱动**，由开发者和 Claude 共同讨论设计来更新，记录"我们要造什么"
 
 **更新时机**:
 - Phase 结束 → 先更新设计基线（对齐实现）→ 再用设计基线与规划基线交叉校验 → 发现偏差后决定是修正规划还是补齐实现
@@ -209,7 +210,7 @@ Forge is a Gradle monorepo (Kotlin DSL) with the following modules:
 - 预期用 `- [ ]` checkbox 格式
 - 末尾有汇总表 + 启动命令 + 关键观察点
 
-**核心原则**: 验收测试是写给人看的产品规格，同时也是可执行的运行时校验。157 个单元测试全过 ≠ 产品可用（Session 14 的 workspace 工具 bug 就是证明）。
+**核心原则**: 验收测试是写给人看的产品规格，同时也是可执行的运行时校验。156 个单元测试全过 ≠ 产品可用（Session 14 的 workspace 工具 bug 就是证明）。
 
 ### 纪律 4：防腐规则（持续改进）
 
