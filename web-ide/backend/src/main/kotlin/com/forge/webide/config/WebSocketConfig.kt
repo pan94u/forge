@@ -1,6 +1,5 @@
 package com.forge.webide.config
 
-import com.forge.webide.websocket.ChatWebSocketHandler
 import com.forge.webide.websocket.TerminalWebSocketHandler
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
@@ -12,17 +11,13 @@ import org.springframework.beans.factory.annotation.Value
 import org.springframework.web.socket.server.support.HttpSessionHandshakeInterceptor
 
 /**
- * WebSocket configuration for chat streaming and terminal sessions.
+ * WebSocket configuration for terminal sessions.
  *
- * Registers WebSocket handlers for:
- * - /ws/chat/{sessionId} - AI chat streaming
- * - /ws/terminal/{workspaceId} - Terminal sessions
- * - /ws/workflow/{workflowId} - Workflow execution streaming
+ * Chat streaming is handled via HTTP SSE (POST /api/chat/sessions/{id}/stream).
  */
 @Configuration
 @EnableWebSocket
 class WebSocketConfig(
-    private val chatWebSocketHandler: ChatWebSocketHandler,
     private val terminalWebSocketHandler: TerminalWebSocketHandler,
     @Value("\${forge.websocket.allowed-origins:http://localhost:3000}")
     private val allowedOrigins: String
@@ -31,18 +26,13 @@ class WebSocketConfig(
     @Bean
     fun createWebSocketContainer(): ServletServerContainerFactoryBean {
         val container = ServletServerContainerFactoryBean()
-        container.setMaxTextMessageBufferSize(512 * 1024)   // 512KB
+        container.setMaxTextMessageBufferSize(512 * 1024)
         container.setMaxBinaryMessageBufferSize(512 * 1024)
         return container
     }
 
     override fun registerWebSocketHandlers(registry: WebSocketHandlerRegistry) {
         val origins = allowedOrigins.split(",").map { it.trim() }.toTypedArray()
-
-        registry
-            .addHandler(chatWebSocketHandler, "/ws/chat/**")
-            .addInterceptors(HttpSessionHandshakeInterceptor())
-            .setAllowedOrigins(*origins)
 
         registry
             .addHandler(terminalWebSocketHandler, "/ws/terminal/**")

@@ -1,5 +1,6 @@
 package com.forge.webide.controller
 
+import com.forge.webide.service.DynamicAdapterFactory
 import com.forge.webide.service.UserModelConfigRequest
 import com.forge.webide.service.UserModelConfigService
 import com.forge.webide.service.UserModelConfigView
@@ -12,11 +13,13 @@ import java.security.Principal
  *
  * 允许用户配置自己的模型提供商参数（API Key、Base URL 等），
  * 覆盖系统默认配置。API Key 加密存储，返回时脱敏。
+ * 每次保存或删除后会清除对应的 Adapter 缓存，确保下次请求使用最新配置。
  */
 @RestController
 @RequestMapping("/api/user/model-configs")
 class UserModelConfigController(
-    private val userModelConfigService: UserModelConfigService
+    private val userModelConfigService: UserModelConfigService,
+    private val dynamicAdapterFactory: DynamicAdapterFactory
 ) {
 
     /**
@@ -53,7 +56,9 @@ class UserModelConfigController(
     ): UserModelConfigView {
         val userId = principal?.name ?: "anonymous"
         val normalizedRequest = request.copy(provider = provider)
-        return userModelConfigService.saveUserConfig(userId, normalizedRequest)
+        val result = userModelConfigService.saveUserConfig(userId, normalizedRequest)
+        dynamicAdapterFactory.invalidate(userId, provider)
+        return result
     }
 
     /**
@@ -66,6 +71,7 @@ class UserModelConfigController(
     ): ResponseEntity<Void> {
         val userId = principal?.name ?: "anonymous"
         userModelConfigService.deleteUserConfig(userId, provider)
+        dynamicAdapterFactory.invalidate(userId, provider)
         return ResponseEntity.noContent().build()
     }
 }

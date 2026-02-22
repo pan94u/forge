@@ -4,20 +4,24 @@ import com.forge.adapter.model.*
 import com.forge.webide.config.ProviderDefaultModels
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * 动态 Adapter 工厂服务。
  *
  * 根据用户在 ModelSettingsDialog 中保存的 Provider 配置，
- * 按需（per-request）创建对应的 ModelAdapter 实例。
+ * 按需创建对应的 ModelAdapter 实例并缓存，避免每次请求重复实例化。
  *
- * 完全依赖用户配置，不读取任何系统级环境变量。
+ * 缓存策略：key = "userId:provider"，API Key 更新时调用 [invalidate] 清除缓存。
  */
 @Service
 class DynamicAdapterFactory(
     private val userModelConfigService: UserModelConfigService
 ) {
     private val logger = LoggerFactory.getLogger(DynamicAdapterFactory::class.java)
+
+    // key = "userId:provider", value = cached adapter
+    private val adapterCache = ConcurrentHashMap<String, ModelAdapter>()
 
     /**
      * 根据 modelId 确定所属 provider。
@@ -29,12 +33,40 @@ class DynamicAdapterFactory(
     }
 
     /**
-     * 为指定用户和 provider 创建 ModelAdapter。
-     * 从数据库读取用户配置的 API Key，动态实例化对应 Adapter。
+     * 为指定用户和 provider 获取（或创建）ModelAdapter。
+     * 相同 userId+provider 的 Adapter 会被缓存复用。
      *
      * @throws ProviderNotConfiguredException 当用户未配置该 Provider 时
      */
     fun createForUser(userId: String, provider: String): ModelAdapter {
+        val cacheKey = "$userId:$provider"
+        return adapterCache.getOrPut(cacheKey) {
+            buildAdapter(userId, provider)
+        }
+    }
+
+    /**
+     * 清除指定用户某 provider 的缓存（用于 API Key 更新后刷新）。
+     */
+    fun invalidate(userId: String, provider: String) {
+        val removed = adapterCache.remove("$userId:$provider")
+        if (removed != null) {
+            logger.debug("已清除用户 {} 的 {} adapter 缓存", userId, provider)
+        }
+    }
+
+    /**
+     * 清除指定用户所有 provider 的缓存。
+     */
+    fun invalidateAll(userId: String) {
+        val prefix = "$userId:"
+        adapterCache.keys.filter { it.startsWith(prefix) }.forEach { key ->
+            adapterCache.remove(key)
+        }
+        logger.debug("已清除用户 {} 的所有 adapter 缓存", userId)
+    }
+
+    private fun buildAdapter(userId: String, provider: String): ModelAdapter {
         val config = userModelConfigService.getDecryptedConfig(userId, provider)
             ?: throw ProviderNotConfiguredException(
                 "Provider '$provider' 未配置。请在 Model Settings 中添加 API Key。"

@@ -57,37 +57,31 @@ export interface ChatContext {
 
 class ClaudeClient {
   private baseUrl: string;
-  private activeWs: WebSocket | null = null;
 
   constructor(baseUrl: string = "") {
     this.baseUrl = baseUrl;
   }
 
   /**
-   * Send a HITL response (approve/reject/modify) via the active WebSocket.
+   * Send a HITL response (approve/reject/modify) via HTTP POST.
    */
-  sendHitlResponse(
+  async sendHitlResponse(
+    sessionId: string,
     action: HitlAction,
     feedback?: string,
     modifiedPrompt?: string,
-  ): void {
-    if (!this.activeWs || this.activeWs.readyState !== WebSocket.OPEN) {
-      console.error("Cannot send HITL response: WebSocket not connected");
-      return;
-    }
-    this.activeWs.send(
-      JSON.stringify({
-        type: "hitl_response",
-        action,
-        feedback,
-        modifiedPrompt,
-      }),
-    );
+  ): Promise<void> {
+    const url = `${this.baseUrl}/api/chat/sessions/${sessionId}/hitl`;
+    await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action, feedback, modifiedPrompt }),
+    });
   }
 
   /**
-   * Stream a message to the Claude agent via WebSocket.
-   * Falls back to HTTP SSE if WebSocket is unavailable.
+   * Stream a message to the AI agent via HTTP SSE.
+   * Model name and workspaceId are passed in the request body.
    */
   async streamMessage(
     sessionId: string,
@@ -98,100 +92,6 @@ class ClaudeClient {
     workspaceId?: string,
     model?: string,
   ): Promise<void> {
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const host = this.baseUrl || window.location.host;
-    const wsUrl = `${protocol}//${host}/ws/chat/${sessionId}`;
-
-    return new Promise<void>((resolve, reject) => {
-      if (signal?.aborted) {
-        reject(new DOMException("Aborted", "AbortError"));
-        return;
-      }
-
-      let ws: WebSocket;
-
-      try {
-        ws = new WebSocket(wsUrl);
-      } catch {
-        // Fall back to HTTP SSE
-        this.streamMessageHttp(sessionId, message, contexts, onEvent, signal)
-          .then(resolve)
-          .catch(reject);
-        return;
-      }
-
-      const cleanup = () => {
-        if (
-          ws.readyState === WebSocket.OPEN ||
-          ws.readyState === WebSocket.CONNECTING
-        ) {
-          ws.close();
-        }
-      };
-
-      if (signal) {
-        signal.addEventListener("abort", () => {
-          cleanup();
-          reject(new DOMException("Aborted", "AbortError"));
-        });
-      }
-
-      ws.onopen = () => {
-        this.activeWs = ws;
-        ws.send(
-          JSON.stringify({
-            type: "message",
-            content: message,
-            contexts,
-            workspaceId,
-            model: model ?? "claude-sonnet-4-6",
-          }),
-        );
-      };
-
-      ws.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data) as StreamEvent;
-          onEvent(data);
-
-          if (data.type === "done") {
-            cleanup();
-            resolve();
-          }
-        } catch {
-          onEvent({ type: "content", content: event.data });
-        }
-      };
-
-      ws.onerror = () => {
-        // Try HTTP fallback on WebSocket error
-        cleanup();
-        this.streamMessageHttp(sessionId, message, contexts, onEvent, signal)
-          .then(resolve)
-          .catch(reject);
-      };
-
-      ws.onclose = (event) => {
-        this.activeWs = null;
-        if (!event.wasClean) {
-          // Connection closed unexpectedly
-          onEvent({ type: "done" });
-        }
-        resolve();
-      };
-    });
-  }
-
-  /**
-   * HTTP SSE fallback for streaming messages.
-   */
-  private async streamMessageHttp(
-    sessionId: string,
-    message: string,
-    contexts: ChatContext[],
-    onEvent: (event: StreamEvent) => void,
-    signal?: AbortSignal,
-  ): Promise<void> {
     const url = `${this.baseUrl}/api/chat/sessions/${sessionId}/stream`;
 
     const response = await fetch(url, {
@@ -200,7 +100,13 @@ class ClaudeClient {
         "Content-Type": "application/json",
         Accept: "text/event-stream",
       },
-      body: JSON.stringify({ type: "message", content: message, contexts }),
+      body: JSON.stringify({
+        type: "message",
+        content: message,
+        contexts,
+        workspaceId: workspaceId ?? "",
+        model: model ?? "claude-sonnet-4-6",
+      }),
       signal,
     });
 
@@ -223,12 +129,10 @@ class ClaudeClient {
 
         buffer += decoder.decode(value, { stream: true });
 
-        // Parse SSE events
         const lines = buffer.split("\n");
         buffer = lines.pop() ?? "";
 
         for (const line of lines) {
-          // Handle both "data:" and "data: " (Spring SSE omits the space)
           if (line.startsWith("data:")) {
             const data = line.startsWith("data: ")
               ? line.slice(6).trim()
@@ -243,6 +147,7 @@ class ClaudeClient {
             try {
               const parsed = JSON.parse(data) as StreamEvent;
               onEvent(parsed);
+              if (parsed.type === "done") return;
             } catch {
               onEvent({ type: "content", content: data });
             }

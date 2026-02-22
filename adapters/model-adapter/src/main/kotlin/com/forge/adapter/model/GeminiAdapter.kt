@@ -14,6 +14,7 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.slf4j.LoggerFactory
 import java.io.BufferedReader
+import java.util.UUID
 import java.util.concurrent.TimeUnit
 
 /**
@@ -204,7 +205,7 @@ class GeminiAdapter(
                             if (functionCall != null) {
                                 val name = functionCall.get("name")?.asString ?: ""
                                 val args = functionCall.getAsJsonObject("args")
-                                val id = name
+                                val id = UUID.randomUUID().toString()
                                 emit(StreamEvent.ToolUseStart(toolCallIndex, id, name))
                                 if (args != null) {
                                     emit(StreamEvent.ToolInputDelta(gson.toJson(args)))

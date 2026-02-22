@@ -754,6 +754,7 @@ export function AiChatSidebar({
         {/* HITL Approval Panel */}
         {hitlPending && hitlData && (
           <HitlApprovalPanel
+            sessionId={sessionId ?? ""}
             profile={hitlData.profile}
             checkpoint={hitlData.checkpoint}
             deliverables={hitlData.deliverables}

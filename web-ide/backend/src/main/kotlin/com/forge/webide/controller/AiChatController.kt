@@ -5,6 +5,8 @@ import com.forge.webide.model.*
 import com.forge.webide.repository.ChatMessageRepository
 import com.forge.webide.repository.ChatSessionRepository
 import com.forge.webide.service.ClaudeAgentService
+import com.forge.webide.service.skill.HitlAction
+import com.forge.webide.service.skill.HitlDecision
 import com.forge.webide.service.skill.SkillLoader
 import org.springframework.http.HttpStatus
 import org.springframework.http.MediaType
@@ -112,8 +114,8 @@ class AiChatController(
     }
 
     /**
-     * Server-Sent Events endpoint for streaming chat responses.
-     * This serves as the HTTP fallback when WebSocket is unavailable.
+     * Server-Sent Events endpoint for streaming chat responses (primary communication channel).
+     * The model name and workspaceId are passed in the request body.
      */
     @PostMapping("/sessions/{sessionId}/stream", produces = [MediaType.TEXT_EVENT_STREAM_VALUE])
     fun streamMessage(
@@ -124,32 +126,27 @@ class AiChatController(
         val session = chatSessionRepository.findById(sessionId).orElse(null)
             ?: throw IllegalArgumentException("Session not found: $sessionId")
 
+        val userId = principal?.name ?: "anonymous"
+        val workspaceId = request.workspaceId.ifBlank { session.workspaceId }
         val emitter = SseEmitter(300_000L) // 5-minute timeout
 
-        // Stream response asynchronously
         claudeAgentService.streamMessage(
             sessionId = sessionId,
             message = request.content,
             contexts = request.contexts ?: emptyList(),
-            workspaceId = session.workspaceId,
+            workspaceId = workspaceId,
+            model = request.model,
+            userId = userId,
             onEvent = { event ->
                 try {
-                    emitter.send(
-                        SseEmitter.event()
-                            .name("message")
-                            .data(event)
-                    )
+                    emitter.send(SseEmitter.event().data(event))
                 } catch (e: Exception) {
                     emitter.completeWithError(e)
                 }
             },
-            onComplete = { assistantMessage ->
+            onComplete = { _ ->
                 try {
-                    emitter.send(
-                        SseEmitter.event()
-                            .name("message")
-                            .data(mapOf("type" to "done"))
-                    )
+                    emitter.send(SseEmitter.event().data(mapOf("type" to "done")))
                     emitter.complete()
                 } catch (e: Exception) {
                     emitter.completeWithError(e)
@@ -157,11 +154,7 @@ class AiChatController(
             },
             onError = { error ->
                 try {
-                    emitter.send(
-                        SseEmitter.event()
-                            .name("message")
-                            .data(mapOf("type" to "error", "content" to error.message))
-                    )
+                    emitter.send(SseEmitter.event().data(mapOf("type" to "error", "content" to error.message)))
                     emitter.completeWithError(error)
                 } catch (e: Exception) {
                     emitter.completeWithError(e)
@@ -170,6 +163,32 @@ class AiChatController(
         )
 
         return emitter
+    }
+
+    /**
+     * HITL (Human-in-the-Loop) response endpoint.
+     * Called by the client to approve, reject, or modify an AI action during a checkpoint.
+     */
+    @PostMapping("/sessions/{sessionId}/hitl")
+    fun submitHitlResponse(
+        @PathVariable sessionId: String,
+        @RequestBody request: HitlResponseRequest
+    ): ResponseEntity<Void> {
+        val action = try {
+            HitlAction.valueOf(request.action.uppercase())
+        } catch (e: IllegalArgumentException) {
+            return ResponseEntity.badRequest().build()
+        }
+
+        claudeAgentService.resolveCheckpoint(
+            sessionId,
+            HitlDecision(
+                action = action,
+                feedback = request.feedback,
+                modifiedPrompt = request.modifiedPrompt
+            )
+        )
+        return ResponseEntity.ok().build()
     }
 
     @GetMapping("/skills")

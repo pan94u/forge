@@ -318,6 +318,7 @@ class ClaudeAgentService(
                                     messages = continueMessages,
                                     options = options,
                                     tools = tools,
+                                    adapter = adapter,
                                     onEvent = onEvent,
                                     workspaceId = workspaceId
                                 )

@@ -9,6 +9,17 @@ dependencies {
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("org.slf4j:slf4j-api:2.0.16")
 
+    // Anthropic official Java SDK
+    implementation("com.anthropic:anthropic-java:2.12.0")
+
+    // Google GenAI official SDK (Gemini)
+    implementation("com.google.genai:google-genai:1.2.0")
+
+    // Alibaba DashScope official SDK (Qwen)
+    implementation("com.alibaba:dashscope-sdk-java:2.20.6") {
+        exclude(group = "org.slf4j", module = "slf4j-simple")
+    }
+
     // AWS Bedrock SDK (for BedrockAdapter)
     implementation(platform("software.amazon.awssdk:bom:2.28.3"))
     implementation("software.amazon.awssdk:bedrockruntime")

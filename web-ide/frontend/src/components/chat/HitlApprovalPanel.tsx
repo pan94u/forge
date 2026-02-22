@@ -5,6 +5,7 @@ import { CheckCircle, XCircle, Edit3 } from "lucide-react";
 import { claudeClient, type HitlAction } from "@/lib/claude-client";
 
 interface HitlApprovalPanelProps {
+  sessionId: string;
   profile: string;
   checkpoint: string;
   deliverables: string[];
@@ -14,6 +15,7 @@ interface HitlApprovalPanelProps {
 }
 
 export function HitlApprovalPanel({
+  sessionId,
   profile,
   checkpoint,
   deliverables,
@@ -40,9 +42,13 @@ export function HitlApprovalPanel({
     return () => clearInterval(timer);
   }, [resolved]);
 
-  const handleAction = (action: HitlAction, feedback?: string, modifiedPrompt?: string) => {
+  const handleAction = (
+    action: HitlAction,
+    feedback?: string,
+    modifiedPrompt?: string,
+  ) => {
     setResolved(true);
-    claudeClient.sendHitlResponse(action, feedback, modifiedPrompt);
+    claudeClient.sendHitlResponse(sessionId, action, feedback, modifiedPrompt);
     onResolved();
   };
 
@@ -66,7 +72,9 @@ export function HitlApprovalPanel({
             ({profile.replace("-profile", "")})
           </span>
         </div>
-        <span className={`text-xs font-mono ${remaining <= 30 ? "text-red-400" : "text-muted-foreground"}`}>
+        <span
+          className={`text-xs font-mono ${remaining <= 30 ? "text-red-400" : "text-muted-foreground"}`}
+        >
           {formatTime(remaining)}
         </span>
       </div>
@@ -77,7 +85,10 @@ export function HitlApprovalPanel({
           <span className="text-xs text-muted-foreground">已生成文件:</span>
           <div className="space-y-0.5">
             {deliverables.map((file, i) => (
-              <div key={i} className="flex items-center gap-1 text-xs text-foreground">
+              <div
+                key={i}
+                className="flex items-center gap-1 text-xs text-foreground"
+              >
                 <span className="text-green-400">+</span>
                 <span className="font-mono">{file}</span>
               </div>

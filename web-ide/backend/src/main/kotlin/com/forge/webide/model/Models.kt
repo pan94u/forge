@@ -97,7 +97,15 @@ data class ToolCallRecord(
 data class ChatStreamMessage(
     val type: String,
     val content: String,
-    val contexts: List<ContextReference>? = null
+    val contexts: List<ContextReference>? = null,
+    val model: String = "claude-sonnet-4-6",
+    val workspaceId: String = ""
+)
+
+data class HitlResponseRequest(
+    val action: String,
+    val feedback: String? = null,
+    val modifiedPrompt: String? = null
 )
 
 // --- Knowledge Models ---
