@@ -259,7 +259,7 @@ class ClaudeAgentService(
                 var promptResult = buildDynamicSystemPrompt(message, workspaceId)
                 logger.info("Stream profile: {}, Skills: {}, confidence: {}", promptResult.activeProfile, promptResult.loadedSkills, promptResult.confidence)
 
-                // Phase 7: Low-confidence intent confirmation
+                // Low-confidence intent confirmation
                 if (promptResult.confidence < INTENT_CONFIRMATION_THRESHOLD) {
                     logger.info("Low confidence routing ({}) for session {}, requesting intent confirmation",
                         promptResult.confidence, sessionId)
@@ -267,7 +267,6 @@ class ClaudeAgentService(
                     val confirmationFuture = java.util.concurrent.CompletableFuture<String>()
                     pendingIntentConfirmations[sessionId] = confirmationFuture
 
-                    // Send intent confirmation event to frontend
                     onEvent(mapOf(
                         "type" to "intent_confirmation",
                         "currentProfile" to promptResult.activeProfile,
@@ -283,12 +282,10 @@ class ClaudeAgentService(
                         )
                     ))
 
-                    // Wait for user response (timeout 60 seconds)
                     try {
                         val selectedProfile = confirmationFuture.get(60, java.util.concurrent.TimeUnit.SECONDS)
                         pendingIntentConfirmations.remove(sessionId)
 
-                        // Re-build prompt with confirmed profile
                         if (selectedProfile != promptResult.activeProfile) {
                             val confirmedProfile = skillLoader.loadProfile(selectedProfile)
                             if (confirmedProfile != null) {
@@ -307,7 +304,6 @@ class ClaudeAgentService(
                                 )
                             }
                         } else {
-                            // User confirmed the original routing
                             promptResult = promptResult.copy(
                                 confidence = 1.0,
                                 routingReason = "User confirmed: ${promptResult.routingReason}"
@@ -388,74 +384,8 @@ class ClaudeAgentService(
                     )
                 }
 
-                // HITL checkpoint: if profile has a hitlCheckpoint defined, pause for approval
-                val activeProfileDef = skillLoader.loadProfile(promptResult.activeProfile)
-                if (activeProfileDef != null && activeProfileDef.hitlCheckpoint.isNotBlank()) {
-                    val deliverables = finalResult.toolCalls
-                        .filter { it.name == "workspace_write_file" && it.status != "error" }
-                        .mapNotNull { tc -> tc.input["path"] as? String }
-
-                    val decision = hitlCheckpointManager.awaitHitlCheckpoint(
-                        sessionId = sessionId,
-                        profile = activeProfileDef,
-                        deliverables = deliverables,
-                        baselineResults = null,
-                        onEvent = onEvent
-                    )
-
-                    when (decision.action) {
-                        HitlAction.REJECT -> {
-                            // Terminate: send summary and return
-                            val rejectContent = finalResult.content +
-                                "\n\n---\n⛔ 用户拒绝了此阶段产出。反馈: ${decision.feedback ?: "无"}"
-                            finalResult = AgenticResult(content = rejectContent, toolCalls = finalResult.toolCalls)
-                        }
-                        HitlAction.MODIFY -> {
-                            // Re-enter agentic loop with modified prompt
-                            val modifiedMessages = (history + Message(role = Message.Role.USER, content = fullMessage)).toMutableList()
-                            modifiedMessages.add(Message(role = Message.Role.ASSISTANT, content = finalResult.content))
-                            modifiedMessages.add(Message(role = Message.Role.USER, content = decision.modifiedPrompt ?: decision.feedback ?: "请修改"))
-
-                            emitSubStep(onEvent, "根据修改指令重新执行...")
-                            onEvent(mapOf("type" to "ooda_phase", "phase" to "orient", "detail" to "根据修改指令重入"))
-
-                            finalResult = runBlocking {
-                                agenticLoopOrchestrator.agenticStream(
-                                    messages = modifiedMessages,
-                                    options = options,
-                                    tools = tools,
-                                    onEvent = onEvent,
-                                    workspaceId = workspaceId,
-                                    adapter = adapter
-                                )
-                            }
-                        }
-                        HitlAction.APPROVE -> {
-                            // Re-enter agentic loop to continue execution after approval
-                            emitSubStep(onEvent, "用户已批准「${activeProfileDef.hitlCheckpoint}」，继续执行...")
-                            onEvent(mapOf("type" to "ooda_phase", "phase" to "orient", "detail" to "审批通过，继续执行"))
-
-                            val continueMessages = (history + Message(role = Message.Role.USER, content = fullMessage)).toMutableList()
-                            continueMessages.add(Message(role = Message.Role.ASSISTANT, content = finalResult.content))
-                            continueMessages.add(Message(role = Message.Role.USER, content =
-                                "用户已审批通过「${activeProfileDef.hitlCheckpoint}」。" +
-                                (if (decision.feedback.isNullOrBlank()) "" else "用户反馈: ${decision.feedback}。") +
-                                "请输出本阶段的完整总结报告，包括：1) 已完成的工作 2) 产出物清单 3) 关键决策 4) 建议的下一步。"
-                            ))
-
-                            finalResult = runBlocking {
-                                agenticLoopOrchestrator.agenticStream(
-                                    messages = continueMessages,
-                                    options = options,
-                                    tools = tools,
-                                    onEvent = onEvent,
-                                    workspaceId = workspaceId,
-                                    adapter = adapter
-                                )
-                            }
-                        }
-                    }
-                }
+                // HITL checkpoint: disabled — will be redesigned later
+                // (previous implementation triggered at inappropriate times)
 
                 // OODA: Complete -- response delivered
                 onEvent(mapOf("type" to "ooda_phase", "phase" to "complete"))
