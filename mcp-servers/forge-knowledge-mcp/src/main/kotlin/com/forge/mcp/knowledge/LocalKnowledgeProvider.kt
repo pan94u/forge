@@ -19,7 +19,8 @@ class LocalKnowledgeProvider(private val basePath: String) {
         val excerpt: String
     )
 
-    private val documents: List<KnowledgeDocument> by lazy { indexDocuments() }
+    @Volatile
+    private var documents: List<KnowledgeDocument> = indexDocuments()
 
     private fun indexDocuments(): List<KnowledgeDocument> {
         val baseDir = File(basePath)
@@ -94,4 +95,9 @@ class LocalKnowledgeProvider(private val basePath: String) {
     }
 
     fun allDocuments(): List<KnowledgeDocument> = documents
+
+    /** Re-index documents after new files are created. */
+    fun reload() {
+        documents = indexDocuments()
+    }
 }

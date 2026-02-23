@@ -94,7 +94,7 @@ export function AiChatSidebar({
   const [activityLog, setActivityLog] = useState<SubStep[]>([]);
   const [showActivityLog, setShowActivityLog] = useState(false);
   const [currentTurn, setCurrentTurn] = useState<{ turn: number; maxTurns: number } | null>(null);
-  const [contextUsage, setContextUsage] = useState<{ tokensUsed: number; tokenBudget: number; compressionPhase: number } | null>(null);
+  const [contextUsage, setContextUsage] = useState<{ tokensUsed: number; tokenBudget: number; compressionPhase: number; turn: number } | null>(null);
   const [oodaDetail, setOodaDetail] = useState<string>("");
   const [baselineResult, setBaselineResult] = useState<BaselineResult | null>(null);
   const [hitlPending, setHitlPending] = useState(false);
@@ -296,6 +296,7 @@ export function AiChatSidebar({
                 tokensUsed: event.tokensUsed ?? 0,
                 tokenBudget: event.tokenBudget ?? 25000,
                 compressionPhase: event.compressionPhase ?? 0,
+                turn: event.turn ?? 0,
               });
               break;
             case "tool_use_start":
@@ -453,7 +454,7 @@ export function AiChatSidebar({
       setOodaDetail("");
       setCurrentTurn(null);
       setBaselineResult(null);
-      setContextUsage(null);
+      // contextUsage intentionally NOT cleared — keep showing after stream ends
       setHitlPending(false);
       setHitlData(null);
       setIntentConfirmation(null);
@@ -777,7 +778,7 @@ export function AiChatSidebar({
               </div>
             )}
             {/* Context Usage Indicator */}
-            {contextUsage && isStreaming && (
+            {contextUsage && (
               <div className="flex items-center gap-1.5 text-xs text-muted-foreground border border-border rounded-md px-2 py-1">
                 <span>Context:</span>
                 <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
@@ -794,7 +795,8 @@ export function AiChatSidebar({
                 </div>
                 <span className="text-[10px]">
                   {Math.round((contextUsage.tokensUsed / contextUsage.tokenBudget) * 100)}%
-                  {contextUsage.compressionPhase > 0 && ` (P${contextUsage.compressionPhase})`}
+                  {contextUsage.turn > 0 && ` · T${contextUsage.turn}`}
+                  {contextUsage.compressionPhase > 0 && ` · P${contextUsage.compressionPhase}`}
                 </span>
               </div>
             )}

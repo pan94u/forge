@@ -31,7 +31,8 @@ class AgenticLoopOrchestrator(
     private val logger = LoggerFactory.getLogger(AgenticLoopOrchestrator::class.java)
 
     companion object {
-        const val MAX_AGENTIC_TURNS = 8
+        /** Absolute safety cap to prevent infinite loops. */
+        const val MAX_AGENTIC_TURNS = 50
     }
 
     /**
@@ -60,20 +61,25 @@ class AgenticLoopOrchestrator(
 
         for (turn in 1..MAX_AGENTIC_TURNS) {
             lastTurn = turn
-            logger.debug("Agentic turn $turn / $MAX_AGENTIC_TURNS")
+            logger.debug("Agentic turn $turn")
 
             // Compress messages if context is getting large
             val compressed = messageCompressor.compressIfNeeded(currentMessages)
             if (compressed.phase > 0) {
                 currentMessages = compressed.messages.toMutableList()
                 logger.info("Context compressed: phase={}, tokens={}", compressed.phase, compressed.tokenCount)
-                onEvent(mapOf(
-                    "type" to "context_usage",
-                    "tokensUsed" to compressed.tokenCount,
-                    "tokenBudget" to MessageCompressor.MAX_CONVERSATION_TOKENS,
-                    "compressionPhase" to compressed.phase
-                ))
             }
+
+            // Always emit context usage so the frontend can show the indicator
+            val currentTokens = if (compressed.phase > 0) compressed.tokenCount
+                else tokenEstimator.estimateMessages(currentMessages)
+            onEvent(mapOf(
+                "type" to "context_usage",
+                "tokensUsed" to currentTokens,
+                "tokenBudget" to MessageCompressor.MAX_CONVERSATION_TOKENS,
+                "compressionPhase" to compressed.phase,
+                "turn" to turn
+            ))
 
             // Accumulate events from this turn
             var turnText = StringBuilder()
@@ -157,7 +163,7 @@ class AgenticLoopOrchestrator(
                 // OODA: Act -- executing tools
                 onEvent(mapOf("type" to "ooda_phase", "phase" to "act",
                     "detail" to "执行 ${currentToolUses.size} 个工具",
-                    "turn" to turn, "maxTurns" to MAX_AGENTIC_TURNS))
+                    "turn" to turn))
                 metricsService.recordOodaPhase("act")
 
                 // Build assistant message with tool uses
@@ -171,7 +177,7 @@ class AgenticLoopOrchestrator(
                 // Execute each tool and collect results
                 val toolResults = mutableListOf<ToolResult>()
                 for ((toolIdx, toolUse) in currentToolUses.withIndex()) {
-                    emitSubStep(onEvent, "Turn $turn/$MAX_AGENTIC_TURNS — 调用 ${toolUse.name} (${toolIdx + 1}/${currentToolUses.size})")
+                    emitSubStep(onEvent, "Turn $turn — 调用 ${toolUse.name} (${toolIdx + 1}/${currentToolUses.size})")
                     val startMs = System.currentTimeMillis()
                     val result = try {
                         val mcpResult = mcpProxyService.callTool(toolUse.name, toolUse.input, workspaceId.ifBlank { null })
