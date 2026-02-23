@@ -10,8 +10,6 @@ networks:
     name: forge-network
 
 volumes:
-  postgres-data:
-    driver: local
   knowledge-mcp-data:
     driver: local
   artifact-mcp-data:
@@ -19,30 +17,9 @@ volumes:
 
 services:
   # ---------------------------------------------------------------------------
-  # PostgreSQL 16 — Shared database for local development
+  # PostgreSQL — 使用远程服务器 (本地 postgres 容器已禁用)
+  # 连接信息配置在 .env 文件中
   # ---------------------------------------------------------------------------
-  postgres:
-    image: postgres:16-alpine
-    container_name: forge-postgres
-    restart: unless-stopped
-    networks:
-      - forge-network
-    ports:
-      - "5432:5432"
-    environment:
-      POSTGRES_USER: forge
-      POSTGRES_PASSWORD: forge_local_dev
-      POSTGRES_DB: forge
-      PGDATA: /var/lib/postgresql/data/pgdata
-    volumes:
-      - postgres-data:/var/lib/postgresql/data
-      - ./init-scripts:/docker-entrypoint-initdb.d:ro
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U forge -d forge"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
 
   # ---------------------------------------------------------------------------
   # forge-knowledge-mcp — Skill Profile registry and CLAUDE.md management
@@ -61,17 +38,14 @@ services:
     environment:
       SERVER_PORT: "8081"
       SPRING_PROFILES_ACTIVE: local
-      DB_URL: jdbc:postgresql://postgres:5432/forge
-      DB_USERNAME: forge
-      DB_PASSWORD: forge_local_dev
+      DB_URL: jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_NAME}
+      DB_USERNAME: ${DB_USERNAME}
+      DB_PASSWORD: ${DB_PASSWORD}
       SKILL_REGISTRY_PATH: /data/skills
       LOG_LEVEL: DEBUG
     volumes:
       - knowledge-mcp-data:/data/skills
       - ../../skills:/data/skills-source:ro
-    depends_on:
-      postgres:
-        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8081/health/ready"]
       interval: 15s
@@ -96,14 +70,11 @@ services:
     environment:
       SERVER_PORT: "8082"
       SPRING_PROFILES_ACTIVE: local
-      DB_URL: jdbc:postgresql://postgres:5432/forge
-      DB_USERNAME: forge
-      DB_PASSWORD: forge_local_dev
+      DB_URL: jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_NAME}
+      DB_USERNAME: ${DB_USERNAME}
+      DB_PASSWORD: ${DB_PASSWORD}
       SCHEMA_CACHE_TTL_SECONDS: "300"
       LOG_LEVEL: DEBUG
-    depends_on:
-      postgres:
-        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8082/health/ready"]
       interval: 15s
@@ -128,14 +99,11 @@ services:
     environment:
       SERVER_PORT: "8083"
       SPRING_PROFILES_ACTIVE: local
-      DB_URL: jdbc:postgresql://postgres:5432/forge
-      DB_USERNAME: forge
-      DB_PASSWORD: forge_local_dev
+      DB_URL: jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_NAME}
+      DB_USERNAME: ${DB_USERNAME}
+      DB_PASSWORD: ${DB_PASSWORD}
       SERVICE_REGISTRY_REFRESH_SECONDS: "60"
       LOG_LEVEL: DEBUG
-    depends_on:
-      postgres:
-        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8083/health/ready"]
       interval: 15s
@@ -160,16 +128,13 @@ services:
     environment:
       SERVER_PORT: "8084"
       SPRING_PROFILES_ACTIVE: local
-      DB_URL: jdbc:postgresql://postgres:5432/forge
-      DB_USERNAME: forge
-      DB_PASSWORD: forge_local_dev
+      DB_URL: jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_NAME}
+      DB_USERNAME: ${DB_USERNAME}
+      DB_PASSWORD: ${DB_PASSWORD}
       ARTIFACT_STORAGE_PATH: /data/artifacts
       LOG_LEVEL: DEBUG
     volumes:
       - artifact-mcp-data:/data/artifacts
-    depends_on:
-      postgres:
-        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8084/health/ready"]
       interval: 15s
@@ -194,14 +159,11 @@ services:
     environment:
       SERVER_PORT: "8085"
       SPRING_PROFILES_ACTIVE: local
-      DB_URL: jdbc:postgresql://postgres:5432/forge
-      DB_USERNAME: forge
-      DB_PASSWORD: forge_local_dev
+      DB_URL: jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_NAME}
+      DB_USERNAME: ${DB_USERNAME}
+      DB_PASSWORD: ${DB_PASSWORD}
       METRICS_RETENTION_DAYS: "30"
       LOG_LEVEL: DEBUG
-    depends_on:
-      postgres:
-        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8085/health/ready"]
       interval: 15s
@@ -226,9 +188,10 @@ services:
     environment:
       SERVER_PORT: "8080"
       SPRING_PROFILES_ACTIVE: local
-      DB_URL: jdbc:postgresql://postgres:5432/forge
-      DB_USERNAME: forge
-      DB_PASSWORD: forge_local_dev
+      DB_URL: jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_NAME}
+      DB_USERNAME: ${DB_USERNAME}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_DRIVER: org.postgresql.Driver
       KNOWLEDGE_MCP_URL: http://forge-knowledge-mcp:8081
       DATABASE_MCP_URL: http://forge-database-mcp:8082
       SERVICE_GRAPH_MCP_URL: http://forge-service-graph-mcp:8083
@@ -241,8 +204,6 @@ services:
     volumes:
       - ../../:/workspace:ro
     depends_on:
-      postgres:
-        condition: service_healthy
       forge-knowledge-mcp:
         condition: service_healthy
       forge-database-mcp:

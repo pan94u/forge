@@ -7,7 +7,7 @@
 
 -- Skill preferences (Phase 4 backfill)
 CREATE TABLE skill_preferences (
-    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     workspace_id VARCHAR(255) NOT NULL,
     skill_name VARCHAR(255) NOT NULL,
     enabled BOOLEAN NOT NULL DEFAULT TRUE,
@@ -17,7 +17,7 @@ CREATE TABLE skill_preferences (
 
 -- Skill usage tracking (Phase 4 backfill)
 CREATE TABLE skill_usage (
-    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     session_id VARCHAR(255) NOT NULL,
     skill_name VARCHAR(255) NOT NULL,
     action VARCHAR(50) NOT NULL,
