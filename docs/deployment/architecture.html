@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Forge Platform — 部署架构</title>
+<style>
+  :root {
+    --bg: #0f172a;
+    --surface: #1e293b;
+    --border: #334155;
+    --text: #e2e8f0;
+    --text-dim: #94a3b8;
+    --accent: #38bdf8;
+    --green: #4ade80;
+    --orange: #fb923c;
+    --purple: #a78bfa;
+    --pink: #f472b6;
+    --cyan: #22d3ee;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, 'SF Pro Display', 'Segoe UI', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    padding: 40px 20px;
+    min-height: 100vh;
+  }
+  .container { max-width: 1100px; margin: 0 auto; }
+  h1 {
+    text-align: center;
+    font-size: 28px;
+    font-weight: 700;
+    margin-bottom: 8px;
+    background: linear-gradient(135deg, var(--accent), var(--purple));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .subtitle {
+    text-align: center;
+    color: var(--text-dim);
+    font-size: 14px;
+    margin-bottom: 48px;
+  }
+  .section-label {
+    font-size: 13px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: var(--text-dim);
+    margin-bottom: 16px;
+    padding-left: 4px;
+  }
+
+  /* ── Diagram ── */
+  .diagram { display: flex; flex-direction: column; gap: 24px; }
+
+  /* User */
+  .user-row { display: flex; justify-content: center; }
+  .user-box {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px 32px;
+    display: flex; align-items: center; gap: 10px;
+    font-size: 15px; font-weight: 500;
+  }
+  .user-box .icon { font-size: 22px; }
+
+  /* Arrow */
+  .arrow-down {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    color: var(--text-dim);
+    font-size: 12px;
+  }
+  .arrow-down .line {
+    width: 2px;
+    height: 20px;
+    background: var(--border);
+  }
+  .arrow-down .label {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 3px 12px;
+    font-size: 11px;
+    color: var(--accent);
+    font-weight: 500;
+  }
+
+  /* Server box */
+  .server-box {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 24px;
+    position: relative;
+  }
+  .server-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  .server-title {
+    font-size: 16px;
+    font-weight: 600;
+  }
+  .server-spec {
+    font-size: 12px;
+    color: var(--text-dim);
+    background: rgba(56,189,248,0.1);
+    padding: 4px 12px;
+    border-radius: 20px;
+    border: 1px solid rgba(56,189,248,0.2);
+  }
+
+  /* Service grid */
+  .services-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+  .service-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 12px;
+  }
+  .service {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: rgba(15,23,42,0.5);
+    transition: border-color 0.2s;
+  }
+  .service:hover { border-color: var(--accent); }
+  .service .dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .service .info { flex: 1; min-width: 0; }
+  .service .name { font-size: 14px; font-weight: 600; }
+  .service .desc { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
+  .service .port {
+    font-size: 11px;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    color: var(--text-dim);
+    background: rgba(255,255,255,0.05);
+    padding: 2px 8px;
+    border-radius: 4px;
+    flex-shrink: 0;
+  }
+  .dot-blue { background: var(--accent); }
+  .dot-green { background: var(--green); }
+  .dot-orange { background: var(--orange); }
+  .dot-purple { background: var(--purple); }
+  .dot-pink { background: var(--pink); }
+  .dot-cyan { background: var(--cyan); }
+
+  /* Full width service */
+  .service-full { grid-column: 1 / -1; }
+
+  /* Internal label */
+  .internal-note {
+    text-align: center;
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px dashed var(--border);
+  }
+
+  /* External services */
+  .external-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+  .external-box {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 18px 20px;
+  }
+  .external-box .ext-title {
+    font-size: 14px;
+    font-weight: 600;
+    margin-bottom: 8px;
+  }
+  .external-box .ext-items {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .ext-tag {
+    font-size: 11px;
+    padding: 3px 10px;
+    border-radius: 20px;
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+  }
+
+  /* CI/CD Pipeline */
+  .pipeline {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 24px;
+    margin-top: 16px;
+  }
+  .pipeline-title {
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 20px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  .pipeline-flow {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    overflow-x: auto;
+    padding-bottom: 8px;
+  }
+  .pipeline-step {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    min-width: 110px;
+    flex-shrink: 0;
+  }
+  .step-icon {
+    width: 44px; height: 44px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+  }
+  .step-label { font-size: 12px; font-weight: 500; text-align: center; }
+  .step-sub { font-size: 10px; color: var(--text-dim); text-align: center; }
+  .pipeline-arrow {
+    color: var(--text-dim);
+    font-size: 18px;
+    flex-shrink: 0;
+    margin: 0 4px;
+  }
+  .step-blue { background: rgba(56,189,248,0.15); border: 1px solid rgba(56,189,248,0.3); }
+  .step-green { background: rgba(74,222,128,0.15); border: 1px solid rgba(74,222,128,0.3); }
+  .step-orange { background: rgba(251,146,60,0.15); border: 1px solid rgba(251,146,60,0.3); }
+  .step-purple { background: rgba(167,139,250,0.15); border: 1px solid rgba(167,139,250,0.3); }
+  .step-pink { background: rgba(244,114,182,0.15); border: 1px solid rgba(244,114,182,0.3); }
+
+  /* Cost table */
+  .cost-section { margin-top: 48px; }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    background: var(--surface);
+    border-radius: 12px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+  }
+  th {
+    text-align: left;
+    padding: 12px 16px;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-dim);
+    background: rgba(255,255,255,0.03);
+    border-bottom: 1px solid var(--border);
+  }
+  td {
+    padding: 10px 16px;
+    font-size: 14px;
+    border-bottom: 1px solid var(--border);
+  }
+  tr:last-child td { border-bottom: none; }
+  .cost-free { color: var(--green); }
+  .cost-paid { color: var(--orange); }
+
+  /* Memory bar */
+  .memory-section { margin-top: 48px; }
+  .mem-bar-container { margin-top: 12px; }
+  .mem-bar {
+    display: flex;
+    height: 32px;
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+  }
+  .mem-segment {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: 600;
+    color: #fff;
+    white-space: nowrap;
+    overflow: hidden;
+  }
+  .mem-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    margin-top: 10px;
+    font-size: 12px;
+    color: var(--text-dim);
+  }
+  .mem-legend-item { display: flex; align-items: center; gap: 6px; }
+  .mem-legend-dot {
+    width: 8px; height: 8px;
+    border-radius: 2px;
+    flex-shrink: 0;
+  }
+
+  @media (max-width: 640px) {
+    .service-row { grid-template-columns: 1fr; }
+    .external-row { grid-template-columns: 1fr; }
+    .pipeline-flow { gap: 0; }
+    .pipeline-step { min-width: 80px; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>Forge Platform 部署架构</h1>
+  <p class="subtitle">单机全包 · Docker Compose · GitHub Actions CI/CD</p>
+
+  <div class="diagram">
+    <!-- User -->
+    <div class="user-row">
+      <div class="user-box">
+        <span class="icon">👨‍💻</span>
+        <span>开发者 / 用户浏览器</span>
+      </div>
+    </div>
+
+    <div class="arrow-down">
+      <div class="line"></div>
+      <span class="label">HTTPS :443</span>
+      <div class="line"></div>
+    </div>
+
+    <!-- Server -->
+    <div>
+      <div class="section-label">海外 VPS（2C4G · Ubuntu 22.04 · 50GB SSD）</div>
+      <div class="server-box">
+        <div class="server-header">
+          <span class="server-title">🖥️ Docker Compose 编排</span>
+          <span class="server-spec">公网仅开放 80 / 443</span>
+        </div>
+
+        <div class="services-grid">
+          <!-- Nginx -->
+          <div class="service service-full">
+            <div class="dot dot-cyan"></div>
+            <div class="info">
+              <div class="name">Nginx</div>
+              <div class="desc">TLS 终结 · 反向代理 · WebSocket · SSE · Let's Encrypt 自动续期</div>
+            </div>
+            <span class="port">:80 / :443</span>
+          </div>
+
+          <!-- Frontend + Backend -->
+          <div class="service-row">
+            <div class="service">
+              <div class="dot dot-purple"></div>
+              <div class="info">
+                <div class="name">Frontend</div>
+                <div class="desc">Next.js 15 · React 19 · ~200MB</div>
+              </div>
+              <span class="port">:3000</span>
+            </div>
+            <div class="service">
+              <div class="dot dot-blue"></div>
+              <div class="info">
+                <div class="name">Backend</div>
+                <div class="desc">Spring Boot 3 · Kotlin · JDK 21 · ~512MB</div>
+              </div>
+              <span class="port">:8080</span>
+            </div>
+          </div>
+
+          <!-- MCP Servers -->
+          <div class="service-row">
+            <div class="service">
+              <div class="dot dot-green"></div>
+              <div class="info">
+                <div class="name">Knowledge MCP</div>
+                <div class="desc">知识库检索 · Ktor · ~256MB</div>
+              </div>
+              <span class="port">:8081</span>
+            </div>
+            <div class="service">
+              <div class="dot dot-green"></div>
+              <div class="info">
+                <div class="name">Database MCP</div>
+                <div class="desc">Schema 查询 · Ktor · ~256MB</div>
+              </div>
+              <span class="port">:8082</span>
+            </div>
+          </div>
+
+          <!-- PostgreSQL -->
+          <div class="service service-full">
+            <div class="dot dot-orange"></div>
+            <div class="info">
+              <div class="name">PostgreSQL 16</div>
+              <div class="desc">数据持久化到 Docker Volume · 重启不丢数据 · 每日自动备份</div>
+            </div>
+            <span class="port">:5432</span>
+          </div>
+        </div>
+
+        <div class="internal-note">
+          ⬆ 除 Nginx 外，所有端口仅 Docker 内网可达，不暴露公网
+        </div>
+      </div>
+    </div>
+
+    <div class="arrow-down">
+      <div class="line"></div>
+      <span class="label">HTTPS 出站</span>
+      <div class="line"></div>
+    </div>
+
+    <!-- External -->
+    <div class="external-row">
+      <div class="external-box">
+        <div class="ext-title">🤖 AI Provider API</div>
+        <div class="ext-items">
+          <span class="ext-tag">Anthropic Claude</span>
+          <span class="ext-tag">阿里云 DashScope</span>
+          <span class="ext-tag">Google Gemini</span>
+          <span class="ext-tag">Ollama / vLLM</span>
+        </div>
+      </div>
+      <div class="external-box">
+        <div class="ext-title">⚙️ GitHub</div>
+        <div class="ext-items">
+          <span class="ext-tag">Actions CI/CD</span>
+          <span class="ext-tag">GHCR 镜像仓库</span>
+          <span class="ext-tag">代码仓库</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CI/CD Pipeline -->
+  <div class="pipeline">
+    <div class="pipeline-title">🔄 CI/CD 流水线（GitHub Actions）</div>
+    <div class="pipeline-flow">
+      <div class="pipeline-step">
+        <div class="step-icon step-blue">📝</div>
+        <div class="step-label">git push</div>
+        <div class="step-sub">main 分支</div>
+      </div>
+      <div class="pipeline-arrow">→</div>
+      <div class="pipeline-step">
+        <div class="step-icon step-blue">🔍</div>
+        <div class="step-label">检测变更</div>
+        <div class="step-sub">paths-filter</div>
+      </div>
+      <div class="pipeline-arrow">→</div>
+      <div class="pipeline-step">
+        <div class="step-icon step-green">🔨</div>
+        <div class="step-label">构建 & 测试</div>
+        <div class="step-sub">JDK 21 / Node 20</div>
+      </div>
+      <div class="pipeline-arrow">→</div>
+      <div class="pipeline-step">
+        <div class="step-icon step-purple">🐳</div>
+        <div class="step-label">Docker 镜像</div>
+        <div class="step-sub">→ GHCR</div>
+      </div>
+      <div class="pipeline-arrow">→</div>
+      <div class="pipeline-step">
+        <div class="step-icon step-orange">🚀</div>
+        <div class="step-label">SSH 部署</div>
+        <div class="step-sub">rsync + pull</div>
+      </div>
+      <div class="pipeline-arrow">→</div>
+      <div class="pipeline-step">
+        <div class="step-icon step-green">💚</div>
+        <div class="step-label">健康检查</div>
+        <div class="step-sub">HTTP 200</div>
+      </div>
+      <div class="pipeline-arrow">→</div>
+      <div class="pipeline-step">
+        <div class="step-icon step-pink">🔙</div>
+        <div class="step-label">失败回滚</div>
+        <div class="step-sub">自动 :latest</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Memory -->
+  <div class="memory-section">
+    <div class="section-label">内存分配（4GB 总量）</div>
+    <div class="mem-bar-container">
+      <div class="mem-bar">
+        <div class="mem-segment" style="width:12.5%;background:#38bdf8;">Backend</div>
+        <div class="mem-segment" style="width:5%;background:#a78bfa;">FE</div>
+        <div class="mem-segment" style="width:6.25%;background:#4ade80;">K-MCP</div>
+        <div class="mem-segment" style="width:6.25%;background:#4ade80;">D-MCP</div>
+        <div class="mem-segment" style="width:5%;background:#fb923c;">PG</div>
+        <div class="mem-segment" style="width:0.75%;background:#22d3ee;"></div>
+        <div class="mem-segment" style="width:12.5%;background:#334155;">系统</div>
+        <div class="mem-segment" style="width:51.75%;background:rgba(255,255,255,0.03);color:var(--text-dim);">空闲 ~1.7GB</div>
+      </div>
+      <div class="mem-legend">
+        <div class="mem-legend-item"><div class="mem-legend-dot" style="background:#38bdf8;"></div>Backend 512MB</div>
+        <div class="mem-legend-item"><div class="mem-legend-dot" style="background:#a78bfa;"></div>Frontend 200MB</div>
+        <div class="mem-legend-item"><div class="mem-legend-dot" style="background:#4ade80;"></div>MCP ×2 512MB</div>
+        <div class="mem-legend-item"><div class="mem-legend-dot" style="background:#fb923c;"></div>PostgreSQL 200MB</div>
+        <div class="mem-legend-item"><div class="mem-legend-dot" style="background:#22d3ee;"></div>Nginx 30MB</div>
+        <div class="mem-legend-item"><div class="mem-legend-dot" style="background:#334155;"></div>系统 500MB</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Cost -->
+  <div class="cost-section">
+    <div class="section-label">费用估算</div>
+    <table>
+      <thead>
+        <tr><th>项目</th><th>费用</th><th>说明</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>海外 VPS 2C4G</td><td class="cost-paid">$10~30/月</td><td>唯一需要购买的东西</td></tr>
+        <tr><td>域名</td><td class="cost-paid">¥50~100/年</td><td>A 记录解析到 VPS IP</td></tr>
+        <tr><td>SSL 证书</td><td class="cost-free">免费</td><td>Let's Encrypt 自动续期</td></tr>
+        <tr><td>GitHub Actions</td><td class="cost-free">免费</td><td>公开仓库无限 / 私有 2000 分钟/月</td></tr>
+        <tr><td>GHCR 镜像仓库</td><td class="cost-free">免费</td><td>500MB 免费存储</td></tr>
+        <tr><td>AI API</td><td class="cost-paid">按量付费</td><td>Claude / 通义千问 / Gemini</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p style="text-align:center;color:var(--text-dim);font-size:12px;margin-top:48px;">
+    Forge Platform v0.1.0 · 快速迭代阶段单机部署方案
+  </p>
+</div>
+</body>
+</html>

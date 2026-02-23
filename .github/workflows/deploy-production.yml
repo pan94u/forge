@@ -1,0 +1,390 @@
+name: CD - Deploy Production
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'web-ide/**'
+      - 'mcp-servers/**'
+      - 'adapters/**'
+      - 'plugins/**'
+      - 'knowledge-base/**'
+      - 'infrastructure/docker/**'
+  workflow_dispatch:
+    inputs:
+      deploy_target:
+        description: '部署目标（all / backend / frontend / mcp）'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - backend
+          - frontend
+          - mcp
+      skip_tests:
+        description: '跳过测试（紧急修复用）'
+        type: boolean
+        default: false
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ghcr.io/${{ github.repository }}
+  DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+  DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+  DEPLOY_PATH: /opt/forge
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  # =========================================================================
+  # 阶段 1：检测变更范围
+  # =========================================================================
+  detect-changes:
+    name: 检测变更
+    runs-on: ubuntu-latest
+    outputs:
+      backend: ${{ steps.filter.outputs.backend }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+      mcp: ${{ steps.filter.outputs.mcp }}
+      config: ${{ steps.filter.outputs.config }}
+      deploy_target: ${{ steps.target.outputs.target }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            backend:
+              - 'web-ide/backend/**'
+              - 'adapters/**'
+            frontend:
+              - 'web-ide/frontend/**'
+            mcp:
+              - 'mcp-servers/**'
+            config:
+              - 'plugins/**'
+              - 'knowledge-base/**'
+              - 'infrastructure/docker/**'
+
+      - name: 确定部署目标
+        id: target
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "target=${{ inputs.deploy_target }}" >> $GITHUB_OUTPUT
+          else
+            echo "target=auto" >> $GITHUB_OUTPUT
+          fi
+
+  # =========================================================================
+  # 阶段 2：构建 & 测试
+  # =========================================================================
+  build-backend:
+    name: 构建后端
+    needs: detect-changes
+    if: |
+      needs.detect-changes.outputs.deploy_target == 'all' ||
+      needs.detect-changes.outputs.deploy_target == 'backend' ||
+      (needs.detect-changes.outputs.deploy_target == 'auto' && needs.detect-changes.outputs.backend == 'true')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-backend-${{ hashFiles('web-ide/backend/build.gradle.kts', 'adapters/**/build.gradle.kts') }}
+          restore-keys: ${{ runner.os }}-gradle-backend-
+      - name: 运行测试
+        if: ${{ !inputs.skip_tests }}
+        run: ./gradlew :web-ide:backend:test :adapters:model-adapter:test --no-daemon
+      - name: 构建 bootJar
+        run: ./gradlew :web-ide:backend:bootJar -x test --no-daemon
+      - uses: actions/upload-artifact@v4
+        with:
+          name: backend-jar
+          path: web-ide/backend/build/libs/backend-*.jar
+          retention-days: 3
+
+  build-frontend:
+    name: 构建前端
+    needs: detect-changes
+    if: |
+      needs.detect-changes.outputs.deploy_target == 'all' ||
+      needs.detect-changes.outputs.deploy_target == 'frontend' ||
+      (needs.detect-changes.outputs.deploy_target == 'auto' && needs.detect-changes.outputs.frontend == 'true')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: web-ide/frontend/package-lock.json
+      - name: 安装依赖 & 构建
+        working-directory: web-ide/frontend
+        run: |
+          npm ci
+          npm run build
+        env:
+          NEXT_PUBLIC_API_URL: ${{ secrets.FORGE_EXTERNAL_URL || 'https://forge.example.com' }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: frontend-build
+          path: |
+            web-ide/frontend/.next/standalone/
+            web-ide/frontend/.next/static/
+          retention-days: 3
+
+  build-mcp:
+    name: 构建 MCP Servers
+    needs: detect-changes
+    if: |
+      needs.detect-changes.outputs.deploy_target == 'all' ||
+      needs.detect-changes.outputs.deploy_target == 'mcp' ||
+      (needs.detect-changes.outputs.deploy_target == 'auto' && needs.detect-changes.outputs.mcp == 'true')
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        server: [forge-knowledge-mcp, forge-database-mcp]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-mcp-${{ hashFiles('mcp-servers/**/build.gradle.kts') }}
+          restore-keys: ${{ runner.os }}-gradle-mcp-
+      - name: 运行测试
+        if: ${{ !inputs.skip_tests }}
+        run: ./gradlew :mcp-servers:${{ matrix.server }}:test --no-daemon
+      - name: 构建 shadowJar
+        run: ./gradlew :mcp-servers:${{ matrix.server }}:shadowJar -x test --no-daemon
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.server }}-jar
+          path: mcp-servers/${{ matrix.server }}/build/libs/*-all.jar
+          retention-days: 3
+
+  # =========================================================================
+  # 阶段 3：构建 Docker 镜像 → GHCR
+  # =========================================================================
+  docker-images:
+    name: Docker 镜像
+    needs: [detect-changes, build-backend, build-frontend, build-mcp]
+    if: always() && !failure() && !cancelled()
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - component: backend
+            context: web-ide/backend
+            artifact: backend-jar
+            artifact_dest: web-ide/backend/build/libs/
+          - component: frontend
+            context: web-ide/frontend
+            artifact: frontend-build
+            artifact_dest: web-ide/frontend/.next/
+          - component: knowledge-mcp
+            context: mcp-servers/forge-knowledge-mcp
+            artifact: forge-knowledge-mcp-jar
+            artifact_dest: mcp-servers/forge-knowledge-mcp/build/libs/
+          - component: database-mcp
+            context: mcp-servers/forge-database-mcp
+            artifact: forge-database-mcp-jar
+            artifact_dest: mcp-servers/forge-database-mcp/build/libs/
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 检查是否需要构建
+        id: check
+        run: |
+          COMPONENT="${{ matrix.component }}"
+          TARGET="${{ needs.detect-changes.outputs.deploy_target }}"
+          BACKEND="${{ needs.detect-changes.outputs.backend }}"
+          FRONTEND="${{ needs.detect-changes.outputs.frontend }}"
+          MCP="${{ needs.detect-changes.outputs.mcp }}"
+
+          SHOULD_BUILD="false"
+          if [ "$TARGET" = "all" ]; then SHOULD_BUILD="true"
+          elif [ "$TARGET" = "backend" ] && [ "$COMPONENT" = "backend" ]; then SHOULD_BUILD="true"
+          elif [ "$TARGET" = "frontend" ] && [ "$COMPONENT" = "frontend" ]; then SHOULD_BUILD="true"
+          elif [ "$TARGET" = "mcp" ] && [[ "$COMPONENT" == *"mcp"* ]]; then SHOULD_BUILD="true"
+          elif [ "$TARGET" = "auto" ]; then
+            if [ "$COMPONENT" = "backend" ] && [ "$BACKEND" = "true" ]; then SHOULD_BUILD="true"; fi
+            if [ "$COMPONENT" = "frontend" ] && [ "$FRONTEND" = "true" ]; then SHOULD_BUILD="true"; fi
+            if [[ "$COMPONENT" == *"mcp"* ]] && [ "$MCP" = "true" ]; then SHOULD_BUILD="true"; fi
+          fi
+          echo "should_build=$SHOULD_BUILD" >> $GITHUB_OUTPUT
+
+      - name: 下载构建产物
+        if: steps.check.outputs.should_build == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.artifact_dest }}
+
+      - uses: docker/setup-buildx-action@v3
+        if: steps.check.outputs.should_build == 'true'
+
+      - uses: docker/login-action@v3
+        if: steps.check.outputs.should_build == 'true'
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/build-push-action@v6
+        if: steps.check.outputs.should_build == 'true'
+        with:
+          context: ${{ matrix.context }}
+          push: true
+          tags: |
+            ${{ env.IMAGE_PREFIX }}/${{ matrix.component }}:${{ github.sha }}
+            ${{ env.IMAGE_PREFIX }}/${{ matrix.component }}:latest
+          cache-from: type=gha,scope=${{ matrix.component }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.component }}
+
+  # =========================================================================
+  # 阶段 4：部署到服务器
+  # =========================================================================
+  deploy:
+    name: 部署
+    needs: [detect-changes, docker-images]
+    if: always() && !failure() && !cancelled()
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: ${{ secrets.FORGE_EXTERNAL_URL }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 配置 SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H ${{ secrets.DEPLOY_HOST }} >> ~/.ssh/known_hosts
+
+      - name: 同步部署文件
+        run: |
+          SSH="ssh -i ~/.ssh/deploy_key"
+          REMOTE="${{ env.DEPLOY_USER }}@${{ env.DEPLOY_HOST }}"
+
+          rsync -avz --delete -e "$SSH" \
+            infrastructure/docker/docker-compose.production.yml \
+            infrastructure/docker/nginx-production.conf \
+            infrastructure/docker/keycloak/ \
+            "$REMOTE:${{ env.DEPLOY_PATH }}/docker/"
+
+          rsync -avz --delete -e "$SSH" \
+            plugins/ "$REMOTE:${{ env.DEPLOY_PATH }}/plugins/"
+
+          rsync -avz --delete -e "$SSH" \
+            knowledge-base/ "$REMOTE:${{ env.DEPLOY_PATH }}/knowledge-base/"
+
+      - name: 部署服务
+        run: |
+          ssh -i ~/.ssh/deploy_key ${{ env.DEPLOY_USER }}@${{ env.DEPLOY_HOST }} << 'DEPLOY_SCRIPT'
+            set -euo pipefail
+            cd ${{ env.DEPLOY_PATH }}/docker
+
+            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+            export IMAGE_PREFIX="${{ env.IMAGE_PREFIX }}"
+            export IMAGE_TAG="${{ github.sha }}"
+
+            cat > docker-compose.override.yml << EOF
+          services:
+            backend:
+              image: ${IMAGE_PREFIX}/backend:${IMAGE_TAG}
+              build: !reset null
+            frontend:
+              image: ${IMAGE_PREFIX}/frontend:${IMAGE_TAG}
+              build: !reset null
+            knowledge-mcp:
+              image: ${IMAGE_PREFIX}/knowledge-mcp:${IMAGE_TAG}
+              build: !reset null
+            database-mcp:
+              image: ${IMAGE_PREFIX}/database-mcp:${IMAGE_TAG}
+              build: !reset null
+          EOF
+
+            docker compose -f docker-compose.production.yml -f docker-compose.override.yml pull
+            docker compose -f docker-compose.production.yml -f docker-compose.override.yml \
+              --env-file .env.production up -d --no-build --remove-orphans
+
+            echo "等待服务启动..."
+            sleep 10
+            docker compose -f docker-compose.production.yml ps
+            docker image prune -f --filter "until=168h"
+          DEPLOY_SCRIPT
+
+      - name: 健康检查
+        run: |
+          sleep 30
+          HEALTH_URL="${{ secrets.FORGE_EXTERNAL_URL }}/api/knowledge/search"
+          for i in $(seq 1 5); do
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "$HEALTH_URL" || echo "000")
+            if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "401" ]; then
+              echo "✅ 健康检查通过 (HTTP $HTTP_CODE)"
+              exit 0
+            fi
+            echo "尝试 $i/5: HTTP $HTTP_CODE，等待 10 秒..."
+            sleep 10
+          done
+          echo "❌ 健康检查未通过"
+          exit 1
+
+      - name: 失败回滚
+        if: failure()
+        run: |
+          ssh -i ~/.ssh/deploy_key ${{ env.DEPLOY_USER }}@${{ env.DEPLOY_HOST }} << 'ROLLBACK'
+            cd ${{ env.DEPLOY_PATH }}/docker
+            echo "回滚到上一版本..."
+            sed -i "s/${{ github.sha }}/latest/g" docker-compose.override.yml
+            docker compose -f docker-compose.production.yml -f docker-compose.override.yml \
+              --env-file .env.production up -d --no-build
+            echo "回滚完成"
+          ROLLBACK
+
+      - name: 清理 SSH
+        if: always()
+        run: rm -f ~/.ssh/deploy_key
+
+  # =========================================================================
+  # 阶段 5：通知
+  # =========================================================================
+  notify:
+    name: 通知
+    needs: [deploy]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: 发送通知
+        run: |
+          STATUS="${{ needs.deploy.result }}"
+          [ "$STATUS" = "success" ] && MSG="✅ 部署成功" || MSG="❌ 部署失败（已自动回滚）"
+          echo "$MSG | Commit: ${{ github.sha }} | By: ${{ github.actor }}"
+
+          # 飞书/钉钉 Webhook（取消注释启用）
+          # curl -s -X POST "${{ secrets.NOTIFY_WEBHOOK_URL }}" \
+          #   -H "Content-Type: application/json" \
+          #   -d "{\"msg_type\":\"text\",\"content\":{\"text\":\"$MSG\nCommit: ${{ github.sha }}\nBy: ${{ github.actor }}\"}}"
