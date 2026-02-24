@@ -1,0 +1,818 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FORGE Platform — Executive Presentation</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html, body { height: 100%; overflow-x: hidden; }
+        html { scroll-snap-type: y mandatory; scroll-behavior: smooth; }
+        body { font-family: 'DM Sans', sans-serif; background: #0d1117; color: #f0ede6; }
+
+        :root {
+            --bg-deep: #0d1117;
+            --bg-surface: #161b22;
+            --accent-gold: #d4af37;
+            --accent-emerald: #00a67e;
+            --text-primary: #f0ede6;
+            --text-secondary: #8b949e;
+            --font-display: 'Cormorant Garamond', serif;
+            --font-body: 'DM Sans', sans-serif;
+            --title-size: clamp(2.5rem, 7vw, 5rem);
+            --h2-size: clamp(1.75rem, 4vw, 3rem);
+            --h3-size: clamp(1.25rem, 2.5vw, 1.75rem);
+            --body-size: clamp(0.875rem, 1.5vw, 1.125rem);
+            --slide-padding: clamp(2rem, 5vw, 4rem);
+            --content-gap: clamp(1rem, 2vw, 2rem);
+        }
+
+        .slide {
+            width: 100vw; height: 100vh; height: 100dvh; overflow: hidden;
+            scroll-snap-align: start; display: flex; flex-direction: column;
+            justify-content: center; position: relative; padding: var(--slide-padding);
+        }
+
+        .blob {
+            position: absolute; border-radius: 50%; filter: blur(80px);
+            opacity: 0.12; pointer-events: none;
+        }
+        .blob-gold {
+            width: 500px; height: 500px;
+            background: radial-gradient(circle, var(--accent-gold), transparent);
+            animation: blobFloat 20s ease-in-out infinite;
+        }
+        .blob-emerald {
+            width: 400px; height: 400px;
+            background: radial-gradient(circle, var(--accent-emerald), transparent);
+            animation: blobFloat 25s ease-in-out infinite reverse;
+        }
+        @keyframes blobFloat {
+            0%, 100% { transform: translate(0, 0) scale(1); }
+            33% { transform: translate(50px, -30px) scale(1.1); }
+            66% { transform: translate(-30px, 40px) scale(0.9); }
+        }
+
+        h1 {
+            font-family: var(--font-display); font-size: var(--title-size);
+            font-weight: 300; letter-spacing: 0.02em; line-height: 1.1;
+        }
+        h2 {
+            font-family: var(--font-display); font-size: var(--h2-size);
+            font-weight: 400; letter-spacing: 0.01em; line-height: 1.2;
+        }
+        h3 {
+            font-family: var(--font-body); font-size: var(--h3-size);
+            font-weight: 600; letter-spacing: -0.01em; line-height: 1.3;
+        }
+        p, li { font-size: var(--body-size); line-height: 1.6; color: var(--text-secondary); }
+
+        .logo-container { width: 100px; height: 100px; position: relative; margin: 0 auto 2rem; }
+        .logo-shape {
+            position: absolute; border: 2px solid var(--accent-gold);
+            border-radius: 50%; top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            animation: shapeRotate 20s linear infinite;
+        }
+        .logo-shape:nth-child(1) { width: 60px; height: 60px; }
+        .logo-shape:nth-child(2) {
+            width: 80px; height: 80px; border-color: var(--accent-emerald);
+            animation-duration: 25s; animation-direction: reverse;
+        }
+        @keyframes shapeRotate {
+            from { transform: translate(-50%, -50%) rotate(0deg); }
+            to { transform: translate(-50%, -50%) rotate(360deg); }
+        }
+
+        .divider {
+            width: 80px; height: 1px; margin: 2rem auto;
+            background: linear-gradient(90deg, transparent, var(--accent-gold), transparent);
+        }
+
+        .reveal {
+            opacity: 0; transform: translateY(30px);
+            transition: opacity 1.2s cubic-bezier(0.16, 1, 0.3, 1),
+                        transform 1.2s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .slide.visible .reveal { opacity: 1; transform: translateY(0); }
+        .reveal:nth-child(1) { transition-delay: 0.1s; }
+        .reveal:nth-child(2) { transition-delay: 0.2s; }
+        .reveal:nth-child(3) { transition-delay: 0.3s; }
+        .reveal:nth-child(4) { transition-delay: 0.4s; }
+        .reveal:nth-child(5) { transition-delay: 0.5s; }
+        .reveal:nth-child(6) { transition-delay: 0.6s; }
+
+        .center { text-align: center; }
+        .accent-gold { color: var(--accent-gold); }
+        .accent-emerald { color: var(--accent-emerald); }
+        .mb-1 { margin-bottom: 1rem; }
+        .mb-2 { margin-bottom: 2rem; }
+        .mb-3 { margin-bottom: 3rem; }
+
+        .card {
+            background: rgba(22, 27, 34, 0.6); border: 1px solid rgba(212, 175, 55, 0.2);
+            border-radius: 16px; padding: 2rem; backdrop-filter: blur(20px);
+            margin-bottom: 1rem;
+        }
+
+        .grid { display: grid; gap: 1.5rem; }
+        .grid-2 { grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+        .grid-3 { grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); }
+
+        ul { list-style: none; }
+        li { margin-bottom: 1rem; padding-left: 1.5rem; position: relative; }
+        li::before {
+            content: ''; position: absolute; left: 0; top: 0.5rem;
+            width: 6px; height: 6px; border-radius: 50%;
+            background: var(--accent-gold);
+        }
+
+        .progress-bar {
+            position: fixed; top: 0; left: 0; height: 3px;
+            background: var(--accent-gold); z-index: 1000;
+            transition: width 0.3s ease;
+        }
+
+        .nav-dots {
+            position: fixed; right: 2rem; top: 50%;
+            transform: translateY(-50%); z-index: 1000;
+            display: flex; flex-direction: column; gap: 0.75rem;
+        }
+        .nav-dot {
+            width: 8px; height: 8px; border-radius: 50%;
+            background: rgba(212, 175, 55, 0.3);
+            cursor: pointer; transition: all 0.3s ease;
+        }
+        .nav-dot.active {
+            background: var(--accent-gold);
+            box-shadow: 0 0 10px var(--accent-gold);
+        }
+
+        @media (max-height: 700px) {
+            :root {
+                --slide-padding: clamp(1.5rem, 4vw, 3rem);
+                --title-size: clamp(2rem, 6vw, 4rem);
+            }
+        }
+
+        @media (max-width: 768px) {
+            .grid-2, .grid-3 { grid-template-columns: 1fr; }
+            .nav-dots { display: none; }
+        }
+    </style>
+</head>
+<body>
+    <div class="progress-bar"></div>
+    <nav class="nav-dots"></nav>
+
+    <!-- Slide 1: Title -->
+    <section class="slide center">
+        <div class="blob blob-gold" style="top: -100px; right: -100px;"></div>
+        <div class="blob blob-emerald" style="bottom: -50px; left: -50px;"></div>
+        <div class="logo-container reveal">
+            <div class="logo-shape"></div>
+            <div class="logo-shape"></div>
+        </div>
+        <h1 class="reveal">FORGE</h1>
+        <p class="reveal mb-2" style="font-size: var(--h3-size); color: var(--text-secondary);">面向 AI 时代的智能交付平台</p>
+        <div class="divider reveal"></div>
+        <p class="reveal" style="font-size: var(--body-size); color: var(--text-secondary);">2026.02</p>
+    </section>
+
+    <!-- Slide 2: Hook -->
+    <section class="slide center">
+        <div class="blob blob-emerald" style="top: 20%; left: 10%;"></div>
+        <h2 class="reveal mb-3" style="font-size: clamp(2rem, 6vw, 4.5rem); line-height: 1.3;">
+            当 <span class="accent-gold">1 个人 + AI</span><br>
+            拥有 <span class="accent-emerald">7 人团队</span>的交付能力
+        </h2>
+    </section>
+
+    <!-- Slide 3: Problem -->
+    <section class="slide">
+        <h2 class="reveal mb-3">我们面对的现实</h2>
+        <ul class="reveal">
+            <li><strong style="color: var(--text-primary);">5-7 人的 Scrum 团队</strong><br>
+                每个角色一个人，知识在人脑里，人走知识就没了</li>
+            <li><strong style="color: var(--text-primary);">AI 只是"更快的打字员"</strong><br>
+                给每个人配一个 AI 助手，不等于交付效率的质变</li>
+            <li><strong style="color: var(--text-primary);">跨栈迁移是黑洞</strong><br>
+                没人懂旧技术栈，人工迁移动辄数十人月</li>
+            <li><strong style="color: var(--text-primary);">经验不沉淀，错误在重复</strong><br>
+                同样的部署失败、同样的安全漏洞，每个项目重来一遍</li>
+        </ul>
+        <p class="reveal accent-gold" style="margin-top: 2rem; font-size: var(--h3-size); font-weight: 500;">
+            问题的本质不是工具不够，是交付流程本身没有被重构。
+        </p>
+    </section>
+
+    <!-- Slide 4: Insight -->
+    <section class="slide">
+        <h2 class="reveal mb-3">三个关键洞察</h2>
+        <div class="grid grid-3 reveal">
+            <div class="card">
+                <h3 class="accent-gold mb-2">SuperAgent<br>不是 Multi-Agent</h3>
+                <p>不是 5 个角色各配一个 AI。而是 1 个超级智能体，通过 Skill Profile 动态切换。</p>
+                <p style="margin-top: 1rem; font-size: var(--body-size); color: var(--text-primary);">
+                    1 个智能体 > 5 个独立 Agent
+                </p>
+            </div>
+            <div class="card">
+                <h3 class="accent-emerald mb-2">Skill 是<br>真正的护城河</h3>
+                <p>模型会被追平，Prompt 会被抄走。但编码了十年经验的 Skill 体系，无法复制。</p>
+                <p style="margin-top: 1rem; font-size: var(--body-size); color: var(--text-primary);">
+                    25+ Skills = 经验的数字化资产
+                </p>
+            </div>
+            <div class="card">
+                <h3 class="accent-gold mb-2">双环驱动<br>越用越好</h3>
+                <p>交付环做事，进化环学习。每次交付产生知识沉淀，反哺下一次交付。</p>
+                <p style="margin-top: 1rem; font-size: var(--body-size); color: var(--text-primary);">
+                    交付 × 进化 = 飞轮效应
+                </p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Slide 5: SuperAgent -->
+    <section class="slide">
+        <h2 class="reveal mb-1">一个智能体，五种角色</h2>
+        <p class="reveal mb-3" style="color: var(--text-secondary);">
+            根据任务自动切换 Skill Profile，覆盖从需求到运维的完整交付链
+        </p>
+        <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem;" class="reveal">
+            <div class="card center">
+                <h3 class="mb-1">规划</h3>
+                <p style="font-size: var(--body-size); font-family: monospace; color: var(--text-secondary); margin-bottom: 0.5rem;">Planning</p>
+                <p style="font-size: var(--body-size);">需求分析<br>PRD 编写</p>
+            </div>
+            <div class="card center">
+                <h3 class="mb-1">设计</h3>
+                <p style="font-size: var(--body-size); font-family: monospace; color: var(--text-secondary); margin-bottom: 0.5rem;">Design</p>
+                <p style="font-size: var(--body-size);">架构设计<br>API 设计</p>
+            </div>
+            <div class="card center" style="border-color: var(--accent-gold);">
+                <h3 class="mb-1 accent-gold">开发</h3>
+                <p style="font-size: var(--body-size); font-family: monospace; color: var(--text-secondary); margin-bottom: 0.5rem;">Development</p>
+                <p style="font-size: var(--body-size);">代码生成<br>13 Foundation Skills</p>
+            </div>
+            <div class="card center">
+                <h3 class="mb-1">测试</h3>
+                <p style="font-size: var(--body-size); font-family: monospace; color: var(--text-secondary); margin-bottom: 0.5rem;">Testing</p>
+                <p style="font-size: var(--body-size);">用例设计<br>自动化执行</p>
+            </div>
+            <div class="card center">
+                <h3 class="mb-1">运维</h3>
+                <p style="font-size: var(--body-size); font-family: monospace; color: var(--text-secondary); margin-bottom: 0.5rem;">Ops</p>
+                <p style="font-size: var(--body-size);">部署策略<br>K8s 编排</p>
+            </div>
+        </div>
+        <div class="card reveal" style="margin-top: 1.5rem; padding: 1.5rem;">
+            <p style="font-size: var(--body-size); color: var(--text-secondary); margin-bottom: 0.5rem;">OODA 循环</p>
+            <p style="font-size: var(--h3-size); color: var(--text-primary);">
+                Observe 观察 → Orient 分析 → Decide 决策 → Act 执行 → <span class="accent-gold">HITL 人在回路</span>
+            </p>
+        </div>
+    </section>
+
+    <!-- Slide 6: Architecture -->
+    <section class="slide">
+        <h2 class="reveal mb-1">四层解耦，独立演进</h2>
+        <p class="reveal mb-3" style="color: var(--text-secondary);">
+            每一层可以独立升级，不影响其他层 — 这是平台能活过模型迭代的根本原因
+        </p>
+        <div class="reveal" style="display: flex; flex-direction: column; gap: 1rem;">
+            <div class="card" style="padding: 1.5rem;">
+                <div style="display: flex; align-items: center; gap: 1rem;">
+                    <span style="font-family: monospace; font-weight: bold; color: var(--text-secondary);">L1</span>
+                    <div style="flex: 1;">
+                        <h3 class="mb-1">用户交互层 <span style="font-size: var(--body-size); font-family: monospace; color: var(--text-secondary); font-weight: normal;">User Interaction</span></h3>
+                        <p style="margin-bottom: 0.5rem;">CLI / VS Code (开发者) + Web IDE (全角色)</p>
+                        <p style="font-size: var(--small-size); color: var(--text-secondary);">Monaco 编辑器 · AI Chat · 知识浏览 · 可视化工作流</p>
+                    </div>
+                </div>
+            </div>
+            <div class="card" style="padding: 1.5rem; border-color: var(--accent-gold);">
+                <div style="display: flex; align-items: center; gap: 1rem;">
+                    <span style="font-family: monospace; font-weight: bold; color: var(--accent-gold);">L2</span>
+                    <div style="flex: 1;">
+                        <h3 class="mb-1 accent-gold">SuperAgent 层 <span style="font-size: var(--body-size); font-family: monospace; color: var(--text-secondary); font-weight: normal;">Intelligence</span></h3>
+                        <p style="margin-bottom: 0.5rem; color: var(--accent-gold);">5 Profiles × 25+ Skills × 8 Baselines</p>
+                        <p style="font-size: var(--small-size); color: var(--text-secondary);">Skill Profile Router · Baseline Runner · Skill Market ↔ Capability Market (MCP)</p>
+                    </div>
+                </div>
+            </div>
+            <div class="card" style="padding: 1.5rem;">
+                <div style="display: flex; align-items: center; gap: 1rem;">
+                    <span style="font-family: monospace; font-weight: bold; color: var(--text-secondary);">L3</span>
+                    <div style="flex: 1;">
+                        <h3 class="mb-1">Agent Runtime 层 <span style="font-size: var(--body-size); font-family: monospace; color: var(--text-secondary); font-weight: normal;">Runtime</span></h3>
+                        <p style="margin-bottom: 0.5rem;">MCP 协议 · Tool Calling · 沙箱 · 可观测</p>
+                        <p style="font-size: var(--small-size); color: var(--text-secondary);">9 聚合工具 · 安全围栏 · SuperAgent 评估框架</p>
+                    </div>
+                </div>
+            </div>
+            <div class="card" style="padding: 1.5rem;">
+                <div style="display: flex; align-items: center; gap: 1rem;">
+                    <span style="font-family: monospace; font-weight: bold; color: var(--text-secondary);">L4</span>
+                    <div style="flex: 1;">
+                        <h3 class="mb-1">数据与模型层 <span style="font-size: var(--body-size); font-family: monospace; color: var(--text-secondary); font-weight: normal;">Data & Model</span></h3>
+                        <p style="margin-bottom: 0.5rem;">公域模型 (Claude) + 私域数据 (知识库 12+) + 垂域模型</p>
+                        <p style="font-size: var(--small-size); color: var(--text-secondary);">MCP Gateway → Knowledge / Database / ServiceGraph / Artifact / Observability</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <p class="reveal center accent-gold" style="margin-top: 1.5rem;">
+            模型从 Opus 换成 GPT? 换 L3 的 Adapter。Skills 和 Baselines 一行不改。
+        </p>
+    </section>
+
+    <!-- Slide 7: Stable vs Volatile -->
+    <section class="slide">
+        <h2 class="reveal mb-1">稳态固化 · 敏态抽象</h2>
+        <p class="reveal mb-3" style="color: var(--text-secondary);">
+            模型一定会被追平，能力编码为 Skill 才是真正的护城河
+        </p>
+        <div class="grid grid-2 reveal">
+            <div class="card" style="border-color: var(--accent-gold);">
+                <h3 class="accent-gold mb-2">稳态 — 核心资产</h3>
+                <p class="mb-2" style="font-size: var(--small-size); color: var(--text-secondary);">越积越厚，无法复制</p>
+                <ul style="list-style: none; padding: 0;">
+                    <li style="margin-bottom: 0.75rem; padding-left: 0;"><strong style="font-family: monospace;">25+ Skills</strong> — 十年工程经验的数字化编码</li>
+                    <li style="margin-bottom: 0.75rem; padding-left: 0;"><strong style="font-family: monospace;">8 Baselines</strong> — 质量底线自动守护</li>
+                    <li style="margin-bottom: 0.75rem; padding-left: 0;"><strong style="font-family: monospace;">5 Profiles</strong> — 全交付角色覆盖</li>
+                    <li style="margin-bottom: 0.75rem; padding-left: 0;"><strong style="font-family: monospace;">12+ Knowledge</strong> — 私域知识持续沉淀</li>
+                    <li style="margin-bottom: 0.75rem; padding-left: 0;"><strong style="font-family: monospace;">OODA 流程</strong> — 标准化决策环路</li>
+                </ul>
+            </div>
+            <div class="card">
+                <h3 class="mb-2">敏态 — 可替换组件</h3>
+                <p class="mb-2" style="font-size: var(--small-size); color: var(--text-secondary);">技术迭代时只换这里</p>
+                <ul style="list-style: none; padding: 0;">
+                    <li style="margin-bottom: 0.75rem; padding-left: 0;"><strong style="font-family: monospace;">ModelAdapter</strong><br>
+                        <span style="font-size: var(--small-size); color: var(--text-secondary);">Claude → GPT → Local</span></li>
+                    <li style="margin-bottom: 0.75rem; padding-left: 0;"><strong style="font-family: monospace;">RuntimeAdapter</strong><br>
+                        <span style="font-size: var(--small-size); color: var(--text-secondary);">Claude Code → ForgeNative</span></li>
+                    <li style="margin-bottom: 0.75rem; padding-left: 0;"><strong style="font-family: monospace;">AssetFormatAdapter</strong><br>
+                        <span style="font-size: var(--small-size); color: var(--text-secondary);">SKILL.md v1 → v2 → ...</span></li>
+                </ul>
+            </div>
+        </div>
+        <div class="card reveal" style="margin-top: 1.5rem; border-color: var(--accent-gold);">
+            <h3 class="accent-gold mb-1">战略意义</h3>
+            <p>OpenAI 发布更好的模型？换一个 Adapter。Claude Code 被替代？切换 ForgeNativeRuntime。<br>
+            但 25 个 Skill 编码的十年工程经验，竞争对手无法复制。</p>
+        </div>
+    </section>
+
+    <!-- Slide 8: Breakthrough -->
+    <section class="slide">
+        <h2 class="reveal mb-3">AI 不再只是聊天，而是交付</h2>
+        <div class="grid grid-2 reveal">
+            <div class="card">
+                <h3 class="mb-2" style="color: var(--text-secondary); font-family: monospace;">Before</h3>
+                <ul style="font-size: var(--body-size);">
+                    <li>AI 在聊天窗口展示代码</li>
+                    <li>用户手动复制粘贴到文件</li>
+                    <li>用户手动创建和管理文件</li>
+                    <li>知识搜索返回 mock 数据</li>
+                    <li>没有认证，没有权限控制</li>
+                    <li>AI 不了解项目结构</li>
+                </ul>
+            </div>
+            <div class="card" style="border-color: var(--accent-gold);">
+                <h3 class="accent-gold mb-2" style="font-family: monospace;">After — Forge</h3>
+                <ul style="font-size: var(--body-size);">
+                    <li><strong style="color: var(--text-primary);">AI 直接写文件到 workspace</strong><br>
+                        <span style="font-size: var(--small-size); font-family: monospace;">workspace_write / read / list</span></li>
+                    <li><strong style="color: var(--text-primary);">文件树自动刷新，编辑器自动打开</strong><br>
+                        <span style="font-size: var(--small-size); font-family: monospace;">SSE file_changed 事件驱动</span></li>
+                    <li><strong style="color: var(--text-primary);">AI 主动了解项目结构再动手</strong><br>
+                        <span style="font-size: var(--small-size); font-family: monospace;">workspace_list_files</span></li>
+                    <li><strong style="color: var(--text-primary);">知识搜索返回真实文档</strong><br>
+                        <span style="font-size: var(--small-size); font-family: monospace;">12+ 知识库文档实连</span></li>
+                    <li><strong style="color: var(--text-primary);">Keycloak SSO 企业级认证</strong><br>
+                        <span style="font-size: var(--small-size); font-family: monospace;">OIDC PKCE + 4 容器部署</span></li>
+                    <li><strong style="color: var(--text-primary);">代码块一键 Apply + 5 秒自动保存</strong><br>
+                        <span style="font-size: var(--small-size); font-family: monospace;">零摩擦交付体验</span></li>
+                </ul>
+            </div>
+        </div>
+    </section>
+
+    <!-- Slide 9: Numbers -->
+    <section class="slide center">
+        <h2 class="reveal mb-1">我们走到了哪里</h2>
+        <p class="reveal mb-3" style="color: var(--text-secondary);">Phase 0 → 1 → 1.5 → 1.6 完成</p>
+        <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 2rem;" class="reveal">
+            <div>
+                <p style="font-size: clamp(3rem, 8vw, 5rem); font-weight: 700; font-family: monospace; color: var(--text-primary); line-height: 1;">45,000+</p>
+                <p style="margin-top: 0.5rem;">行代码</p>
+            </div>
+            <div>
+                <p style="font-size: clamp(3rem, 8vw, 5rem); font-weight: 700; font-family: monospace; color: var(--text-primary); line-height: 1;">320+</p>
+                <p style="margin-top: 0.5rem;">文件</p>
+            </div>
+            <div>
+                <p style="font-size: clamp(3rem, 8vw, 5rem); font-weight: 700; font-family: monospace; color: var(--text-primary); line-height: 1;">130+</p>
+                <p style="margin-top: 0.5rem;">测试</p>
+            </div>
+            <div>
+                <p style="font-size: clamp(3rem, 8vw, 5rem); font-weight: 700; font-family: monospace; color: var(--text-primary); line-height: 1;">89</p>
+                <p style="margin-top: 0.5rem;">验收场景</p>
+            </div>
+        </div>
+        <div class="divider reveal"></div>
+        <div class="grid reveal" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 2rem; margin-top: 2rem;">
+            <div>
+                <p style="font-size: clamp(2.5rem, 6vw, 4rem); font-weight: 700; font-family: monospace; color: var(--accent-gold); line-height: 1;">9</p>
+                <p style="margin-top: 0.5rem;">MCP 工具</p>
+            </div>
+            <div>
+                <p style="font-size: clamp(2.5rem, 6vw, 4rem); font-weight: 700; font-family: monospace; color: var(--text-primary); line-height: 1;">5</p>
+                <p style="margin-top: 0.5rem;">Skill Profile</p>
+            </div>
+            <div>
+                <p style="font-size: clamp(2.5rem, 6vw, 4rem); font-weight: 700; font-family: monospace; color: var(--text-primary); line-height: 1;">13</p>
+                <p style="margin-top: 0.5rem;">Foundation Skill</p>
+            </div>
+            <div>
+                <p style="font-size: clamp(2.5rem, 6vw, 4rem); font-weight: 700; font-family: monospace; color: var(--text-primary); line-height: 1;">4</p>
+                <p style="margin-top: 0.5rem;">Docker 容器</p>
+            </div>
+        </div>
+        <p class="reveal" style="margin-top: 2rem; font-size: var(--small-size); color: var(--text-secondary);">
+            docker compose up → Keycloak SSO → AI 对话 → 代码写入 workspace → 文件树刷新
+        </p>
+    </section>
+
+    <!-- Slide 10: Migration -->
+    <section class="slide">
+        <h2 class="reveal mb-1">跨栈迁移：10 倍提效</h2>
+        <p class="reveal mb-3" style="color: var(--text-secondary);">
+            "没人懂旧技术栈"的困局，AI 可以系统性地解决
+        </p>
+        <div class="grid reveal" style="grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem;">
+            <div class="card center">
+                <p style="font-family: monospace; color: var(--accent-gold); margin-bottom: 0.75rem;">01</p>
+                <h3 class="mb-1" style="font-size: var(--h3-size);">AI 代码考古</h3>
+                <p>解析项目结构<br>生成项目说明书</p>
+            </div>
+            <div class="card center">
+                <p style="font-family: monospace; color: var(--text-secondary); margin-bottom: 0.75rem;">02</p>
+                <h3 class="mb-1" style="font-size: var(--h3-size);">业务规则提取</h3>
+                <p>逐模块分析<br>规则 + 边界条件</p>
+            </div>
+            <div class="card center">
+                <p style="font-family: monospace; color: var(--text-secondary); margin-bottom: 0.75rem;">03</p>
+                <h3 class="mb-1" style="font-size: var(--h3-size);">架构设计</h3>
+                <p>.NET → Java 映射<br>依赖拓扑排列</p>
+            </div>
+            <div class="card center">
+                <p style="font-family: monospace; color: var(--text-secondary); margin-bottom: 0.75rem;">04</p>
+                <h3 class="mb-1" style="font-size: var(--h3-size);">逐模块迁移</h3>
+                <p>SuperAgent 编写<br>规范自动遵循</p>
+            </div>
+            <div class="card center">
+                <p style="font-family: monospace; color: var(--text-secondary); margin-bottom: 0.75rem;">05</p>
+                <h3 class="mb-1" style="font-size: var(--h3-size);">行为等价验证</h3>
+                <p>API 契约对比<br>规则覆盖度检查</p>
+            </div>
+        </div>
+        <div class="reveal center" style="margin-top: 2rem; display: flex; align-items: center; justify-content: center; gap: 2rem;">
+            <div>
+                <p style="color: var(--text-secondary); margin-bottom: 0.5rem;">传统方式</p>
+                <p style="font-size: clamp(2rem, 5vw, 3rem); font-family: monospace; font-weight: 700; color: var(--text-secondary);">50-65 人天</p>
+            </div>
+            <p style="font-size: 2rem; color: var(--text-secondary);">→</p>
+            <div>
+                <p style="color: var(--text-secondary); margin-bottom: 0.5rem;">Forge 辅助</p>
+                <p style="font-size: clamp(2rem, 5vw, 3rem); font-family: monospace; font-weight: 700; color: var(--accent-gold);">5-7 人天</p>
+            </div>
+            <p style="font-size: clamp(2.5rem, 6vw, 4rem); font-family: monospace; font-weight: 900; color: var(--accent-gold);">10x</p>
+        </div>
+    </section>
+
+    <!-- Slide 11: Quality -->
+    <section class="slide">
+        <h2 class="reveal mb-3">速度不缺，缺的是安全网</h2>
+        <div class="reveal center mb-3">
+            <p style="color: var(--text-secondary); margin-bottom: 1rem;">首次部署成功率</p>
+            <p style="font-size: clamp(4rem, 10vw, 6rem); font-family: monospace; font-weight: 900; color: var(--text-primary); line-height: 1;">7.7%</p>
+            <p style="margin-top: 1rem; max-width: 600px; margin-left: auto; margin-right: auto;">
+                13 次尝试，90 分钟，10 个计划外问题。CORS 通配符直接进入 commit，无人察觉。
+            </p>
+        </div>
+        <div class="divider reveal"></div>
+        <div class="grid grid-2 reveal" style="margin-top: 2rem;">
+            <div>
+                <h3 class="mb-2">系统性解决</h3>
+                <p>痛点不修补，而是编码为平台能力。</p>
+                <p style="margin-top: 1rem;">8 道质量底线自动拦截，让未来的开发者无感地获得保护。</p>
+            </div>
+            <div class="center">
+                <p style="color: var(--text-secondary); margin-bottom: 1rem;">目标成功率</p>
+                <p style="font-size: clamp(3rem, 7vw, 4.5rem); font-family: monospace; font-weight: 900; color: var(--accent-gold); line-height: 1;">≥ 90%</p>
+            </div>
+        </div>
+        <p class="reveal center" style="margin-top: 2rem; font-size: var(--small-size); color: var(--text-secondary);">
+            已验证的设计不可隐式退化 · 开发者痛点即平台能力
+        </p>
+    </section>
+
+    <!-- Slide 12: Roadmap -->
+    <section class="slide">
+        <h2 class="reveal mb-3">从工具到平台到生态</h2>
+        <div class="grid grid-3 reveal">
+            <div class="card" style="border-color: var(--accent-gold);">
+                <h3 class="accent-gold mb-2" style="font-family: monospace;">已完成</h3>
+                <div style="height: 2px; background: var(--accent-gold); margin-bottom: 1rem;"></div>
+                <ul style="list-style: none; padding: 0;">
+                    <li style="margin-bottom: 1rem; padding-left: 0;">
+                        <strong style="color: var(--text-primary);">Phase 0</strong><br>
+                        <span style="font-size: var(--small-size);">骨架搭建</span>
+                    </li>
+                    <li style="margin-bottom: 1rem; padding-left: 0;">
+                        <strong style="color: var(--text-primary);">Phase 1</strong><br>
+                        <span style="font-size: var(--small-size);">Web IDE 实连</span>
+                    </li>
+                    <li style="margin-bottom: 1rem; padding-left: 0;">
+                        <strong style="color: var(--text-primary);">Phase 1.5</strong><br>
+                        <span style="font-size: var(--small-size);">设计守护 + Docker</span>
+                    </li>
+                    <li style="margin-bottom: 1rem; padding-left: 0;">
+                        <strong style="color: var(--text-primary);">Phase 1.6</strong><br>
+                        <span style="font-size: var(--small-size);">AI 交付闭环 + SSO</span>
+                    </li>
+                </ul>
+            </div>
+            <div class="card">
+                <h3 class="mb-2" style="font-family: monospace;">下一步</h3>
+                <div style="height: 2px; background: var(--text-secondary); margin-bottom: 1rem;"></div>
+                <ul style="list-style: none; padding: 0;">
+                    <li style="margin-bottom: 1rem; padding-left: 0;">
+                        <strong style="color: var(--text-primary);">Phase 2</strong><br>
+                        <span style="font-size: var(--small-size);">OODA 引擎 + SkillLoader</span>
+                    </li>
+                    <li style="margin-bottom: 1rem; padding-left: 0;">
+                        <span style="font-size: var(--small-size);">底线脚本 CI 集成</span>
+                    </li>
+                    <li style="margin-bottom: 1rem; padding-left: 0;">
+                        <span style="font-size: var(--small-size);">跨栈迁移 PoC</span>
+                    </li>
+                    <li style="margin-bottom: 1rem; padding-left: 0;">
+                        <span style="font-size: var(--small-size);">3-5 人内部试用</span>
+                    </li>
+                </ul>
+            </div>
+            <div class="card">
+                <h3 class="mb-2" style="font-family: monospace; color: var(--text-secondary);">远景</h3>
+                <div style="height: 2px; background: rgba(139, 148, 158, 0.3); margin-bottom: 1rem;"></div>
+                <ul style="list-style: none; padding: 0;">
+                    <li style="margin-bottom: 1rem; padding-left: 0;">
+                        <strong style="color: var(--text-primary);">Phase 3</strong><br>
+                        <span style="font-size: var(--small-size);">进化环闭合</span>
+                    </li>
+                    <li style="margin-bottom: 1rem; padding-left: 0;">
+                        <span style="font-size: var(--small-size);">Runtime 完全抽象</span>
+                    </li>
+                    <li style="margin-bottom: 1rem; padding-left: 0;">
+                        <strong style="color: var(--text-primary);">Phase 4</strong><br>
+                        <span style="font-size: var(--small-size);">Skill 生态开放</span>
+                    </li>
+                    <li style="margin-bottom: 1rem; padding-left: 0;">
+                        <span style="font-size: var(--small-size);">全组织部署</span>
+                    </li>
+                </ul>
+            </div>
+        </div>
+        <p class="reveal center" style="margin-top: 2rem; font-size: var(--small-size); color: var(--text-secondary);">
+            终局：1 人 + SuperAgent 全自主交付 · Skill 生态开放 · 知识持续进化
+        </p>
+    </section>
+
+    <!-- Slide 13: The Ask -->
+    <section class="slide">
+        <h2 class="reveal mb-3">下一步需要什么</h2>
+        <div class="reveal" style="display: flex; flex-direction: column; gap: 1.5rem;">
+            <div class="card" style="padding: 1.5rem; border-color: var(--accent-gold);">
+                <div style="display: flex; gap: 1.5rem; align-items: flex-start;">
+                    <span style="font-size: 2rem; font-family: monospace; font-weight: 700; color: var(--accent-gold);">01</span>
+                    <div style="flex: 1;">
+                        <h3 class="mb-1">API Key + 试用环境</h3>
+                        <p>完成 Claude API 接入，3-5 人真实使用。<br>
+                        交付闭环已就绪，差这一步跑通完整流程。</p>
+                    </div>
+                </div>
+            </div>
+            <div class="card" style="padding: 1.5rem;">
+                <div style="display: flex; gap: 1.5rem; align-items: flex-start;">
+                    <span style="font-size: 2rem; font-family: monospace; font-weight: 700; color: var(--text-secondary);">02</span>
+                    <div style="flex: 1;">
+                        <h3 class="mb-1">1 个试点项目</h3>
+                        <p>选一个小型 .NET → Java 模块，验证 10x 假设。<br>
+                        最有说服力的场景，可产出量化 ROI。</p>
+                    </div>
+                </div>
+            </div>
+            <div class="card" style="padding: 1.5rem;">
+                <div style="display: flex; gap: 1.5rem; align-items: flex-start;">
+                    <span style="font-size: 2rem; font-family: monospace; font-weight: 700; color: var(--text-secondary);">03</span>
+                    <div style="flex: 1;">
+                        <h3 class="mb-1">CI/CD 管道接入</h3>
+                        <p>8 个底线脚本集成到 GitHub Actions。<br>
+                        让质量安全网从"设计了"变成"跑起来"。</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Slide 14: Closing -->
+    <section class="slide center">
+        <div class="blob blob-gold" style="top: 30%; right: 20%;"></div>
+        <div class="blob blob-emerald" style="bottom: 30%; left: 20%;"></div>
+        <div class="logo-container reveal" style="margin-bottom: 3rem;">
+            <div class="logo-shape"></div>
+            <div class="logo-shape"></div>
+        </div>
+        <p class="reveal mb-2" style="font-size: var(--h2-size); color: var(--text-secondary);">
+            不是给每个人配一个 AI 助手
+        </p>
+        <h1 class="reveal mb-3" style="font-size: clamp(2rem, 6vw, 4rem);">
+            而是用 AI 重构交付流程本身
+        </h1>
+        <div class="divider reveal"></div>
+        <p class="reveal" style="font-size: var(--h3-size); color: var(--text-secondary); font-family: monospace;">
+            Thank You
+        </p>
+    </section>
+
+
+    <script>
+        /* ===========================================
+           SLIDE PRESENTATION CONTROLLER
+           Handles navigation, animations, and interactions
+           =========================================== */
+
+        class SlidePresentation {
+            constructor() {
+                this.slides = document.querySelectorAll('.slide');
+                this.currentSlide = 0;
+                this.isScrolling = false;
+                this.progressBar = document.querySelector('.progress-bar');
+                this.navDots = document.querySelector('.nav-dots');
+
+                this.init();
+            }
+
+            init() {
+                this.setupObserver();
+                this.setupKeyboard();
+                this.setupWheel();
+                this.setupTouch();
+                this.setupNavDots();
+                this.updateProgress();
+                
+                // Mark first slide as visible
+                this.slides[0].classList.add('visible');
+            }
+
+            setupObserver() {
+                const options = {
+                    threshold: 0.5
+                };
+
+                const observer = new IntersectionObserver((entries) => {
+                    entries.forEach(entry => {
+                        if (entry.isIntersecting) {
+                            entry.target.classList.add('visible');
+                            this.currentSlide = Array.from(this.slides).indexOf(entry.target);
+                            this.updateProgress();
+                            this.updateNavDots();
+                        }
+                    });
+                }, options);
+
+                this.slides.forEach(slide => observer.observe(slide));
+            }
+
+            setupKeyboard() {
+                document.addEventListener('keydown', (e) => {
+                    if (e.key === 'ArrowRight' || e.key === ' ') {
+                        e.preventDefault();
+                        this.nextSlide();
+                    } else if (e.key === 'ArrowLeft') {
+                        e.preventDefault();
+                        this.prevSlide();
+                    } else if (e.key === 'Home') {
+                        e.preventDefault();
+                        this.goToSlide(0);
+                    } else if (e.key === 'End') {
+                        e.preventDefault();
+                        this.goToSlide(this.slides.length - 1);
+                    }
+                });
+            }
+
+            setupWheel() {
+                let wheelTimeout;
+                document.addEventListener('wheel', (e) => {
+                    if (this.isScrolling) return;
+                    
+                    clearTimeout(wheelTimeout);
+                    wheelTimeout = setTimeout(() => {
+                        if (e.deltaY > 0) {
+                            this.nextSlide();
+                        } else {
+                            this.prevSlide();
+                        }
+                    }, 50);
+                }, { passive: true });
+            }
+
+            setupTouch() {
+                let touchStart = 0;
+                let touchEnd = 0;
+
+                document.addEventListener('touchstart', (e) => {
+                    touchStart = e.changedTouches[0].screenY;
+                });
+
+                document.addEventListener('touchend', (e) => {
+                    touchEnd = e.changedTouches[0].screenY;
+                    this.handleSwipe();
+                });
+
+                const handleSwipe = () => {
+                    if (touchStart - touchEnd > 50) {
+                        this.nextSlide();
+                    }
+                    if (touchEnd - touchStart > 50) {
+                        this.prevSlide();
+                    }
+                };
+
+                this.handleSwipe = handleSwipe;
+            }
+
+            setupNavDots() {
+                this.slides.forEach((slide, index) => {
+                    const dot = document.createElement('div');
+                    dot.classList.add('nav-dot');
+                    if (index === 0) dot.classList.add('active');
+                    dot.addEventListener('click', () => this.goToSlide(index));
+                    this.navDots.appendChild(dot);
+                });
+            }
+
+            updateNavDots() {
+                const dots = this.navDots.querySelectorAll('.nav-dot');
+                dots.forEach((dot, index) => {
+                    dot.classList.toggle('active', index === this.currentSlide);
+                });
+            }
+
+            updateProgress() {
+                const progress = ((this.currentSlide + 1) / this.slides.length) * 100;
+                this.progressBar.style.width = `${progress}%`;
+            }
+
+            nextSlide() {
+                if (this.currentSlide < this.slides.length - 1) {
+                    this.goToSlide(this.currentSlide + 1);
+                }
+            }
+
+            prevSlide() {
+                if (this.currentSlide > 0) {
+                    this.goToSlide(this.currentSlide - 1);
+                }
+            }
+
+            goToSlide(index) {
+                if (index < 0 || index >= this.slides.length || this.isScrolling) return;
+                
+                this.isScrolling = true;
+                this.currentSlide = index;
+                
+                this.slides[index].scrollIntoView({
+                    behavior: 'smooth',
+                    block: 'start'
+                });
+
+                setTimeout(() => {
+                    this.isScrolling = false;
+                }, 800);
+            }
+        }
+
+        // Initialize presentation
+        new SlidePresentation();
+    </script>
+</body>
+</html>

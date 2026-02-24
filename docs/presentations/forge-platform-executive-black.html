@@ -1,0 +1,760 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FORGE — 面向 AI 时代的智能交付平台</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --black: #000000;
+  --white: #ffffff;
+  --gray-title: #f5f5f7;
+  --gray-body: #86868b;
+  --gray-dim: #48484a;
+  --gray-card: #1d1d1f;
+  --accent: #2997ff;
+  --font: 'Inter', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  --mono: 'JetBrains Mono', 'SF Mono', monospace;
+  --title-size: clamp(2rem, 5vw, 4rem);
+  --h2-size: clamp(1.5rem, 3.5vw, 2.8rem);
+  --h3-size: clamp(1rem, 2vw, 1.5rem);
+  --body-size: clamp(0.75rem, 1.3vw, 1rem);
+  --small-size: clamp(0.65rem, 1vw, 0.8rem);
+  --pad: clamp(2rem, 5vw, 5rem);
+  --gap: clamp(0.5rem, 1.5vw, 1.5rem);
+}
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+html {
+  scroll-snap-type: y mandatory;
+  scroll-behavior: smooth;
+  height: 100%;
+  overflow-x: hidden;
+}
+body {
+  font-family: var(--font);
+  background: var(--black);
+  color: var(--white);
+  height: 100%;
+  overflow-x: hidden;
+}
+.slide {
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+  scroll-snap-align: start;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  position: relative;
+  padding: var(--pad);
+}
+/* nav dots */
+.nav {
+  position: fixed;
+  right: clamp(0.75rem, 2vw, 1.5rem);
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 100;
+}
+.nav-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--gray-dim);
+  cursor: pointer;
+  transition: background 0.3s, transform 0.3s;
+}
+.nav-dot.active { background: var(--accent); transform: scale(1.4); }
+/* progress */
+.progress {
+  position: fixed;
+  top: 0; left: 0;
+  height: 2px;
+  background: var(--accent);
+  transition: width 0.4s ease;
+  z-index: 100;
+}
+/* reveal animations */
+.r {
+  opacity: 0;
+  transform: translateY(24px);
+  transition: opacity 0.7s cubic-bezier(0.16,1,0.3,1), transform 0.7s cubic-bezier(0.16,1,0.3,1);
+}
+.slide.visible .r { opacity: 1; transform: translateY(0); }
+.r:nth-child(1){transition-delay:.05s}
+.r:nth-child(2){transition-delay:.15s}
+.r:nth-child(3){transition-delay:.25s}
+.r:nth-child(4){transition-delay:.35s}
+.r:nth-child(5){transition-delay:.45s}
+.r:nth-child(6){transition-delay:.55s}
+/* shared */
+.label { font-size: var(--small-size); color: var(--gray-dim); font-family: var(--mono); letter-spacing: .08em; text-transform: uppercase; }
+.accent { color: var(--accent); }
+.dim { color: var(--gray-dim); }
+.body-text { color: var(--gray-body); font-size: var(--body-size); line-height: 1.6; }
+.card {
+  background: var(--gray-card);
+  border-radius: 12px;
+  padding: clamp(1rem, 2vw, 1.8rem);
+  position: relative;
+  overflow: hidden;
+}
+.card-accent::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+  background: var(--accent);
+}
+.card-dim::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+  background: var(--gray-dim);
+}
+.slide-title {
+  font-size: var(--h2-size);
+  font-weight: 700;
+  color: var(--gray-title);
+  margin-bottom: clamp(0.3rem, 1vw, 0.6rem);
+}
+.slide-sub {
+  font-size: var(--body-size);
+  color: var(--gray-body);
+  margin-bottom: clamp(1rem, 2.5vw, 2rem);
+}
+.divider {
+  width: 100%;
+  height: 1px;
+  background: var(--gray-dim);
+  opacity: 0.3;
+  margin: clamp(0.5rem, 1.5vw, 1rem) 0;
+}
+@media (max-height: 700px) {
+  :root { --pad: clamp(1rem, 3vw, 2.5rem); --gap: clamp(0.3rem, 1vw, 0.8rem); }
+}
+@media (max-height: 500px) {
+  :root { --pad: clamp(0.75rem, 2vw, 1.5rem); --title-size: clamp(1.5rem, 4vw, 2.5rem); }
+  .nav { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .r { transition: opacity 0.3s ease; transform: none; }
+  html { scroll-behavior: auto; }
+}
+</style>
+</head>
+<body>
+
+<!-- NAV DOTS -->
+<nav class="nav" id="nav"></nav>
+<div class="progress" id="progress"></div>
+
+<!-- ═══════════════════════════════════════════
+     SLIDE 1: TITLE
+═══════════════════════════════════════════ -->
+<section class="slide" id="s1" style="align-items:center;text-align:center;">
+  <!-- Forge logo: anvil + spark -->
+  <div class="r" style="margin-bottom:clamp(1rem,3vh,2rem);">
+    <svg width="80" height="72" viewBox="0 0 80 72" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <!-- anvil base -->
+      <rect x="4" y="52" width="72" height="14" rx="2" fill="#f5f5f7"/>
+      <!-- anvil neck -->
+      <rect x="26" y="34" width="28" height="22" fill="#f5f5f7"/>
+      <!-- anvil top surface -->
+      <rect x="10" y="26" width="60" height="12" rx="2" fill="#f5f5f7"/>
+      <!-- anvil horn -->
+      <rect x="70" y="28" width="10" height="7" rx="1" fill="#f5f5f7"/>
+      <!-- spark diamond -->
+      <rect x="36" y="8" width="12" height="12" rx="1" fill="#2997ff" transform="rotate(45 42 14)"/>
+      <!-- spark particles -->
+      <circle cx="22" cy="18" r="3" fill="#2997ff" opacity="0.7"/>
+      <circle cx="60" cy="16" r="2.5" fill="#2997ff" opacity="0.6"/>
+      <circle cx="34" cy="6" r="2" fill="#2997ff" opacity="0.5"/>
+      <circle cx="52" cy="4" r="2" fill="#2997ff" opacity="0.5"/>
+    </svg>
+  </div>
+  <h1 class="r" style="font-size:clamp(3rem,7vw,5.5rem);font-weight:700;color:var(--gray-title);letter-spacing:.12em;font-family:var(--mono);">FORGE</h1>
+  <p class="r" style="font-size:clamp(1rem,2.2vw,1.4rem);color:var(--gray-body);margin-top:clamp(0.5rem,1.5vh,1rem);">面向 AI 时代的智能交付平台</p>
+  <div class="r" style="width:120px;height:1px;background:var(--gray-dim);margin:clamp(1rem,3vh,2rem) auto;"></div>
+  <p class="r" style="font-size:var(--small-size);color:var(--gray-dim);font-family:var(--mono);">2026.02</p>
+</section>
+
+<!-- ═══════════════════════════════════════════
+     SLIDE 2: HOOK
+═══════════════════════════════════════════ -->
+<section class="slide" id="s2" style="align-items:center;text-align:center;">
+  <p class="r" style="font-size:clamp(2rem,5.5vw,4.5rem);font-weight:700;color:var(--gray-title);line-height:1.25;max-width:900px;">
+    当 1 个人 + AI<br>
+    <span style="color:var(--accent);">拥有 7 人团队的交付能力</span>
+  </p>
+</section>
+
+<!-- ═══════════════════════════════════════════
+     SLIDE 3: PROBLEM
+═══════════════════════════════════════════ -->
+<section class="slide" id="s3">
+  <h2 class="slide-title r">我们面对的现实</h2>
+  <div style="display:flex;flex-direction:column;gap:var(--gap);max-width:900px;">
+    <div class="r" style="display:flex;gap:1rem;align-items:flex-start;">
+      <div style="width:3px;min-width:3px;height:100%;background:var(--gray-dim);border-radius:2px;margin-top:4px;align-self:stretch;"></div>
+      <div>
+        <div style="font-size:var(--h3-size);font-weight:600;color:var(--gray-title);margin-bottom:4px;">5-7 人的 Scrum 团队</div>
+        <div class="body-text">每个角色一个人，知识在人脑里，人走知识就没了</div>
+      </div>
+    </div>
+    <div class="r" style="display:flex;gap:1rem;align-items:flex-start;">
+      <div style="width:3px;min-width:3px;background:var(--gray-dim);border-radius:2px;margin-top:4px;align-self:stretch;"></div>
+      <div>
+        <div style="font-size:var(--h3-size);font-weight:600;color:var(--gray-title);margin-bottom:4px;">AI 只是"更快的打字员"</div>
+        <div class="body-text">给每个人配一个 AI 助手，不等于交付效率的质变</div>
+      </div>
+    </div>
+    <div class="r" style="display:flex;gap:1rem;align-items:flex-start;">
+      <div style="width:3px;min-width:3px;background:var(--gray-dim);border-radius:2px;margin-top:4px;align-self:stretch;"></div>
+      <div>
+        <div style="font-size:var(--h3-size);font-weight:600;color:var(--gray-title);margin-bottom:4px;">跨栈迁移是黑洞</div>
+        <div class="body-text">没人懂旧技术栈，人工迁移动辄数十人月</div>
+      </div>
+    </div>
+    <div class="r" style="display:flex;gap:1rem;align-items:flex-start;">
+      <div style="width:3px;min-width:3px;background:var(--gray-dim);border-radius:2px;margin-top:4px;align-self:stretch;"></div>
+      <div>
+        <div style="font-size:var(--h3-size);font-weight:600;color:var(--gray-title);margin-bottom:4px;">经验不沉淀，错误在重复</div>
+        <div class="body-text">同样的部署失败、同样的安全漏洞，每个项目重来一遍</div>
+      </div>
+    </div>
+  </div>
+  <div class="r" style="margin-top:clamp(1rem,3vh,2rem);padding:clamp(0.6rem,1.5vw,1rem) clamp(1rem,2vw,1.5rem);border-left:3px solid var(--accent);background:rgba(41,151,255,0.06);border-radius:0 8px 8px 0;max-width:900px;">
+    <span style="font-size:var(--body-size);color:var(--accent);">问题的本质不是工具不够，是交付流程本身没有被重构。</span>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════
+     SLIDE 4: THREE INSIGHTS
+═══════════════════════════════════════════ -->
+<section class="slide" id="s4">
+  <h2 class="slide-title r">三个关键洞察</h2>
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:var(--gap);flex:1;max-height:72vh;">
+    <div class="card card-accent r" style="display:flex;flex-direction:column;gap:clamp(0.5rem,1.5vh,1rem);">
+      <div style="font-size:var(--h3-size);font-weight:700;color:var(--gray-title);line-height:1.3;">SuperAgent<br>不是 Multi-Agent</div>
+      <div class="body-text">不是 5 个角色各配一个 AI。而是 1 个超级智能体，通过 Skill Profile 动态切换。</div>
+      <div style="margin-top:auto;font-size:var(--small-size);color:var(--gray-dim);font-family:var(--mono);">1 个智能体 > 5 个独立 Agent</div>
+    </div>
+    <div class="card card-dim r" style="display:flex;flex-direction:column;gap:clamp(0.5rem,1.5vh,1rem);">
+      <div style="font-size:var(--h3-size);font-weight:700;color:var(--gray-title);line-height:1.3;">Skill 是<br>真正的护城河</div>
+      <div class="body-text">模型会被追平，Prompt 会被抄走。但编码了十年经验的 Skill 体系，无法复制。</div>
+      <div style="margin-top:auto;font-size:var(--small-size);color:var(--gray-dim);font-family:var(--mono);">25+ Skills = 经验的数字化资产</div>
+    </div>
+    <div class="card card-dim r" style="display:flex;flex-direction:column;gap:clamp(0.5rem,1.5vh,1rem);">
+      <div style="font-size:var(--h3-size);font-weight:700;color:var(--gray-title);line-height:1.3;">双环驱动<br>越用越好</div>
+      <div class="body-text">交付环做事，进化环学习。每次交付产生知识沉淀，反哺下一次交付。</div>
+      <div style="margin-top:auto;font-size:var(--small-size);color:var(--gray-dim);font-family:var(--mono);">交付 × 进化 = 飞轮效应</div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════
+     SLIDE 5: SUPERAGENT — 5 PROFILES + OODA
+═══════════════════════════════════════════ -->
+<section class="slide" id="s5">
+  <h2 class="slide-title r">一个智能体，五种角色</h2>
+  <p class="slide-sub r">根据任务自动切换 Skill Profile，覆盖从需求到运维的完整交付链</p>
+  <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:var(--gap);margin-bottom:var(--gap);">
+    <div class="card card-dim r" style="text-align:center;padding:clamp(0.8rem,1.5vw,1.2rem);">
+      <div style="font-size:clamp(1.2rem,2.5vw,1.8rem);font-weight:700;color:var(--gray-title);">规划</div>
+      <div style="font-size:var(--small-size);color:var(--gray-dim);font-family:var(--mono);margin:4px 0 8px;">Planning</div>
+      <div class="body-text" style="font-size:var(--small-size);">需求分析<br>PRD 编写</div>
+    </div>
+    <div class="card card-dim r" style="text-align:center;padding:clamp(0.8rem,1.5vw,1.2rem);">
+      <div style="font-size:clamp(1.2rem,2.5vw,1.8rem);font-weight:700;color:var(--gray-title);">设计</div>
+      <div style="font-size:var(--small-size);color:var(--gray-dim);font-family:var(--mono);margin:4px 0 8px;">Design</div>
+      <div class="body-text" style="font-size:var(--small-size);">架构设计<br>API 设计</div>
+    </div>
+    <div class="card card-accent r" style="text-align:center;padding:clamp(0.8rem,1.5vw,1.2rem);">
+      <div style="font-size:clamp(1.2rem,2.5vw,1.8rem);font-weight:700;color:var(--gray-title);">开发</div>
+      <div style="font-size:var(--small-size);color:var(--accent);font-family:var(--mono);margin:4px 0 8px;">Development</div>
+      <div class="body-text" style="font-size:var(--small-size);">代码生成<br>13 Foundation Skills</div>
+    </div>
+    <div class="card card-dim r" style="text-align:center;padding:clamp(0.8rem,1.5vw,1.2rem);">
+      <div style="font-size:clamp(1.2rem,2.5vw,1.8rem);font-weight:700;color:var(--gray-title);">测试</div>
+      <div style="font-size:var(--small-size);color:var(--gray-dim);font-family:var(--mono);margin:4px 0 8px;">Testing</div>
+      <div class="body-text" style="font-size:var(--small-size);">用例设计<br>自动化执行</div>
+    </div>
+    <div class="card card-dim r" style="text-align:center;padding:clamp(0.8rem,1.5vw,1.2rem);">
+      <div style="font-size:clamp(1.2rem,2.5vw,1.8rem);font-weight:700;color:var(--gray-title);">运维</div>
+      <div style="font-size:var(--small-size);color:var(--gray-dim);font-family:var(--mono);margin:4px 0 8px;">Ops</div>
+      <div class="body-text" style="font-size:var(--small-size);">部署策略<br>K8s 编排</div>
+    </div>
+  </div>
+  <!-- OODA bar -->
+  <div class="card r" style="display:flex;align-items:center;gap:clamp(0.5rem,1.5vw,1.5rem);padding:clamp(0.6rem,1.5vw,1rem) clamp(1rem,2vw,1.5rem);">
+    <span class="label" style="white-space:nowrap;">OODA 循环</span>
+    <div style="display:flex;align-items:center;gap:clamp(0.3rem,1vw,0.8rem);flex:1;flex-wrap:wrap;">
+      <span style="font-size:var(--body-size);color:var(--gray-title);">Observe 观察</span>
+      <span style="color:var(--gray-dim);">→</span>
+      <span style="font-size:var(--body-size);color:var(--gray-title);">Orient 分析</span>
+      <span style="color:var(--gray-dim);">→</span>
+      <span style="font-size:var(--body-size);color:var(--gray-title);">Decide 决策</span>
+      <span style="color:var(--gray-dim);">→</span>
+      <span style="font-size:var(--body-size);color:var(--gray-title);">Act 执行</span>
+      <span style="color:var(--gray-dim);">→</span>
+      <span style="font-size:var(--body-size);color:var(--accent);font-weight:600;">HITL 人在回路</span>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════
+     SLIDE 6: FOUR-LAYER ARCHITECTURE
+═══════════════════════════════════════════ -->
+<section class="slide" id="s6">
+  <h2 class="slide-title r">四层解耦，独立演进</h2>
+  <p class="slide-sub r">每一层可以独立升级，不影响其他层 — 这是平台能活过模型迭代的根本原因</p>
+  <div style="display:flex;flex-direction:column;gap:clamp(0.3rem,0.8vh,0.6rem);flex:1;max-height:62vh;">
+    <div class="card card-dim r" style="display:flex;align-items:center;gap:clamp(0.8rem,2vw,1.5rem);padding:clamp(0.6rem,1.5vw,1rem) clamp(1rem,2vw,1.5rem);">
+      <span style="font-size:var(--small-size);font-weight:700;color:var(--gray-dim);font-family:var(--mono);min-width:2rem;">L1</span>
+      <div style="flex:1;">
+        <div style="font-size:var(--h3-size);font-weight:600;color:var(--gray-title);">用户交互层 <span style="font-size:var(--small-size);color:var(--gray-dim);font-family:var(--mono);font-weight:400;">User Interaction</span></div>
+        <div class="body-text" style="font-size:var(--small-size);">CLI / VS Code (开发者) + Web IDE (全角色) · Monaco 编辑器 · AI Chat · 知识浏览 · 可视化工作流</div>
+      </div>
+    </div>
+    <div style="text-align:center;color:var(--gray-dim);font-size:0.8rem;">↓</div>
+    <div class="card card-accent r" style="display:flex;align-items:center;gap:clamp(0.8rem,2vw,1.5rem);padding:clamp(0.6rem,1.5vw,1rem) clamp(1rem,2vw,1.5rem);">
+      <span style="font-size:var(--small-size);font-weight:700;color:var(--accent);font-family:var(--mono);min-width:2rem;">L2</span>
+      <div style="flex:1;">
+        <div style="font-size:var(--h3-size);font-weight:600;color:var(--gray-title);">SuperAgent 层 <span style="font-size:var(--small-size);color:var(--accent);font-family:var(--mono);font-weight:400;">Intelligence</span></div>
+        <div style="font-size:var(--small-size);color:var(--accent);">5 Profiles × 25+ Skills × 8 Baselines · Skill Profile Router · Baseline Runner</div>
+      </div>
+    </div>
+    <div style="text-align:center;color:var(--gray-dim);font-size:0.8rem;">↓</div>
+    <div class="card card-dim r" style="display:flex;align-items:center;gap:clamp(0.8rem,2vw,1.5rem);padding:clamp(0.6rem,1.5vw,1rem) clamp(1rem,2vw,1.5rem);">
+      <span style="font-size:var(--small-size);font-weight:700;color:var(--gray-dim);font-family:var(--mono);min-width:2rem;">L3</span>
+      <div style="flex:1;">
+        <div style="font-size:var(--h3-size);font-weight:600;color:var(--gray-title);">Agent Runtime 层 <span style="font-size:var(--small-size);color:var(--gray-dim);font-family:var(--mono);font-weight:400;">Runtime</span></div>
+        <div class="body-text" style="font-size:var(--small-size);">MCP 协议 · Tool Calling · 沙箱 · 可观测 · 9 聚合工具 · 安全围栏 · SuperAgent 评估框架</div>
+      </div>
+    </div>
+    <div style="text-align:center;color:var(--gray-dim);font-size:0.8rem;">↓</div>
+    <div class="card card-dim r" style="display:flex;align-items:center;gap:clamp(0.8rem,2vw,1.5rem);padding:clamp(0.6rem,1.5vw,1rem) clamp(1rem,2vw,1.5rem);">
+      <span style="font-size:var(--small-size);font-weight:700;color:var(--gray-dim);font-family:var(--mono);min-width:2rem;">L4</span>
+      <div style="flex:1;">
+        <div style="font-size:var(--h3-size);font-weight:600;color:var(--gray-title);">数据与模型层 <span style="font-size:var(--small-size);color:var(--gray-dim);font-family:var(--mono);font-weight:400;">Data &amp; Model</span></div>
+        <div class="body-text" style="font-size:var(--small-size);">公域模型 (Claude) + 私域数据 (知识库 12+) + 垂域模型 · MCP Gateway → Knowledge / Database / ServiceGraph</div>
+      </div>
+    </div>
+  </div>
+  <div class="r" style="margin-top:clamp(0.5rem,1.5vh,1rem);font-size:var(--small-size);color:var(--accent);text-align:center;font-family:var(--mono);">模型从 Opus 换成 GPT? 换 L3 的 Adapter。Skills 和 Baselines 一行不改。</div>
+</section>
+
+<!-- ═══════════════════════════════════════════
+     SLIDE 7: STABLE vs VOLATILE
+═══════════════════════════════════════════ -->
+<section class="slide" id="s7">
+  <h2 class="slide-title r">稳态固化 · 敏态抽象</h2>
+  <p class="slide-sub r">模型一定会被追平，能力编码为 Skill 才是真正的护城河</p>
+  <div style="display:grid;grid-template-columns:1fr auto 1fr;gap:clamp(0.8rem,2vw,1.5rem);align-items:center;flex:1;max-height:62vh;">
+    <!-- stable -->
+    <div class="card card-accent r" style="height:100%;display:flex;flex-direction:column;gap:clamp(0.4rem,1vh,0.8rem);">
+      <div style="font-size:var(--h3-size);font-weight:700;color:var(--accent);">稳态 — 核心资产</div>
+      <div style="font-size:var(--small-size);color:var(--gray-dim);">越积越厚，无法复制</div>
+      <div class="divider"></div>
+      <div style="display:flex;flex-direction:column;gap:clamp(0.3rem,0.8vh,0.6rem);flex:1;">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;">
+          <span style="font-size:var(--body-size);font-weight:600;color:var(--gray-title);font-family:var(--mono);">25+ Skills</span>
+          <span style="font-size:var(--small-size);color:var(--gray-body);">十年工程经验的数字化编码</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:baseline;">
+          <span style="font-size:var(--body-size);font-weight:600;color:var(--gray-title);font-family:var(--mono);">8 Baselines</span>
+          <span style="font-size:var(--small-size);color:var(--gray-body);">质量底线自动守护</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:baseline;">
+          <span style="font-size:var(--body-size);font-weight:600;color:var(--gray-title);font-family:var(--mono);">5 Profiles</span>
+          <span style="font-size:var(--small-size);color:var(--gray-body);">全交付角色覆盖</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:baseline;">
+          <span style="font-size:var(--body-size);font-weight:600;color:var(--gray-title);font-family:var(--mono);">12+ Knowledge</span>
+          <span style="font-size:var(--small-size);color:var(--gray-body);">私域知识持续沉淀</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:baseline;">
+          <span style="font-size:var(--body-size);font-weight:600;color:var(--gray-title);font-family:var(--mono);">OODA 流程</span>
+          <span style="font-size:var(--small-size);color:var(--gray-body);">标准化决策环路</span>
+        </div>
+      </div>
+    </div>
+    <!-- adapter -->
+    <div class="r" style="display:flex;flex-direction:column;align-items:center;gap:8px;">
+      <span style="color:var(--accent);font-size:1.2rem;">→</span>
+      <div style="background:var(--gray-dim);border-radius:8px;padding:clamp(0.5rem,1.5vw,1rem) clamp(0.4rem,1vw,0.7rem);writing-mode:vertical-rl;text-orientation:mixed;font-size:var(--small-size);font-weight:700;color:var(--black);font-family:var(--mono);letter-spacing:.1em;">ADAPTER</div>
+      <span style="color:var(--gray-dim);font-size:1.2rem;">→</span>
+    </div>
+    <!-- volatile -->
+    <div class="card card-dim r" style="height:100%;display:flex;flex-direction:column;gap:clamp(0.4rem,1vh,0.8rem);">
+      <div style="font-size:var(--h3-size);font-weight:700;color:var(--gray-body);">敏态 — 可替换组件</div>
+      <div style="font-size:var(--small-size);color:var(--gray-dim);">技术迭代时只换这里</div>
+      <div class="divider"></div>
+      <div style="display:flex;flex-direction:column;gap:clamp(0.5rem,1.5vh,1rem);flex:1;">
+        <div>
+          <div style="font-size:var(--body-size);font-weight:600;color:var(--gray-title);font-family:var(--mono);">ModelAdapter</div>
+          <div style="font-size:var(--small-size);color:var(--gray-dim);">Claude → GPT → Local</div>
+        </div>
+        <div>
+          <div style="font-size:var(--body-size);font-weight:600;color:var(--gray-title);font-family:var(--mono);">RuntimeAdapter</div>
+          <div style="font-size:var(--small-size);color:var(--gray-dim);">Claude Code → ForgeNative</div>
+        </div>
+        <div>
+          <div style="font-size:var(--body-size);font-weight:600;color:var(--gray-title);font-family:var(--mono);">AssetFormatAdapter</div>
+          <div style="font-size:var(--small-size);color:var(--gray-dim);">SKILL.md v1 → v2 → ...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="card r" style="margin-top:clamp(0.5rem,1.5vh,1rem);border-left:3px solid var(--accent);border-radius:0 8px 8px 0;padding:clamp(0.5rem,1.5vw,0.8rem) clamp(0.8rem,2vw,1.2rem);">
+    <span style="font-size:var(--small-size);font-weight:600;color:var(--accent);">战略意义 </span>
+    <span style="font-size:var(--small-size);color:var(--gray-body);">OpenAI 发布更好的模型？换一个 Adapter。25 个 Skill 编码的十年工程经验，竞争对手无法复制。</span>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════
+     SLIDE 8: BEFORE / AFTER
+═══════════════════════════════════════════ -->
+<section class="slide" id="s8">
+  <h2 class="slide-title r">AI 不再只是聊天，而是交付</h2>
+  <div style="display:grid;grid-template-columns:1fr auto 1fr;gap:clamp(0.8rem,2vw,1.5rem);flex:1;max-height:72vh;align-items:stretch;">
+    <!-- before -->
+    <div class="card card-dim r" style="display:flex;flex-direction:column;gap:clamp(0.4rem,1vh,0.7rem);">
+      <div style="font-size:var(--h3-size);font-weight:600;color:var(--gray-dim);font-family:var(--mono);">Before</div>
+      <div class="divider"></div>
+      <ul style="list-style:none;display:flex;flex-direction:column;gap:clamp(0.3rem,0.8vh,0.6rem);">
+        <li class="body-text">AI 在聊天窗口展示代码</li>
+        <li class="body-text">用户手动复制粘贴到文件</li>
+        <li class="body-text">用户手动创建和管理文件</li>
+        <li class="body-text">知识搜索返回 mock 数据</li>
+        <li class="body-text">没有认证，没有权限控制</li>
+        <li class="body-text">AI 不了解项目结构</li>
+      </ul>
+    </div>
+    <!-- arrow -->
+    <div class="r" style="display:flex;align-items:center;justify-content:center;">
+      <span style="font-size:clamp(1.5rem,3vw,2.5rem);color:var(--accent);font-weight:700;">→</span>
+    </div>
+    <!-- after -->
+    <div class="card card-accent r" style="display:flex;flex-direction:column;gap:clamp(0.4rem,1vh,0.7rem);">
+      <div style="font-size:var(--h3-size);font-weight:600;color:var(--accent);font-family:var(--mono);">After — Forge</div>
+      <div class="divider"></div>
+      <ul style="list-style:none;display:flex;flex-direction:column;gap:clamp(0.3rem,0.8vh,0.5rem);">
+        <li>
+          <div style="font-size:var(--body-size);color:var(--gray-title);">AI 直接写文件到 workspace</div>
+          <div style="font-size:var(--small-size);color:var(--gray-dim);font-family:var(--mono);">workspace_write / read / list</div>
+        </li>
+        <li>
+          <div style="font-size:var(--body-size);color:var(--gray-title);">文件树自动刷新，编辑器自动打开</div>
+          <div style="font-size:var(--small-size);color:var(--gray-dim);font-family:var(--mono);">SSE file_changed 事件驱动</div>
+        </li>
+        <li>
+          <div style="font-size:var(--body-size);color:var(--gray-title);">知识搜索返回真实文档</div>
+          <div style="font-size:var(--small-size);color:var(--gray-dim);font-family:var(--mono);">12+ 知识库文档实连</div>
+        </li>
+        <li>
+          <div style="font-size:var(--body-size);color:var(--gray-title);">Keycloak SSO 企业级认证</div>
+          <div style="font-size:var(--small-size);color:var(--gray-dim);font-family:var(--mono);">OIDC PKCE + 4 容器部署</div>
+        </li>
+        <li>
+          <div style="font-size:var(--body-size);color:var(--gray-title);">代码块一键 Apply + 5 秒自动保存</div>
+          <div style="font-size:var(--small-size);color:var(--gray-dim);font-family:var(--mono);">零摩擦交付体验</div>
+        </li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════
+     SLIDE 9: NUMBERS
+═══════════════════════════════════════════ -->
+<section class="slide" id="s9">
+  <h2 class="slide-title r">我们走到了哪里</h2>
+  <p class="slide-sub r">Phase 0 → 1 → 1.5 → 1.6 完成</p>
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:var(--gap);margin-bottom:var(--gap);">
+    <div class="r" style="text-align:center;">
+      <div style="font-size:clamp(2.5rem,6vw,5rem);font-weight:700;color:var(--gray-title);font-family:var(--mono);line-height:1;">45,000+</div>
+      <div class="body-text" style="margin-top:4px;">行代码</div>
+    </div>
+    <div class="r" style="text-align:center;">
+      <div style="font-size:clamp(2.5rem,6vw,5rem);font-weight:700;color:var(--gray-title);font-family:var(--mono);line-height:1;">320+</div>
+      <div class="body-text" style="margin-top:4px;">文件</div>
+    </div>
+    <div class="r" style="text-align:center;">
+      <div style="font-size:clamp(2.5rem,6vw,5rem);font-weight:700;color:var(--gray-title);font-family:var(--mono);line-height:1;">130+</div>
+      <div class="body-text" style="margin-top:4px;">测试</div>
+    </div>
+    <div class="r" style="text-align:center;">
+      <div style="font-size:clamp(2.5rem,6vw,5rem);font-weight:700;color:var(--gray-title);font-family:var(--mono);line-height:1;">89</div>
+      <div class="body-text" style="margin-top:4px;">验收场景</div>
+    </div>
+  </div>
+  <div class="divider r"></div>
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:var(--gap);margin-top:var(--gap);">
+    <div class="r" style="text-align:center;">
+      <div style="font-size:clamp(2rem,5vw,4rem);font-weight:700;color:var(--accent);font-family:var(--mono);line-height:1;">9</div>
+      <div class="body-text" style="margin-top:4px;">MCP 工具</div>
+    </div>
+    <div class="r" style="text-align:center;">
+      <div style="font-size:clamp(2rem,5vw,4rem);font-weight:700;color:var(--gray-title);font-family:var(--mono);line-height:1;">5</div>
+      <div class="body-text" style="margin-top:4px;">Skill Profile</div>
+    </div>
+    <div class="r" style="text-align:center;">
+      <div style="font-size:clamp(2rem,5vw,4rem);font-weight:700;color:var(--gray-title);font-family:var(--mono);line-height:1;">13</div>
+      <div class="body-text" style="margin-top:4px;">Foundation Skill</div>
+    </div>
+    <div class="r" style="text-align:center;">
+      <div style="font-size:clamp(2rem,5vw,4rem);font-weight:700;color:var(--gray-title);font-family:var(--mono);line-height:1;">4</div>
+      <div class="body-text" style="margin-top:4px;">Docker 容器</div>
+    </div>
+  </div>
+  <div class="r" style="margin-top:clamp(0.8rem,2vh,1.5rem);text-align:center;font-size:var(--small-size);color:var(--gray-dim);font-family:var(--mono);">docker compose up → Keycloak SSO → AI 对话 → 代码写入 workspace → 文件树刷新</div>
+</section>
+
+<!-- ═══════════════════════════════════════════
+     SLIDE 10: CROSS-STACK MIGRATION
+═══════════════════════════════════════════ -->
+<section class="slide" id="s10">
+  <h2 class="slide-title r">跨栈迁移：10 倍提效</h2>
+  <p class="slide-sub r">"没人懂旧技术栈"的困局，AI 可以系统性地解决</p>
+  <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:var(--gap);margin-bottom:var(--gap);">
+    <div class="card card-accent r" style="padding:clamp(0.6rem,1.5vw,1rem);">
+      <div style="font-size:var(--small-size);color:var(--gray-dim);font-family:var(--mono);margin-bottom:6px;">01</div>
+      <div style="font-size:var(--body-size);font-weight:600;color:var(--gray-title);margin-bottom:4px;">AI 代码考古</div>
+      <div class="body-text" style="font-size:var(--small-size);">解析项目结构<br>生成项目说明书</div>
+    </div>
+    <div class="card card-dim r" style="padding:clamp(0.6rem,1.5vw,1rem);">
+      <div style="font-size:var(--small-size);color:var(--gray-dim);font-family:var(--mono);margin-bottom:6px;">02</div>
+      <div style="font-size:var(--body-size);font-weight:600;color:var(--gray-title);margin-bottom:4px;">业务规则提取</div>
+      <div class="body-text" style="font-size:var(--small-size);">逐模块分析<br>规则 + 边界条件</div>
+    </div>
+    <div class="card card-dim r" style="padding:clamp(0.6rem,1.5vw,1rem);">
+      <div style="font-size:var(--small-size);color:var(--gray-dim);font-family:var(--mono);margin-bottom:6px;">03</div>
+      <div style="font-size:var(--body-size);font-weight:600;color:var(--gray-title);margin-bottom:4px;">架构设计</div>
+      <div class="body-text" style="font-size:var(--small-size);">.NET → Java 映射<br>依赖拓扑排列</div>
+    </div>
+    <div class="card card-dim r" style="padding:clamp(0.6rem,1.5vw,1rem);">
+      <div style="font-size:var(--small-size);color:var(--gray-dim);font-family:var(--mono);margin-bottom:6px;">04</div>
+      <div style="font-size:var(--body-size);font-weight:600;color:var(--gray-title);margin-bottom:4px;">逐模块迁移</div>
+      <div class="body-text" style="font-size:var(--small-size);">SuperAgent 编写<br>规范自动遵循</div>
+    </div>
+    <div class="card card-dim r" style="padding:clamp(0.6rem,1.5vw,1rem);">
+      <div style="font-size:var(--small-size);color:var(--gray-dim);font-family:var(--mono);margin-bottom:6px;">05</div>
+      <div style="font-size:var(--body-size);font-weight:600;color:var(--gray-title);margin-bottom:4px;">行为等价验证</div>
+      <div class="body-text" style="font-size:var(--small-size);">API 契约对比<br>规则覆盖度检查</div>
+    </div>
+  </div>
+  <div class="divider r"></div>
+  <div class="r" style="display:flex;align-items:center;justify-content:center;gap:clamp(1rem,4vw,4rem);margin-top:var(--gap);">
+    <div style="text-align:center;">
+      <div style="font-size:var(--small-size);color:var(--gray-dim);margin-bottom:4px;">传统方式</div>
+      <div style="font-size:clamp(1.5rem,4vw,3rem);font-weight:700;color:var(--gray-body);font-family:var(--mono);">50-65 人天</div>
+    </div>
+    <div style="font-size:clamp(1.5rem,3vw,2.5rem);color:var(--gray-dim);">→</div>
+    <div style="text-align:center;">
+      <div style="font-size:var(--small-size);color:var(--gray-dim);margin-bottom:4px;">Forge 辅助</div>
+      <div style="font-size:clamp(1.5rem,4vw,3rem);font-weight:700;color:var(--accent);font-family:var(--mono);">5-7 人天</div>
+    </div>
+    <div style="text-align:center;">
+      <div style="font-size:clamp(2.5rem,6vw,5rem);font-weight:700;color:var(--accent);font-family:var(--mono);">10x</div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════
+     SLIDE 11: QUALITY
+═══════════════════════════════════════════ -->
+<section class="slide" id="s11">
+  <h2 class="slide-title r">速度不缺，缺的是安全网</h2>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:clamp(1rem,3vw,2.5rem);flex:1;max-height:72vh;align-items:center;">
+    <div class="r">
+      <div style="font-size:var(--small-size);color:var(--gray-dim);margin-bottom:8px;">首次部署成功率</div>
+      <div style="font-size:clamp(4rem,10vw,8rem);font-weight:700;color:var(--gray-title);font-family:var(--mono);line-height:1;">7.7%</div>
+      <div class="body-text" style="margin-top:clamp(0.5rem,1.5vh,1rem);max-width:480px;">13 次尝试，90 分钟，10 个计划外问题。CORS 通配符直接进入 commit，无人察觉。</div>
+    </div>
+    <div class="r" style="display:flex;flex-direction:column;gap:clamp(0.8rem,2vh,1.5rem);">
+      <div class="card card-dim" style="padding:clamp(0.8rem,2vw,1.5rem);">
+        <div style="font-size:var(--h3-size);font-weight:600;color:var(--gray-title);margin-bottom:8px;">系统性解决</div>
+        <div class="body-text">痛点不修补，而是编码为平台能力。8 道质量底线自动拦截，让未来的开发者无感地获得保护。</div>
+      </div>
+      <div style="text-align:center;">
+        <div style="font-size:var(--small-size);color:var(--gray-dim);margin-bottom:4px;">目标成功率</div>
+        <div style="font-size:clamp(3rem,7vw,5.5rem);font-weight:700;color:var(--accent);font-family:var(--mono);line-height:1;">≥ 90%</div>
+      </div>
+    </div>
+  </div>
+  <div class="r" style="margin-top:clamp(0.5rem,1.5vh,1rem);text-align:center;font-size:var(--small-size);color:var(--gray-dim);">已验证的设计不可隐式退化 · 开发者痛点即平台能力</div>
+</section>
+
+<!-- ═══════════════════════════════════════════
+     SLIDE 12: ROADMAP
+═══════════════════════════════════════════ -->
+<section class="slide" id="s12">
+  <h2 class="slide-title r">从工具到平台到生态</h2>
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:var(--gap);flex:1;max-height:72vh;">
+    <!-- done -->
+    <div class="r" style="display:flex;flex-direction:column;gap:var(--gap);">
+      <div>
+        <div style="font-size:var(--body-size);font-weight:700;color:var(--accent);font-family:var(--mono);margin-bottom:6px;">已完成</div>
+        <div style="height:2px;background:var(--accent);border-radius:1px;"></div>
+      </div>
+      <div class="card" style="flex:1;display:flex;flex-direction:column;gap:clamp(0.5rem,1.5vh,1rem);">
+        <div><div style="font-size:var(--body-size);font-weight:600;color:var(--gray-title);">Phase 0</div><div class="body-text" style="font-size:var(--small-size);">骨架搭建</div></div>
+        <div><div style="font-size:var(--body-size);font-weight:600;color:var(--gray-title);">Phase 1</div><div class="body-text" style="font-size:var(--small-size);">Web IDE 实连</div></div>
+        <div><div style="font-size:var(--body-size);font-weight:600;color:var(--gray-title);">Phase 1.5</div><div class="body-text" style="font-size:var(--small-size);">设计守护 + Docker</div></div>
+        <div><div style="font-size:var(--body-size);font-weight:600;color:var(--gray-title);">Phase 1.6</div><div class="body-text" style="font-size:var(--small-size);">AI 交付闭环 + SSO</div></div>
+      </div>
+    </div>
+    <!-- next -->
+    <div class="r" style="display:flex;flex-direction:column;gap:var(--gap);">
+      <div>
+        <div style="font-size:var(--body-size);font-weight:700;color:var(--gray-title);font-family:var(--mono);margin-bottom:6px;">下一步</div>
+        <div style="height:2px;background:var(--gray-title);border-radius:1px;"></div>
+      </div>
+      <div class="card" style="flex:1;display:flex;flex-direction:column;gap:clamp(0.5rem,1.5vh,1rem);">
+        <div><div style="font-size:var(--body-size);font-weight:600;color:var(--gray-title);">Phase 2</div><div class="body-text" style="font-size:var(--small-size);">OODA 引擎 + SkillLoader</div></div>
+        <div class="body-text" style="font-size:var(--small-size);">底线脚本 CI 集成</div>
+        <div class="body-text" style="font-size:var(--small-size);">跨栈迁移 PoC</div>
+        <div class="body-text" style="font-size:var(--small-size);">3-5 人内部试用</div>
+      </div>
+    </div>
+    <!-- vision -->
+    <div class="r" style="display:flex;flex-direction:column;gap:var(--gap);">
+      <div>
+        <div style="font-size:var(--body-size);font-weight:700;color:var(--gray-dim);font-family:var(--mono);margin-bottom:6px;">远景</div>
+        <div style="height:2px;background:var(--gray-dim);border-radius:1px;"></div>
+      </div>
+      <div class="card" style="flex:1;display:flex;flex-direction:column;gap:clamp(0.5rem,1.5vh,1rem);">
+        <div><div style="font-size:var(--body-size);font-weight:600;color:var(--gray-title);">Phase 3</div><div class="body-text" style="font-size:var(--small-size);">进化环闭合</div></div>
+        <div class="body-text" style="font-size:var(--small-size);">Runtime 完全抽象</div>
+        <div><div style="font-size:var(--body-size);font-weight:600;color:var(--gray-title);">Phase 4</div><div class="body-text" style="font-size:var(--small-size);">Skill 生态开放</div></div>
+        <div class="body-text" style="font-size:var(--small-size);">全组织部署</div>
+      </div>
+    </div>
+  </div>
+  <div class="r" style="margin-top:clamp(0.5rem,1.5vh,1rem);text-align:center;font-size:var(--small-size);color:var(--gray-dim);">终局：1 人 + SuperAgent 全自主交付 · Skill 生态开放 · 知识持续进化</div>
+</section>
+
+<!-- ═══════════════════════════════════════════
+     SLIDE 13: THE ASK
+═══════════════════════════════════════════ -->
+<section class="slide" id="s13">
+  <h2 class="slide-title r">下一步需要什么</h2>
+  <div style="display:flex;flex-direction:column;gap:clamp(0.6rem,2vh,1.2rem);flex:1;max-height:72vh;justify-content:center;">
+    <div class="card r" style="display:flex;align-items:flex-start;gap:clamp(0.8rem,2vw,1.5rem);border-left:3px solid var(--accent);border-radius:0 12px 12px 0;">
+      <div style="font-size:clamp(1.5rem,3.5vw,2.5rem);font-weight:700;color:var(--accent);font-family:var(--mono);min-width:2.5rem;line-height:1;">01</div>
+      <div>
+        <div style="font-size:var(--h3-size);font-weight:600;color:var(--gray-title);margin-bottom:6px;">API Key + 试用环境</div>
+        <div class="body-text">完成 Claude API 接入，3-5 人真实使用。交付闭环已就绪，差这一步跑通完整流程。</div>
+      </div>
+    </div>
+    <div class="card r" style="display:flex;align-items:flex-start;gap:clamp(0.8rem,2vw,1.5rem);border-left:3px solid var(--gray-dim);border-radius:0 12px 12px 0;">
+      <div style="font-size:clamp(1.5rem,3.5vw,2.5rem);font-weight:700;color:var(--gray-dim);font-family:var(--mono);min-width:2.5rem;line-height:1;">02</div>
+      <div>
+        <div style="font-size:var(--h3-size);font-weight:600;color:var(--gray-title);margin-bottom:6px;">1 个试点项目</div>
+        <div class="body-text">选一个小型 .NET → Java 模块，验证 10x 假设。最有说服力的场景，可产出量化 ROI。</div>
+      </div>
+    </div>
+    <div class="card r" style="display:flex;align-items:flex-start;gap:clamp(0.8rem,2vw,1.5rem);border-left:3px solid var(--gray-dim);border-radius:0 12px 12px 0;">
+      <div style="font-size:clamp(1.5rem,3.5vw,2.5rem);font-weight:700;color:var(--gray-dim);font-family:var(--mono);min-width:2.5rem;line-height:1;">03</div>
+      <div>
+        <div style="font-size:var(--h3-size);font-weight:600;color:var(--gray-title);margin-bottom:6px;">CI/CD 管道接入</div>
+        <div class="body-text">8 个底线脚本集成到 GitHub Actions。让质量安全网从"设计了"变成"跑起来"。</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════
+     SLIDE 14: CLOSING
+═══════════════════════════════════════════ -->
+<section class="slide" id="s14" style="align-items:center;text-align:center;">
+  <div class="r" style="margin-bottom:clamp(1.5rem,4vh,3rem);">
+    <svg width="48" height="44" viewBox="0 0 80 72" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect x="4" y="52" width="72" height="14" rx="2" fill="#f5f5f7"/>
+      <rect x="26" y="34" width="28" height="22" fill="#f5f5f7"/>
+      <rect x="10" y="26" width="60" height="12" rx="2" fill="#f5f5f7"/>
+      <rect x="70" y="28" width="10" height="7" rx="1" fill="#f5f5f7"/>
+      <rect x="36" y="8" width="12" height="12" rx="1" fill="#2997ff" transform="rotate(45 42 14)"/>
+      <circle cx="22" cy="18" r="3" fill="#2997ff" opacity="0.7"/>
+      <circle cx="60" cy="16" r="2.5" fill="#2997ff" opacity="0.6"/>
+    </svg>
+  </div>
+  <p class="r" style="font-size:clamp(1.2rem,3vw,2rem);color:var(--gray-dim);margin-bottom:clamp(0.5rem,2vh,1rem);">不是给每个人配一个 AI 助手</p>
+  <p class="r" style="font-size:clamp(1.8rem,4.5vw,3.5rem);font-weight:700;color:var(--gray-title);line-height:1.2;">而是用 AI 重构交付流程本身</p>
+  <div class="r" style="width:100px;height:1px;background:var(--gray-dim);margin:clamp(1.5rem,4vh,3rem) auto;"></div>
+  <p class="r" style="font-size:var(--body-size);color:var(--gray-dim);font-family:var(--mono);">Thank You</p>
+</section>
+
+<script>
+const slides = document.querySelectorAll('.slide');
+const nav = document.getElementById('nav');
+const progress = document.getElementById('progress');
+let current = 0;
+
+// Build nav dots
+slides.forEach((_, i) => {
+  const dot = document.createElement('div');
+  dot.className = 'nav-dot' + (i === 0 ? ' active' : '');
+  dot.addEventListener('click', () => scrollToSlide(i));
+  nav.appendChild(dot);
+});
+
+function scrollToSlide(i) {
+  slides[i].scrollIntoView({ behavior: 'smooth' });
+}
+
+function updateNav(i) {
+  document.querySelectorAll('.nav-dot').forEach((d, j) => d.classList.toggle('active', j === i));
+  progress.style.width = ((i + 1) / slides.length * 100) + '%';
+  current = i;
+}
+
+// Intersection observer for animations + nav
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      entry.target.classList.add('visible');
+      const i = Array.from(slides).indexOf(entry.target);
+      if (i !== -1) updateNav(i);
+    }
+  });
+}, { threshold: 0.5 });
+
+slides.forEach(s => observer.observe(s));
+
+// Keyboard navigation
+document.addEventListener('keydown', e => {
+  if (e.key === 'ArrowDown' || e.key === 'ArrowRight' || e.key === ' ') {
+    e.preventDefault();
+    if (current < slides.length - 1) scrollToSlide(current + 1);
+  } else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') {
+    e.preventDefault();
+    if (current > 0) scrollToSlide(current - 1);
+  }
+});
+
+// Touch swipe
+let touchY = 0;
+document.addEventListener('touchstart', e => { touchY = e.touches[0].clientY; }, { passive: true });
+document.addEventListener('touchend', e => {
+  const dy = touchY - e.changedTouches[0].clientY;
+  if (Math.abs(dy) > 50) {
+    if (dy > 0 && current < slides.length - 1) scrollToSlide(current + 1);
+    else if (dy < 0 && current > 0) scrollToSlide(current - 1);
+  }
+}, { passive: true });
+
+// Init progress
+progress.style.width = (1 / slides.length * 100) + '%';
+slides[0].classList.add('visible');
+</script>
+</body>
+</html>
