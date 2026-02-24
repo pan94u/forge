@@ -9,6 +9,10 @@ import {
   AlertTriangle,
   Terminal,
   Filter,
+  Globe,
+  FolderOpen,
+  User,
+  Layers,
 } from "lucide-react";
 
 interface KnowledgeDocument {
@@ -19,12 +23,22 @@ interface KnowledgeDocument {
   updatedAt: string;
   author: string;
   tags: string[];
+  scope?: "global" | "workspace" | "personal";
+  scopeId?: string;
 }
 
 interface KnowledgeSearchProps {
   onSelectDocument: (docId: string) => void;
   selectedDocId: string | null;
+  workspaceId?: string;
 }
+
+const scopeFilters = [
+  { value: "all", label: "All", icon: Layers },
+  { value: "global", label: "Global", icon: Globe },
+  { value: "workspace", label: "Workspace", icon: FolderOpen },
+  { value: "personal", label: "Personal", icon: User },
+] as const;
 
 const docTypeFilters = [
   { value: "all", label: "All", icon: BookOpen },
@@ -47,26 +61,63 @@ function getDocTypeIcon(type: KnowledgeDocument["type"]) {
   }
 }
 
+function getScopeBadge(scope?: string) {
+  switch (scope) {
+    case "workspace":
+      return (
+        <span className="inline-flex items-center gap-0.5 rounded bg-blue-500/10 px-1.5 py-0.5 text-[10px] font-medium text-blue-400">
+          <FolderOpen className="h-2.5 w-2.5" />
+          Workspace
+        </span>
+      );
+    case "personal":
+      return (
+        <span className="inline-flex items-center gap-0.5 rounded bg-purple-500/10 px-1.5 py-0.5 text-[10px] font-medium text-purple-400">
+          <User className="h-2.5 w-2.5" />
+          Personal
+        </span>
+      );
+    case "global":
+      return (
+        <span className="inline-flex items-center gap-0.5 rounded bg-green-500/10 px-1.5 py-0.5 text-[10px] font-medium text-green-400">
+          <Globe className="h-2.5 w-2.5" />
+          Global
+        </span>
+      );
+    default:
+      return null;
+  }
+}
+
 export function KnowledgeSearch({
   onSelectDocument,
   selectedDocId,
+  workspaceId,
 }: KnowledgeSearchProps) {
   const [query, setQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState<string>("all");
+  const [scopeFilter, setScopeFilter] = useState<string>("all");
   const [showFilters, setShowFilters] = useState(false);
 
   const { data: results, isLoading } = useQuery<KnowledgeDocument[]>({
-    queryKey: ["knowledge-search", query, typeFilter],
+    queryKey: ["knowledge-search", query, typeFilter, scopeFilter, workspaceId],
     queryFn: async () => {
       const params = new URLSearchParams();
       if (query) params.set("q", query);
       if (typeFilter !== "all") params.set("type", typeFilter);
+      if (scopeFilter !== "all") params.set("scope", scopeFilter);
+      if (workspaceId) params.set("workspaceId", workspaceId);
       const res = await fetch(`/api/knowledge/search?${params}`);
       if (!res.ok) throw new Error("Search failed");
       return res.json();
     },
     placeholderData: (prev) => prev,
   });
+
+  // Hide workspace filter if not in workspace context
+  const availableScopeFilters = workspaceId
+    ? scopeFilters
+    : scopeFilters.filter((f) => f.value !== "workspace");
 
   return (
     <div className="flex h-full flex-col">
@@ -85,7 +136,7 @@ export function KnowledgeSearch({
           <button
             onClick={() => setShowFilters(!showFilters)}
             className={`rounded-md border p-1.5 ${
-              showFilters || typeFilter !== "all"
+              showFilters || typeFilter !== "all" || scopeFilter !== "all"
                 ? "border-primary bg-primary/10 text-primary"
                 : "border-input text-muted-foreground hover:bg-accent"
             }`}
@@ -94,24 +145,43 @@ export function KnowledgeSearch({
           </button>
         </div>
 
-        {/* Filter chips */}
+        {/* Scope filter chips */}
         {showFilters && (
-          <div className="flex flex-wrap gap-1">
-            {docTypeFilters.map((f) => (
-              <button
-                key={f.value}
-                onClick={() => setTypeFilter(f.value)}
-                className={`flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium transition-colors ${
-                  typeFilter === f.value
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-muted text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                <f.icon className="h-3 w-3" />
-                {f.label}
-              </button>
-            ))}
-          </div>
+          <>
+            <div className="flex flex-wrap gap-1">
+              {availableScopeFilters.map((f) => (
+                <button
+                  key={f.value}
+                  onClick={() => setScopeFilter(f.value)}
+                  className={`flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium transition-colors ${
+                    scopeFilter === f.value
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-muted text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  <f.icon className="h-3 w-3" />
+                  {f.label}
+                </button>
+              ))}
+            </div>
+            {/* Type filter chips */}
+            <div className="flex flex-wrap gap-1">
+              {docTypeFilters.map((f) => (
+                <button
+                  key={f.value}
+                  onClick={() => setTypeFilter(f.value)}
+                  className={`flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium transition-colors ${
+                    typeFilter === f.value
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-muted text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  <f.icon className="h-3 w-3" />
+                  {f.label}
+                </button>
+              ))}
+            </div>
+          </>
         )}
       </div>
 
@@ -142,9 +212,12 @@ export function KnowledgeSearch({
                 <div className="flex items-start gap-2">
                   {getDocTypeIcon(doc.type)}
                   <div className="flex-1 min-w-0">
-                    <h4 className="text-sm font-medium truncate">
-                      {doc.title}
-                    </h4>
+                    <div className="flex items-center gap-2">
+                      <h4 className="text-sm font-medium truncate">
+                        {doc.title}
+                      </h4>
+                      {getScopeBadge(doc.scope)}
+                    </div>
                     <p className="mt-1 text-xs text-muted-foreground line-clamp-2">
                       {doc.snippet}
                     </p>

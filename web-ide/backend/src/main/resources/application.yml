@@ -253,6 +253,27 @@ forge:
           supports-vision: false
           cost-tier: LOW
 
+    minimax:
+      enabled: true
+      api-key: ${MINIMAX_API_KEY:}
+      base-url: ${MINIMAX_API_URL:https://api.minimaxi.com/anthropic}
+      models:
+        - id: MiniMax-M2.5
+          display-name: MiniMax M2.5
+          context-window: 1000000
+          max-output-tokens: 16384
+          cost-tier: MEDIUM
+        - id: MiniMax-M2.5-lightning
+          display-name: MiniMax M2.5 Lightning
+          context-window: 1000000
+          max-output-tokens: 16384
+          cost-tier: LOW
+        - id: MiniMax-M2.5-highspeed
+          display-name: MiniMax M2.5 Highspeed
+          context-window: 1000000
+          max-output-tokens: 16384
+          cost-tier: LOW
+
     openai:
       enabled: true
       api-key: ${LOCAL_MODEL_API_KEY:}

@@ -252,12 +252,13 @@ class McpProxyService(
             ),
             McpTool(
                 name = "search_knowledge",
-                description = "Search the knowledge base for documentation, ADRs, runbooks, conventions, and API docs. Returns matching documents with titles and excerpts.",
+                description = "Search the knowledge base for documentation, ADRs, runbooks, conventions, and API docs. Supports scope-based filtering: global (platform-wide), workspace (project-specific), personal (user's own). When no scope is specified, uses cascade search (workspace > personal > global priority).",
                 inputSchema = mapOf(
                     "type" to "object",
                     "properties" to mapOf(
                         "query" to mapOf("type" to "string", "description" to "Search query (keywords to find in document titles and content)"),
-                        "type" to mapOf("type" to "string", "description" to "Document type filter", "enum" to listOf("adr", "runbook", "convention", "api-doc"))
+                        "type" to mapOf("type" to "string", "description" to "Document type filter", "enum" to listOf("adr", "runbook", "convention", "api-doc")),
+                        "scope" to mapOf("type" to "string", "description" to "Knowledge scope filter: global, workspace, personal. Omit for cascade search.", "enum" to listOf("global", "workspace", "personal"))
                     ),
                     "required" to listOf("query")
                 )

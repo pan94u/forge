@@ -3768,3 +3768,220 @@ Level 3: 子文件 + 可执行脚本（按需读取/执行，无上限）
 - Git commit: `04da304`（26 files changed, +3010, -1899）
 - 设计基线版本：v9 → **v10**
 - 规划基线版本：v1.9 → **v2.0**
+
+---
+
+## Session 30 — 2026-02-23：Git Clone 进度条 + 知识库 Scope 分层 + Bug 修复
+
+### 30.1 目标
+
+三大功能：Git Clone 异步化+进度条、知识库 Global/Workspace/Personal Scope 分层、品牌文档重定位。附带修复 streamWithRetry 率限重试 bug。
+
+### 30.2 实施内容
+
+**任务 1：Git Clone 异步化 + 前端进度条**
+
+| 操作 | 文件 | 说明 |
+|------|------|------|
+| 修改 | `entity/WorkspaceEntity.kt` | +errorMessage 字段 |
+| 新建 | `db/migration/V7__add_workspace_error_message.sql` | ALTER TABLE +error_message |
+| 修改 | `service/WorkspaceService.kt` | 异步 clone：POST 返回 creating → 后台线程 git clone → active/error |
+| 修改 | `model/Models.kt` | Workspace +errorMessage |
+| 修改 | `frontend/src/app/workspace/[id]/page.tsx` | 进度条 UI：模拟递增 + 2s 轮询 |
+| 修改 | `frontend/src/lib/workspace-api.ts` | +errorMessage 类型 |
+
+**任务 2：知识库 Scope 分层**
+
+| 操作 | 文件 | 说明 |
+|------|------|------|
+| 修改 | `model/Models.kt` | +KnowledgeScope enum, +scope/scopeId, +CRUD DTOs |
+| 新建 | `entity/KnowledgeDocumentEntity.kt` | JPA entity with scope 支持 |
+| 新建 | `repository/KnowledgeDocumentRepository.kt` | +findByScopeAndScopeId 等 |
+| 新建 | `db/migration/V8__create_knowledge_documents.sql` | knowledge_documents 表 + 索引 |
+| 重写 | `service/KnowledgeIndexService.kt` | ConcurrentHashMap → JPA，级联搜索优先级 ws(+20) > personal(+10) > global |
+| 修改 | `controller/KnowledgeController.kt` | +scope 参数, +POST/PUT/DELETE CRUD |
+| 修改 | `service/BuiltinToolHandler.kt` | search_knowledge +scope |
+| 修改 | `service/McpProxyService.kt` | search_knowledge schema +scope |
+| 重写 | `frontend/.../KnowledgeSearch.tsx` | Scope filter chips (All/Global/Workspace/Personal) |
+| 修改 | `frontend/.../knowledge/page.tsx` | useSearchParams 提取 workspaceId |
+
+**任务 3：品牌文档重定位**
+
+| 操作 | 文件 | 说明 |
+|------|------|------|
+| 修改 | `CLAUDE.md` | AI 驱动的智能交付平台愿景 |
+| 修改 | `design-baseline-v1.md` | 品牌统一 |
+| 修改 | `planning-baseline-v1.5.md` | 品牌统一 |
+
+**附加修复**
+
+| 操作 | 文件 | 说明 |
+|------|------|------|
+| 修复 | `service/AgenticLoopOrchestrator.kt` | streamWithRetry：RateLimitException 在 Flow collect 阶段也能被捕获重试 |
+| 修复 | `model/Models.kt` | @JsonCreator: DocumentType/KnowledgeScope 大小写无关反序列化 |
+| 修改 | `service/EncryptionService.kt` | 无密钥时降级 Base64（不再抛异常） |
+| 修改 | `test/.../McpProxyServiceTest.kt` | 适配 BuiltinToolHandler 新构造函数 |
+
+### 30.3 Bug 修复
+
+| Bug | 根因 | 修复 |
+|-----|------|------|
+| BUG-029: 聊天 UI 卡住无响应 | `streamWithRetry` 只在 Flow 创建时 catch RateLimitException，collect 阶段的 429 直接崩溃 | 用 `flow {}` builder 包裹 creation + collection 两阶段 |
+| BUG-030: Knowledge CRUD 400 | `KnowledgeScope` 有 `@JsonValue` 返回小写 → Jackson 反序列化也期望小写；`DocumentType` 无 `@JsonValue` → 期望大写。混合大小写 | 两个枚举都加 `@JsonCreator` companion object |
+| BUG-031: KnowledgeIndexService 初始化警告 | `private val` 在 `init{}` 中赋值，Kotlin 编译器警告 | 改为内联初始化 |
+
+### 30.4 待修复 Bug（已记录）
+
+| Bug | 症状 | 根因 |
+|-----|------|------|
+| BUG-032: Chat Message FK 违约 | `CHAT_MESSAGES FOREIGN KEY(SESSION_ID)` 约束失败，聊天历史未持久化 | WebSocket 传入的 chatSessionId 在 chat_sessions 表中不存在，insert message 时 FK 违约。对话能正常进行（内存中），但刷新后丢失 |
+
+### 30.5 Acceptance Test 结果
+
+| # | 场景 | 结果 |
+|---|------|------|
+| AT-1 | Knowledge Search API | ✅ 5 docs |
+| AT-2 | Knowledge Scope Filter | ✅ global=5, workspace=0, personal=0 |
+| AT-3 | Knowledge CRUD | ✅ create/read/update/delete |
+| AT-4 | Workspace 创建（空） | ✅ status=active |
+| AT-5 | Workspace 创建（git，异步 clone） | ✅ creating→active (3s) |
+| AT-6 | Git Clone 失败→错误消息 | ✅ status=error + errorMessage |
+| AT-7 | Knowledge 类型过滤 | ✅ wiki=2, runbook=1, api_doc=1 |
+| AT-8 | 级联搜索优先级 | ✅ workspace > personal > global |
+| AT-9 | MCP search_knowledge scope 参数 | ✅ |
+| AT-10 | 前端页面加载 | ✅ /, /knowledge, /skills, /workspace/new |
+| AT-11 | API 回归 | ✅ workspaces/tools/skills/services 全部正常 |
+
+**通过率：11/11 = 100%**
+
+### 30.6 统计快照
+
+- Flyway migration: V1-V6 → **V1-V8**（+V7 workspace error_message, +V8 knowledge_documents）
+- Knowledge CRUD: 无 → **POST/PUT/DELETE /api/knowledge/docs**
+- Knowledge Scope: 无 → **Global/Workspace/Personal 三层级联**
+- Workspace 创建: 同步阻塞 → **异步 clone + 前端进度条**
+- MCP 工具: 17 个（search_knowledge +scope 参数）
+- 单元测试: 156（全部通过）
+- Git commits: `8a283e5`（feat）+ `1255b5b`（docs）
+
+---
+
+## Session 31 — 2026-02-23：H2 持久化 + MiniMax 模型支持 + 模型选择端到端打通
+
+### 31.1 目标
+
+解决三个问题：(1) Docker 重启 H2 数据丢失；(2) 新增 MiniMax 模型供应商；(3) 前端选的模型没有传到后端（selectedModel 只存 localStorage）
+
+### 31.2 实施内容
+
+| 操作 | 文件 | 说明 |
+|------|------|------|
+| 修改 | `infrastructure/docker/docker-compose.trial.yml` | +backend data volume 持久化 H2, +MiniMax env vars |
+| 修改 | `web-ide/backend/Dockerfile` | +`mkdir -p /app/data` |
+| 修改 | `web-ide/backend/src/main/resources/application.yml` | +minimax 配置块（3 模型） |
+| 修改 | `.../config/ModelProperties.kt` | +minimax: ProviderConfig 字段 |
+| 修改 | `.../config/ClaudeConfig.kt` | +minimax adapter 注册（复用 ClaudeAdapter, 无系统 key 也注册） |
+| 修改 | `.../service/ClaudeAgentService.kt` | +ModelRegistry 注入, +modelId 参数, +动态 adapter 选择, resolveUserApiKey 去掉 anonymous 过滤 |
+| 修改 | `.../service/AgenticLoopOrchestrator.kt` | +adapter 参数, 内部用 activeAdapter 替代硬编码 claudeAdapter |
+| 修改 | `.../service/BaselineAutoChecker.kt` | +adapter 参数透传 |
+| 修改 | `.../websocket/ChatWebSocketHandler.kt` | +解析 modelId 从 WebSocket payload, 传给 streamMessage |
+| 修改 | `.../test/.../ClaudeAgentServiceTest.kt` | +modelRegistry mock, agenticStream 匹配 6 参数 |
+| 修改 | `adapters/model-adapter/.../ModelRegistry.kt` | +providerForModel() 公共方法 |
+| 修改 | `web-ide/frontend/src/lib/claude-client.ts` | +modelId 参数, WebSocket 消息携带 modelId |
+| 修改 | `.../components/chat/AiChatSidebar.tsx` | +传递 selectedModel 到 streamMessage |
+| 修改 | `.../components/chat/ModelSettingsDialog.tsx` | +MiniMax 供应商 |
+| 修改 | `.../components/chat/ModelSelector.tsx` | +MiniMax label |
+
+### 31.3 发现的 Bug 及修复
+
+| Bug | 根因 | 修复 |
+|-----|------|------|
+| BUG-033: MiniMax 模型不在下拉列表 | ClaudeConfig 注册条件 `minimaxKey.isNotBlank()`，无系统 key 时 adapter 不注册，/api/models 返回空 | 改为只要 `enabled` 就注册 adapter（用 placeholder key），用户可通过 Settings 配置自己的 key |
+| BUG-034: 用户配置的 API Key 不生效 | `resolveUserApiKey` 中 `userId != "anonymous"` 过滤掉了安全关闭模式下所有用户 | 去掉 anonymous 过滤，anonymous 用户也能用自己配置的 key |
+
+### 31.4 经验沉淀
+
+- **无系统 Key 也应注册 adapter**：模型列表展示和 API 调用是两个独立关注点。即使没有系统级 key，也应注册 adapter 让前端看到模型列表，运行时通过用户配置的 key 覆盖
+- **anonymous 用户不应被忽略**：`FORGE_SECURITY_ENABLED=false` 时所有用户都是 anonymous，过滤 anonymous 等于禁用了用户级配置功能
+- **端到端打通检查清单**：前端状态 → WebSocket payload → Handler 解析 → Service 参数 → Orchestrator 参数，任何一环断开都不生效
+
+### 31.5 统计快照
+
+- 模型供应商: 5 → **6**（+MiniMax）
+- MiniMax 模型: MiniMax-M2.5 / M2.5-lightning / M2.5-highspeed
+- H2 持久化: 无 volume → **forge-backend-data volume**
+- 模型选择: 前端 only → **端到端打通**（前端 → WebSocket → 后端动态 adapter）
+- 单元测试: 156（147 pass, 9 pre-existing）
+- Git commit: `b162436`, `3e4ed81`
+
+---
+
+## Session 32 — 2026-02-23：Evaluation Profile + 知识库本地写入 + Context Usage 增强
+
+### 32.1 目标
+
+三方面：(1) Docker 后端启动崩溃修复（DB_DRIVER 默认值问题）；(2) 知识库 page_create 本地模式写入；(3) context_usage 每 turn 发送 + 前端始终显示。同时新增 evaluation-profile 及学习闭环增强。
+
+### 32.2 实施内容
+
+| 操作 | 文件 | 说明 |
+|------|------|------|
+| **Docker 修复 + 知识库写入 + Context Usage** | | |
+| 修改 | `infrastructure/docker/docker-compose.trial.yml` | DB_DRIVER 默认改回 `org.h2.Driver`，knowledge-base volume 去 `:ro` 改为可写，+`forge-backend-data` volume |
+| 修改 | `.../knowledge/tools/PageCreateTool.kt` | +local mode：KNOWLEDGE_MODE=local 时直接写 Markdown 到 `knowledge-base/<space>/`，+`httpClient` lazy 初始化 |
+| 修改 | `.../knowledge/LocalKnowledgeProvider.kt` | `lazy val` → `@Volatile var`，+`reload()` 即时重索引 |
+| 修改 | `.../knowledge/KnowledgeMcpServer.kt` | 传递 `localProvider` 和 `knowledgeBasePath` 给 PageCreateTool |
+| 修改 | `.../service/AgenticLoopOrchestrator.kt` | MAX_AGENTIC_TURNS 8→50，context_usage 每 turn 发送（含 turn 字段），去除 `/maxTurns` 日志 |
+| 修改 | `.../components/chat/AiChatSidebar.tsx` | Context Usage 卡片去除 `isStreaming` 条件始终显示，+turn 字段，显示格式 `65% · T3 · P1` |
+| 新增 | `knowledge-base/workspace/*.md` | 知识抽取测试产生的 2 个 workspace 知识文档 |
+| **Evaluation Profile + 学习闭环** | | |
+| 新增 | `plugins/.../skill-profiles/evaluation-profile.md` | read-only 分析模式 profile（mode: read-only） |
+| 修改 | `plugins/.../skill-profiles/development-profile.md` | +bug-fix-workflow skill |
+| 新增 | `plugins/.../skills/bug-fix-workflow/SKILL.md` | 结构化 Bug 修复工作流 Skill |
+| 新增 | `plugins/.../skills/document-generation/SKILL.md` | 文档生成 Skill |
+| 新增 | `plugins/.../skills/knowledge-distillation/SKILL.md` | 知识萃取 Skill |
+| 新增 | `plugins/.../skills/progress-evaluation/SKILL.md` | 进度评估 Skill |
+| 修改 | `.../service/skill/ProfileRouter.kt` | +评估关键词路由（@评估/进度/状态/复盘），关键词评分改为加权（短关键词半权），短消息弱匹配降低 confidence |
+| 修改 | `.../service/skill/SkillModels.kt` | +evaluation stage 匹配，ProfileDefinition +mode 字段 |
+| 修改 | `.../service/skill/SkillLoader.kt` | 解析 profile YAML 中的 mode 字段 |
+| 修改 | `.../service/skill/SystemPromptAssembler.kt` | +read-only mode 行为指引（Analysis Behavior 章节） |
+| 修改 | `.../service/learning/SkillFeedbackService.kt` | +evaluationRepository 注入，FeedbackReport +四维评分聚合 |
+| 新增 | `.../controller/EvaluationController.kt` | 评估 REST API（CRUD + 统计） |
+| 新增 | `.../entity/InteractionEvaluationEntity.kt` | 交互评估 JPA Entity（4 维度评分） |
+| 新增 | `.../repository/InteractionEvaluationRepository.kt` | 评估数据 Repository |
+| 新增 | `.../service/learning/InteractionEvaluationService.kt` | 评估服务（自动评估 + 手动评估） |
+| 新增 | `.../service/learning/LearningLoopPipelineService.kt` | 学习闭环管道服务 |
+| 新增 | `agent-eval/eval-sets/evaluation-profile/eval-001~003.yaml` | 评估 profile 的 3 个 eval case |
+| 新增 | `agent-eval/eval-sets/development-profile/eval-004-structured-bugfix.yaml` | 结构化 bugfix eval case |
+| 新增 | `web-ide/frontend/src/app/evaluations/page.tsx` | 评估管理前端页面 |
+| **文档** | | |
+| 修改 | `docs/baselines/design-baseline-v1.md` | v11→v12（+62 行） |
+| 修改 | `docs/analysis/buglist.md` | +BUG-029~032 |
+
+### 32.3 发现的 Bug 及修复
+
+| Bug | 根因 | 修复 |
+|-----|------|------|
+| Docker 后端崩溃 | PR #7 将 `DB_DRIVER` 默认改为 `org.postgresql.Driver`，但实际用 H2 | 改回 `org.h2.Driver`，DB_URL 默认 `jdbc:h2:file:./data/forge` |
+| Flyway V5 checksum mismatch | PR #7 修改了 V5 migration 脚本，stale volume 保留旧 checksum | 删除 `docker_forge-backend-data` volume 重建 |
+| 知识写入失败 | PageCreateTool 只支持 Confluence API，local mode 调用不存在的 wiki 端点 | 新增 `executeLocal()` 方法直接写文件 |
+| `localProvider.reload()` 编译错误 | nullable receiver 调用非空方法 | `localProvider!!.reload()`（已在 null check 分支内） |
+| Context Usage 卡片不显示 | 仅 `compressionPhase > 0` 时发送事件 + 前端要求 `isStreaming` | 每 turn 发送 + 去除 isStreaming 条件 |
+
+### 32.4 经验沉淀
+
+- **Docker 环境变量默认值要保守**：PR 合入的默认值变更（如 DB_DRIVER）可能导致其他部署模式崩溃，默认值应该对应最简配置（H2）而非最复杂配置（PostgreSQL）
+- **MCP 工具双模式设计**：知识库工具应同时支持 local（文件写入）和 wiki（API 调用）两种模式，确保 trial 部署无外部依赖也能完整运行
+- **context_usage 是 UX 关键信号**：用户需要知道每轮对话消耗多少上下文窗口，压缩阶段信息也很重要——应该每 turn 都发，不仅限于压缩触发时
+
+### 32.5 统计快照
+
+- Skill Profiles: 5 → **6**（+evaluation-profile）
+- Skills: 28 → **32**（+bug-fix-workflow, document-generation, knowledge-distillation, progress-evaluation）
+- MAX_AGENTIC_TURNS: 8 → **50**（安全上限）
+- MCP 工具: 17 → **18**（page_create local mode 不算新工具，但 knowledge write 能力新增）
+- 设计基线: v11 → **v12**
+- Buglist: 28 → **32**（BUG-029~032）
+- 单元测试: 156
+- 规划基线: v2.1 → **v2.2**（+77 行，Phase 7 ✅，演进路线重编号 Phase 8-10）
+- Git commits: `20e25fe`, `cda0e21`, `a325e85`, `e37b89f`(logbook), `bfe3d4d`(规划基线 v2.2)

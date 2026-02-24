@@ -10,7 +10,7 @@ services:
       WIKI_BASE_URL: "http://localhost:8090"
       WIKI_API_TOKEN: ""
     volumes:
-      - ../../knowledge-base:/knowledge-base:ro
+      - ../../knowledge-base:/knowledge-base
     ports:
       - "8081:8081"
     healthcheck:
@@ -46,6 +46,9 @@ services:
     environment:
       # --- Provider API Keys ---
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ANTHROPIC_API_URL: ${ANTHROPIC_API_URL:-https://api.anthropic.com}
+      MINIMAX_API_KEY: ${MINIMAX_API_KEY:-}
+      MINIMAX_API_URL: ${MINIMAX_API_URL:-https://api.minimaxi.com/anthropic}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       DASHSCOPE_API_KEY: ${DASHSCOPE_API_KEY:-}
       # --- AWS Bedrock ---
@@ -64,15 +67,16 @@ services:
       FORGE_FRONTEND_URL: "http://localhost:9000"
       SPRING_JPA_HIBERNATE_DDL_AUTO: update
       FORGE_PLUGINS_PATH: /plugins
-      # --- DataSource ---
-      DB_URL: ${DB_URL:-}
-      DB_USERNAME: ${DB_USERNAME:-}
+      # --- DataSource (default: H2 file, override via .env for PostgreSQL) ---
+      DB_URL: ${DB_URL:-jdbc:h2:file:./data/forge;AUTO_SERVER=TRUE}
+      DB_USERNAME: ${DB_USERNAME:-sa}
       DB_PASSWORD: ${DB_PASSWORD:-}
-      DB_DRIVER: ${DB_DRIVER:-org.postgresql.Driver}
+      DB_DRIVER: ${DB_DRIVER:-org.h2.Driver}
       FORGE_MCP_SERVERS: "http://knowledge-mcp:8081,http://database-mcp:8082"
     volumes:
       - ../../plugins:/plugins:ro
-      - ../../knowledge-base:/knowledge-base:ro
+      - ../../knowledge-base:/knowledge-base
+      - forge-backend-data:/app/data
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/api/knowledge/search"]
       interval: 15s
@@ -105,3 +109,7 @@ services:
     depends_on:
       - backend
       - frontend
+
+volumes:
+  forge-backend-data:
+    driver: local

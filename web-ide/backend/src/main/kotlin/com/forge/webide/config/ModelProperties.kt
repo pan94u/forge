@@ -42,6 +42,9 @@ data class ModelProperties(
     /** 阿里云通义千问 (DashScope) */
     val dashscope: ProviderConfig = ProviderConfig(),
 
+    /** MiniMax（兼容 Anthropic 协议） */
+    val minimax: ProviderConfig = ProviderConfig(),
+
     /** OpenAI 兼容 / 本地模型 */
     val openai: OpenAIProviderConfig = OpenAIProviderConfig()
 )

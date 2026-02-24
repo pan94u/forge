@@ -4,6 +4,7 @@ description: "Skill Profile for the Development delivery stage. Loads core codin
 skills:
   - delivery-methodology
   - code-generation
+  - bug-fix-workflow
   - kotlin-conventions
   - spring-boot-patterns
   - database-patterns

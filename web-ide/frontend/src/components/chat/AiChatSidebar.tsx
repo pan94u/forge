@@ -94,7 +94,7 @@ export function AiChatSidebar({
   const [activityLog, setActivityLog] = useState<SubStep[]>([]);
   const [showActivityLog, setShowActivityLog] = useState(false);
   const [currentTurn, setCurrentTurn] = useState<{ turn: number; maxTurns: number } | null>(null);
-  const [contextUsage, setContextUsage] = useState<{ tokensUsed: number; tokenBudget: number; compressionPhase: number } | null>(null);
+  const [contextUsage, setContextUsage] = useState<{ tokensUsed: number; tokenBudget: number; compressionPhase: number; turn: number } | null>(null);
   const [oodaDetail, setOodaDetail] = useState<string>("");
   const [baselineResult, setBaselineResult] = useState<BaselineResult | null>(null);
   const [hitlPending, setHitlPending] = useState(false);
@@ -104,6 +104,12 @@ export function AiChatSidebar({
     deliverables: string[];
     baselineResults?: Array<{ name: string; status: string; output?: string }>;
     timeoutSeconds: number;
+  } | null>(null);
+  const [intentConfirmation, setIntentConfirmation] = useState<{
+    currentProfile: string;
+    confidence: number;
+    reason: string;
+    options: Array<{ id: string; label: string; description: string }>;
   } | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -290,6 +296,7 @@ export function AiChatSidebar({
                 tokensUsed: event.tokensUsed ?? 0,
                 tokenBudget: event.tokenBudget ?? 25000,
                 compressionPhase: event.compressionPhase ?? 0,
+                turn: event.turn ?? 0,
               });
               break;
             case "tool_use_start":
@@ -311,7 +318,16 @@ export function AiChatSidebar({
                 setHitlData(null);
               }
               break;
+            case "intent_confirmation":
+              setIntentConfirmation({
+                currentProfile: event.currentProfile ?? "",
+                confidence: event.confidence ?? 0,
+                reason: event.reason ?? "",
+                options: event.options ?? [],
+              });
+              break;
             case "profile_active":
+              setIntentConfirmation(null);
               setActiveProfile({
                 name: event.activeProfile ?? "unknown",
                 skills: event.loadedSkills ?? [],
@@ -415,6 +431,7 @@ export function AiChatSidebar({
         },
         abortController.signal,
         workspaceId,
+        selectedModel,
       );
     } catch (err) {
       if ((err as Error).name !== "AbortError") {
@@ -437,9 +454,10 @@ export function AiChatSidebar({
       setOodaDetail("");
       setCurrentTurn(null);
       setBaselineResult(null);
-      setContextUsage(null);
+      // contextUsage intentionally NOT cleared — keep showing after stream ends
       setHitlPending(false);
       setHitlData(null);
+      setIntentConfirmation(null);
       abortRef.current = null;
     }
   };
@@ -696,21 +714,26 @@ export function AiChatSidebar({
             {/* Delivery Stage Indicator */}
             {activeProfile && (
               <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                {["Planning", "Design", "Development", "Testing", "Ops"].map((stage) => {
+                {["Planning", "Design", "Development", "Testing", "Ops", "Evaluation"].map((stage) => {
                   const profileName = activeProfile.name.toLowerCase();
                   const stageMap: Record<string, string> = {
                     "requirement-engineering-profile": "Planning",
+                    "planning-profile": "Planning",
                     "architecture-design-profile": "Design",
                     "detailed-design-profile": "Design",
+                    "design-profile": "Design",
                     "development-profile": "Development",
                     "code-generation-profile": "Development",
                     "test-case-writing-profile": "Testing",
+                    "testing-profile": "Testing",
                     "deployment-ops-profile": "Ops",
+                    "ops-profile": "Ops",
+                    "evaluation-profile": "Evaluation",
                   };
                   const currentStage = stageMap[profileName] || "Development";
                   const isActive = stage === currentStage;
-                  const stageIdx = ["Planning", "Design", "Development", "Testing", "Ops"].indexOf(stage);
-                  const currentIdx = ["Planning", "Design", "Development", "Testing", "Ops"].indexOf(currentStage);
+                  const stageIdx = ["Planning", "Design", "Development", "Testing", "Ops", "Evaluation"].indexOf(stage);
+                  const currentIdx = ["Planning", "Design", "Development", "Testing", "Ops", "Evaluation"].indexOf(currentStage);
                   const isPast = stageIdx < currentIdx;
                   return (
                     <span
@@ -755,7 +778,7 @@ export function AiChatSidebar({
               </div>
             )}
             {/* Context Usage Indicator */}
-            {contextUsage && isStreaming && (
+            {contextUsage && (
               <div className="flex items-center gap-1.5 text-xs text-muted-foreground border border-border rounded-md px-2 py-1">
                 <span>Context:</span>
                 <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
@@ -772,7 +795,8 @@ export function AiChatSidebar({
                 </div>
                 <span className="text-[10px]">
                   {Math.round((contextUsage.tokensUsed / contextUsage.tokenBudget) * 100)}%
-                  {contextUsage.compressionPhase > 0 && ` (P${contextUsage.compressionPhase})`}
+                  {contextUsage.turn > 0 && ` · T${contextUsage.turn}`}
+                  {contextUsage.compressionPhase > 0 && ` · P${contextUsage.compressionPhase}`}
                 </span>
               </div>
             )}
@@ -801,6 +825,36 @@ export function AiChatSidebar({
                 )}
               </div>
             )}
+          </div>
+        )}
+        {/* Intent Confirmation Card */}
+        {intentConfirmation && (
+          <div className="mx-1 rounded-lg border border-primary/30 bg-primary/5 p-3 space-y-2">
+            <div className="text-xs text-muted-foreground">
+              检测到你的意图可能是：
+              <span className="font-medium text-foreground ml-1">
+                {intentConfirmation.currentProfile.replace("-profile", "")}
+              </span>
+              <span className="ml-1 text-muted-foreground/60">
+                (置信度 {Math.round(intentConfirmation.confidence * 100)}%)
+              </span>
+            </div>
+            <div className="text-xs text-muted-foreground mb-1">你想要我做什么？</div>
+            <div className="grid grid-cols-2 gap-1.5">
+              {intentConfirmation.options.map((option) => (
+                <button
+                  key={option.id}
+                  onClick={() => {
+                    claudeClient.sendIntentResponse(option.id);
+                    setIntentConfirmation(null);
+                  }}
+                  className="flex flex-col items-start gap-0.5 rounded-md border border-border bg-background px-2.5 py-2 text-left hover:border-primary/50 hover:bg-primary/5 transition-colors"
+                >
+                  <span className="text-xs font-medium text-foreground">{option.label}</span>
+                  <span className="text-[10px] text-muted-foreground leading-tight">{option.description}</span>
+                </button>
+              ))}
+            </div>
           </div>
         )}
         {/* HITL Approval Panel */}

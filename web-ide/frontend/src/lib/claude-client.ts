@@ -1,5 +1,11 @@
 export type OodaPhase = "observe" | "orient" | "decide" | "act" | "complete";
 
+export interface IntentOption {
+  id: string;
+  label: string;
+  description: string;
+}
+
 export interface StreamEvent {
   type:
     | "thinking"
@@ -15,7 +21,8 @@ export interface StreamEvent {
     | "sub_step"
     | "baseline_check"
     | "hitl_checkpoint"
-    | "context_usage";
+    | "context_usage"
+    | "intent_confirmation";
   content?: string;
   toolCallId?: string;
   toolName?: string;
@@ -50,6 +57,10 @@ export interface StreamEvent {
   tokensUsed?: number;
   tokenBudget?: number;
   compressionPhase?: number;
+  // intent_confirmation fields
+  currentProfile?: string;
+  reason?: string;
+  options?: IntentOption[];
 }
 
 export type HitlAction = "approve" | "reject" | "modify";
@@ -66,6 +77,20 @@ class ClaudeClient {
 
   constructor(baseUrl: string = "") {
     this.baseUrl = baseUrl;
+  }
+
+  /**
+   * Send an intent confirmation response via the active WebSocket.
+   */
+  sendIntentResponse(selectedProfile: string): void {
+    if (!this.activeWs || this.activeWs.readyState !== WebSocket.OPEN) {
+      console.error("Cannot send intent response: WebSocket not connected");
+      return;
+    }
+    this.activeWs.send(JSON.stringify({
+      type: "intent_response",
+      selectedProfile,
+    }));
   }
 
   /**
@@ -94,7 +119,8 @@ class ClaudeClient {
     contexts: ChatContext[],
     onEvent: (event: StreamEvent) => void,
     signal?: AbortSignal,
-    workspaceId?: string
+    workspaceId?: string,
+    modelId?: string
   ): Promise<void> {
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     const host = this.baseUrl || window.location.host;
@@ -139,6 +165,7 @@ class ClaudeClient {
             content: message,
             contexts,
             workspaceId,
+            modelId,
           })
         );
       };

@@ -27,11 +27,27 @@ class ProfileRouter(
             "@设计" to "design-profile",
             "@开发" to "development-profile",
             "@测试" to "testing-profile",
-            "@运维" to "ops-profile"
+            "@运维" to "ops-profile",
+            "@评估" to "evaluation-profile"
         )
 
         // Priority 2: Keyword → profile name mapping
+        // NOTE: evaluation-profile keywords are listed FIRST so they match before development fallback
         private val KEYWORD_ROUTES: List<Pair<List<String>, String>> = listOf(
+            // Evaluation/Analysis keywords (must be before development to avoid fallback)
+            listOf(
+                "progress", "status", "evaluate", "assessment", "report", "analyze quality",
+                "进度", "状态", "评估", "汇报", "到哪了", "进展", "看看", "查看进度"
+            ) to "evaluation-profile",
+            listOf(
+                "distill", "extract pattern", "lesson learned", "knowledge base",
+                "提炼", "经验总结", "萃取", "沉淀", "复盘", "写入知识库"
+            ) to "evaluation-profile",
+            listOf(
+                "generate doc", "architecture diagram", "manual", "usage guide",
+                "手册", "生成文档", "架构图", "报告", "生成报告", "周报"
+            ) to "evaluation-profile",
+            // Delivery stage keywords
             listOf(
                 "requirement", "prd", "user story", "feature request", "scope", "stakeholder",
                 "需求", "规划", "产品文档"
@@ -109,18 +125,22 @@ class ProfileRouter(
 
     private fun routeByKeyword(message: String): ProfileRoutingResult? {
         val lowerMessage = message.lowercase()
+        // Strip punctuation to measure "meaningful" message length
+        val strippedMessage = lowerMessage.replace(Regex("[\\s\\p{Punct}]"), "")
 
-        // Score each profile by keyword matches
+        // Score each profile by keyword matches (weighted: short/vague keywords count less)
         var bestProfile: String? = null
-        var bestScore = 0
+        var bestScore = 0.0
         var bestKeyword = ""
 
         for ((keywords, profileName) in KEYWORD_ROUTES) {
-            var score = 0
+            var score = 0.0
             var matchedKeyword = ""
             for (keyword in keywords) {
                 if (lowerMessage.contains(keyword.lowercase())) {
-                    score++
+                    // Short keywords (≤2 chars) are vague — give half weight
+                    val weight = if (keyword.length <= 2) 0.5 else 1.0
+                    score += weight
                     if (matchedKeyword.isEmpty()) matchedKeyword = keyword
                 }
             }
@@ -134,10 +154,15 @@ class ProfileRouter(
         if (bestProfile != null && bestScore > 0) {
             val profile = skillLoader.loadProfile(bestProfile)
             if (profile != null) {
-                val confidence = (0.5 + 0.1 * bestScore).coerceAtMost(0.95)
+                // Base confidence from keyword score
+                var confidence = (0.5 + 0.1 * bestScore).coerceAtMost(0.95)
+                // Short messages with weak matches → lower confidence to trigger intent confirmation
+                if (strippedMessage.length <= 5 && bestScore < 1.0) {
+                    confidence = (confidence * 0.7).coerceAtMost(0.45)
+                }
                 logger.info(
-                    "Routed to {} via keyword '{}' (score={}, confidence={})",
-                    bestProfile, bestKeyword, bestScore, confidence
+                    "Routed to {} via keyword '{}' (score={}, confidence={}, msgLen={})",
+                    bestProfile, bestKeyword, bestScore, confidence, strippedMessage.length
                 )
                 return ProfileRoutingResult(
                     profile = profile,

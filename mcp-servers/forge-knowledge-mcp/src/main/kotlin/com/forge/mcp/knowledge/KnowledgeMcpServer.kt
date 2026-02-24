@@ -196,7 +196,7 @@ class KnowledgeMcpServer : McpServerBase(
             AdrSearchTool(wikiBaseUrl, wikiApiToken, localProvider),
             RunbookSearchTool(wikiBaseUrl, wikiApiToken, localProvider),
             ApiDocSearchTool(wikiBaseUrl, wikiApiToken, localProvider),
-            PageCreateTool(wikiBaseUrl, wikiApiToken),
+            PageCreateTool(wikiBaseUrl, wikiApiToken, localProvider, knowledgeBasePath),
             KnowledgeGapLogTool()
         )
     }

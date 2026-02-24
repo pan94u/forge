@@ -15,6 +15,7 @@ const PROVIDER_LABEL: Record<string, string> = {
   "aws-bedrock": "AWS Bedrock",
   google: "Google",
   dashscope: "Alibaba",
+  minimax: "MiniMax",
   local: "Local",
   openai: "OpenAI",
 };

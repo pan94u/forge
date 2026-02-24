@@ -87,6 +87,7 @@ data class SkillDefinition(
             profileName.contains("development") -> "development"
             profileName.contains("testing") -> "testing"
             profileName.contains("ops") -> "operations"
+            profileName.contains("evaluation") -> "evaluation"
             else -> return true // unknown profile → include all
         }
         return stage == expectedStage
@@ -103,7 +104,9 @@ data class ProfileDefinition(
     val baselines: List<String> = emptyList(),
     val hitlCheckpoint: String = "",
     val oodaGuidance: String,
-    val sourcePath: String
+    val sourcePath: String,
+    /** Profile mode: "default" for delivery profiles, "read-only" for analysis/evaluation profiles */
+    val mode: String = "default"
 )
 
 /**

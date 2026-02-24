@@ -1,7 +1,6 @@
 package com.forge.webide.service
 
-import com.forge.webide.model.McpContent
-import com.forge.webide.model.McpToolCallResponse
+import com.forge.webide.model.*
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
@@ -15,7 +14,8 @@ import javax.sql.DataSource
 @Service
 class BuiltinToolHandler(
     private val baselineService: BaselineService,
-    private val dataSource: DataSource
+    private val dataSource: DataSource,
+    private val knowledgeIndexService: KnowledgeIndexService
 ) {
 
     private val logger = LoggerFactory.getLogger(BuiltinToolHandler::class.java)
@@ -39,69 +39,94 @@ class BuiltinToolHandler(
     }
 
     /**
-     * Search knowledge-base/ directory for documents matching the query.
-     * Supports filtering by type (adr, runbook, convention, api-doc).
+     * Search knowledge-base/ directory AND DB documents matching the query.
+     * Supports filtering by type (adr, runbook, convention, api-doc) and scope.
      */
     private fun handleSearchKnowledge(arguments: Map<String, Any?>): McpToolCallResponse {
         val query = (arguments["query"] as? String ?: "").lowercase()
         val typeFilter = arguments["type"] as? String
-
-        val knowledgeBaseDir = resolveKnowledgeBaseDir()
-        if (!knowledgeBaseDir.exists()) {
-            return McpToolCallResponse(
-                content = listOf(McpContent(
-                    type = "text",
-                    text = "Knowledge base directory not found at: ${knowledgeBaseDir.absolutePath}"
-                )),
-                isError = true
-            )
-        }
+        val scopeFilter = arguments["scope"] as? String
+        val workspaceId = arguments["workspaceId"] as? String
+        val userId = arguments["userId"] as? String
 
         val results = mutableListOf<Map<String, String>>()
 
-        knowledgeBaseDir.walkTopDown()
-            .filter { it.isFile && it.extension == "md" }
-            .filter { file ->
-                if (typeFilter != null) {
-                    val parentDir = file.parentFile?.name ?: ""
-                    when (typeFilter.lowercase()) {
-                        "adr" -> parentDir == "adr"
-                        "runbook", "runbooks" -> parentDir == "runbooks"
-                        "convention", "conventions" -> parentDir == "conventions"
-                        "api-doc", "api-docs" -> parentDir == "api-docs"
-                        else -> true
+        // 1. Search DB-backed knowledge documents (with scope)
+        val docType = typeFilter?.let {
+            try { DocumentType.valueOf(it.uppercase().replace("-", "_")) } catch (_: Exception) { null }
+        }
+        val docScope = scopeFilter?.let {
+            try { KnowledgeScope.valueOf(it.uppercase()) } catch (_: Exception) { null }
+        }
+
+        val dbResults = knowledgeIndexService.search(
+            query = query,
+            type = docType,
+            scope = docScope,
+            workspaceId = workspaceId,
+            userId = userId
+        )
+
+        dbResults.forEach { doc ->
+            results.add(mapOf(
+                "title" to doc.title,
+                "path" to "db://${doc.id}",
+                "type" to doc.type.name.lowercase(),
+                "scope" to doc.scope.toValue(),
+                "excerpt" to doc.snippet.take(200)
+            ))
+        }
+
+        // 2. Also search knowledge-base/ filesystem (always global scope)
+        if (scopeFilter == null || scopeFilter.equals("global", ignoreCase = true)) {
+            val knowledgeBaseDir = resolveKnowledgeBaseDir()
+            if (knowledgeBaseDir.exists()) {
+                knowledgeBaseDir.walkTopDown()
+                    .filter { it.isFile && it.extension == "md" }
+                    .filter { file ->
+                        if (typeFilter != null) {
+                            val parentDir = file.parentFile?.name ?: ""
+                            when (typeFilter.lowercase()) {
+                                "adr" -> parentDir == "adr"
+                                "runbook", "runbooks" -> parentDir == "runbooks"
+                                "convention", "conventions" -> parentDir == "conventions"
+                                "api-doc", "api-docs" -> parentDir == "api-docs"
+                                else -> true
+                            }
+                        } else true
                     }
-                } else true
+                    .forEach { file ->
+                        val content = file.readText()
+                        val contentLower = content.lowercase()
+                        val fileNameLower = file.nameWithoutExtension.lowercase()
+
+                        val queryTerms = query.split("\\s+".toRegex())
+                        val matches = query.isBlank() || queryTerms.any { term ->
+                            fileNameLower.contains(term) || contentLower.contains(term)
+                        }
+
+                        if (matches) {
+                            val title = content.lines().firstOrNull { it.startsWith("# ") }
+                                ?.removePrefix("# ")?.trim()
+                                ?: file.nameWithoutExtension
+
+                            val excerpt = content.lines()
+                                .filter { it.isNotBlank() && !it.startsWith("#") && !it.startsWith("---") }
+                                .take(3)
+                                .joinToString(" ")
+                                .take(200)
+
+                            results.add(mapOf(
+                                "title" to title,
+                                "path" to file.relativeTo(knowledgeBaseDir).path,
+                                "type" to (file.parentFile?.name ?: "unknown"),
+                                "scope" to "global",
+                                "excerpt" to excerpt
+                            ))
+                        }
+                    }
             }
-            .forEach { file ->
-                val content = file.readText()
-                val contentLower = content.lowercase()
-                val fileNameLower = file.nameWithoutExtension.lowercase()
-
-                val queryTerms = query.split("\\s+".toRegex())
-                val matches = queryTerms.any { term ->
-                    fileNameLower.contains(term) || contentLower.contains(term)
-                }
-
-                if (matches) {
-                    val title = content.lines().firstOrNull { it.startsWith("# ") }
-                        ?.removePrefix("# ")?.trim()
-                        ?: file.nameWithoutExtension
-
-                    val excerpt = content.lines()
-                        .filter { it.isNotBlank() && !it.startsWith("#") && !it.startsWith("---") }
-                        .take(3)
-                        .joinToString(" ")
-                        .take(200)
-
-                    results.add(mapOf(
-                        "title" to title,
-                        "path" to file.relativeTo(knowledgeBaseDir).path,
-                        "type" to (file.parentFile?.name ?: "unknown"),
-                        "excerpt" to excerpt
-                    ))
-                }
-            }
+        }
 
         if (results.isEmpty()) {
             return McpToolCallResponse(
@@ -109,8 +134,7 @@ class BuiltinToolHandler(
                     type = "text",
                     text = "No results found for query: '$query'" +
                         (if (typeFilter != null) " (type: $typeFilter)" else "") +
-                        "\nKnowledge base location: ${knowledgeBaseDir.absolutePath}" +
-                        "\nAvailable categories: ${knowledgeBaseDir.listFiles()?.filter { it.isDirectory }?.joinToString { it.name } ?: "none"}"
+                        (if (scopeFilter != null) " (scope: $scopeFilter)" else "")
                 ))
             )
         }
@@ -119,7 +143,7 @@ class BuiltinToolHandler(
             appendLine("Found ${results.size} result(s) for '$query':")
             appendLine()
             results.forEachIndexed { i, r ->
-                appendLine("${i + 1}. **${r["title"]}** [${r["type"]}]")
+                appendLine("${i + 1}. **${r["title"]}** [${r["type"]}] (${r["scope"]})")
                 appendLine("   Path: ${r["path"]}")
                 appendLine("   ${r["excerpt"]}")
                 appendLine()

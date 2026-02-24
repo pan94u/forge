@@ -86,6 +86,22 @@ class ClaudeConfig(
             logger.info("注册 adapter: dashscope (Qwen), {} 个模型", models?.size ?: "默认")
         }
 
+        // MiniMax（兼容 Anthropic 协议，复用 ClaudeAdapter）
+        // 即使没有系统级 API Key 也注册 adapter，用户可通过 Settings 配置自己的 key
+        val minimaxConfig = modelProperties.minimax
+        val minimaxKey = minimaxConfig.apiKey.ifBlank { System.getenv("MINIMAX_API_KEY") ?: "" }
+        if (minimaxConfig.enabled) {
+            val baseUrl = minimaxConfig.baseUrl.ifBlank { "https://api.minimaxi.com/anthropic" }
+            val models = toModelInfoList(minimaxConfig.models, "minimax")
+            adapters["minimax"] = ClaudeAdapter(
+                apiKey = minimaxKey.ifBlank { "placeholder" },
+                baseUrl = baseUrl,
+                customModels = models
+            )
+            logger.info("注册 adapter: minimax (MiniMax, Anthropic 兼容), {} 个模型, hasSystemKey={}",
+                models?.size ?: "默认", minimaxKey.isNotBlank())
+        }
+
         // OpenAI 兼容 / 本地模型
         val openaiConfig = modelProperties.openai
         val localUrl = openaiConfig.baseUrl.ifBlank { System.getenv("LOCAL_MODEL_URL") ?: "" }

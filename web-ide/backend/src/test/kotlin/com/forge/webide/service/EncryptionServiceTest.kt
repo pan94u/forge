@@ -62,19 +62,21 @@ class EncryptionServiceTest {
     }
 
     @Test
-    fun `encrypt without key configured throws`() {
+    fun `encrypt without key falls back to Base64 dev mode`() {
         val service = EncryptionService("")
 
-        assertThatThrownBy { service.encrypt("my-api-key") }
-            .isInstanceOf(IllegalStateException::class.java)
+        val encrypted = service.encrypt("my-api-key")
+        assertThat(encrypted).startsWith("DEV:")
+        assertThat(service.decrypt(encrypted)).isEqualTo("my-api-key")
     }
 
     @Test
-    fun `decrypt without key configured throws`() {
+    fun `decrypt non-dev ciphertext without key returns empty`() {
         val service = EncryptionService("")
 
-        assertThatThrownBy { service.decrypt("my-api-key") }
-            .isInstanceOf(IllegalStateException::class.java)
+        // Non-DEV: prefix data cannot be decrypted without key
+        val result = service.decrypt("someCiphertext")
+        assertThat(result).isEmpty()
     }
 
     @Test

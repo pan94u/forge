@@ -1,0 +1,46 @@
+id: eval-003-doc-generation
+name: "Document Generation — Architecture Diagram"
+description: "Tests the agent's ability to analyze a workspace and generate an architecture diagram in Mermaid syntax."
+tags: [evaluation, document, diagram, mermaid]
+profile: evaluation-profile
+baseline_pass_rate: 0.80
+
+prompt: |
+  生成这个项目的架构图，用 Mermaid 语法。
+
+context:
+  workspace: "forge-platform"
+  files:
+    - path: "web-ide/frontend/package.json"
+      content: "{ \"name\": \"forge-frontend\", \"dependencies\": { \"next\": \"15.0\", \"react\": \"19.0\" } }"
+    - path: "web-ide/backend/build.gradle.kts"
+      content: "plugins { id(\"org.springframework.boot\") }"
+    - path: "mcp-servers/forge-context-server/build.gradle.kts"
+      content: "plugins { id(\"io.ktor.plugin\") }"
+    - path: "infrastructure/docker/docker-compose.trial.yml"
+      content: "services: { backend, frontend, nginx, keycloak }"
+
+assertions:
+  - type: "profile_routed"
+    expected: "evaluation-profile"
+    description: "Must route to evaluation-profile"
+  - type: "contains"
+    expected: "```mermaid"
+    description: "Response must include a Mermaid code block"
+  - type: "contains"
+    expected: "Frontend"
+    case_insensitive: true
+    description: "Diagram must include frontend component"
+  - type: "contains"
+    expected: "Backend"
+    case_insensitive: true
+    description: "Diagram must include backend component"
+  - type: "not_contains"
+    expected: "workspace_write_file"
+    description: "Must NOT auto-save (present in chat first)"
+
+quality_criteria:
+  completeness: 0.85
+  correctness: 0.80
+  structure: 0.90
+  actionability: 0.80

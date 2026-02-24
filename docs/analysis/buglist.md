@@ -37,6 +37,10 @@
 | BUG-026 | P1 | ✅ 已修复 | Baseline 修复循环触发 rate limit — 主循环 8 轮 + baseline 修复循环无 token 预算感知 |
 | BUG-027 | P2 | ✅ 已修复 | test-coverage-baseline 对非 Java/Kotlin workspace 报失败 — 已从所有 profile 移除 |
 | BUG-028 | P1 | ✅ 已修复 | WebSocket 消息体过大导致断连 — 多轮对话后 history 超出默认 8KB 缓冲区 |
+| BUG-029 | P1 | ✅ 已修复 | streamWithRetry 在 Flow collect 阶段无法捕获 RateLimitException — 聊天 UI 卡住 |
+| BUG-030 | P2 | ✅ 已修复 | Knowledge CRUD 400 — DocumentType/KnowledgeScope 枚举反序列化大小写不兼容 |
+| BUG-031 | P3 | ✅ 已修复 | KnowledgeIndexService 初始化警告 — private val 在 init{} 中赋值 |
+| BUG-032 | P1 | 🔴 未修复 | Chat Message FK 违约 — chatSessionId 在 chat_sessions 表中不存在，聊天历史未持久化 |
 
 ---
 
@@ -234,6 +238,43 @@
 - **验证**: 流程结束后活动日志仍可查看
 - **文件**: `web-ide/frontend/src/components/chat/AiChatSidebar.tsx`
 
+### BUG-029: streamWithRetry 在 Flow collect 阶段无法捕获 RateLimitException
+- **发现**: Session 30, 用户测试聊天功能
+- **严重等级**: P1
+- **症状**: 用户在 Docker 环境中使用 AI 聊天，UI 卡住无响应，等待数分钟无结果
+- **根因**: `AgenticLoopOrchestrator.streamWithRetry` 只在 Flow 创建阶段（`block()` 调用）用 try-catch 捕获 `RateLimitException`。但 Claude API 的 `RateLimitException` 也可能在 Flow 收集阶段（`.collect{}`）抛出（HTTP SSE 连接建立时），此时异常完全绕过重试逻辑，直接向上传播导致 WebSocket 无响应
+- **修复**: 用 `flow {}` builder 重写 `streamWithRetry`，将 `block()` 和 `upstream.collect { emit(event) }` 都包裹在同一个 try-catch 内，确保两个阶段的 RateLimitException 都能被捕获并重试
+- **状态**: ✅ 已修复
+- **文件**: `web-ide/backend/src/main/kotlin/com/forge/webide/service/AgenticLoopOrchestrator.kt`
+
+### BUG-030: Knowledge CRUD 400 Bad Request（枚举反序列化）
+- **发现**: Session 30, Acceptance Test AT-3
+- **严重等级**: P2
+- **症状**: `POST /api/knowledge/docs` 创建文档时返回 400，Jackson 报错 `Cannot deserialize value of type KnowledgeScope from String "WORKSPACE": not one of the values accepted for Enum class: [personal, global, workspace]`
+- **根因**: `KnowledgeScope` 有 `@JsonValue` 返回小写 → Jackson 反序列化也期望小写输入。`DocumentType` 无 `@JsonValue` → 期望大写输入。前端/curl 发送大写时 KnowledgeScope 拒绝，发送小写时 DocumentType 拒绝。与 BUG-008/017 同类系统性枚举序列化问题
+- **修复**: 两个枚举都添加 `@JsonCreator` companion object，`fromValue()` 方法先 `.uppercase()` 再 `valueOf()`，实现大小写无关反序列化
+- **状态**: ✅ 已修复
+- **文件**: `web-ide/backend/src/main/kotlin/com/forge/webide/model/Models.kt`
+
+### BUG-031: KnowledgeIndexService 初始化警告
+- **发现**: Session 30, 编译阶段
+- **严重等级**: P3
+- **症状**: Kotlin 编译器警告 `Property must be initialized, be final, or be abstract`
+- **根因**: `serviceGraph`、`apiCatalog`、`diagrams` 声明为 `private val` 但在 `init {}` 块中赋值，Kotlin 编译器认为可能未初始化
+- **修复**: 改为内联初始化（`= buildSampleServiceGraph()` 等），`init {}` 只调用 `initializeSampleData()`
+- **状态**: ✅ 已修复
+- **文件**: `web-ide/backend/src/main/kotlin/com/forge/webide/service/KnowledgeIndexService.kt`
+
+### BUG-032: Chat Message FK 违约（聊天历史未持久化）
+- **发现**: Session 30, Docker 后端日志分析
+- **严重等级**: P1
+- **症状**: 后端日志反复报错 `Referential integrity constraint violation: CHAT_MESSAGES FOREIGN KEY(SESSION_ID) REFERENCES CHAT_SESSIONS(ID)`。聊天功能表面正常（消息在内存中），但刷新页面后聊天记录丢失
+- **根因**: 前端通过 WebSocket 传入的 `chatSessionId`（如 `f0e866b0-3737-48e4-ac67-bf6121f63f90`）在 `chat_sessions` 表中不存在。`ChatWebSocketHandler` 或 `ClaudeAgentService` 在保存 `chat_messages` 前未创建对应的 `chat_sessions` 记录，导致 FK 约束失败
+- **影响**: 所有对话历史未持久化到数据库。当前对话可正常进行（内存中），但刷新浏览器后丢失
+- **修复方向**: 排查 `ChatWebSocketHandler` → `ClaudeAgentService` → `ChatSessionRepository` 链路，确保 WebSocket 连接建立时先 upsert `chat_sessions` 记录
+- **状态**: 🔴 未修复
+- **文件**: 待定（`ChatWebSocketHandler.kt` / `ClaudeAgentService.kt` / `ChatSessionRepository.kt`）
+
 ---
 
 ## 统计
@@ -288,12 +329,14 @@
 
 ## 统计
 
-- **总计**: 28 个 Bug
-- **已修复**: 27 个
+- **总计**: 32 个 Bug
+- **已修复**: 30 个
 - **挂起**: 1 个 (BUG-016)
+- **未修复**: 1 个 (BUG-032)
 - **P0 (阻塞)**: 2 个 (BUG-008, BUG-012) — 均已修复
-- **P1 (严重)**: 8 个 (BUG-001, BUG-005, BUG-013, BUG-017, BUG-021, BUG-022, BUG-026, BUG-028) — 均已修复
-- **P2 (一般)**: 16 个
+- **P1 (严重)**: 10 个 (BUG-001, BUG-005, BUG-013, BUG-017, BUG-021, BUG-022, BUG-026, BUG-028, BUG-029, BUG-032) — 9 已修复 / 1 未修复
+- **P2 (一般)**: 17 个
+- **P3 (低)**: 1 个 (BUG-031)
 
 ## 影响文件
 
@@ -301,7 +344,7 @@
 |------|---------|
 | `web-ide/frontend/src/components/editor/FileExplorer.tsx` | BUG-001~004, 006, 007 |
 | `web-ide/backend/src/main/kotlin/com/forge/webide/service/WorkspaceService.kt` | BUG-005, 009 |
-| `web-ide/backend/src/main/kotlin/com/forge/webide/model/Models.kt` | BUG-008, 017 |
+| `web-ide/backend/src/main/kotlin/com/forge/webide/model/Models.kt` | BUG-008, 017, 030 |
 | `web-ide/frontend/src/app/workspace/[id]/page.tsx` | BUG-011 |
 | `web-ide/backend/src/test/kotlin/com/forge/webide/controller/McpControllerTest.kt` | BUG-010 |
 | `web-ide/backend/src/main/kotlin/com/forge/webide/websocket/ChatWebSocketHandler.kt` | BUG-012 |
@@ -315,3 +358,5 @@
 | `plugins/forge-superagent/skill-profiles/development-profile.md` | BUG-024, 027 |
 | `plugins/forge-superagent/skill-profiles/testing-profile.md` | BUG-027 |
 | `web-ide/backend/src/main/kotlin/com/forge/webide/config/WebSocketConfig.kt` | BUG-028 |
+| `web-ide/backend/src/main/kotlin/com/forge/webide/service/AgenticLoopOrchestrator.kt` | BUG-029 |
+| `web-ide/backend/src/main/kotlin/com/forge/webide/service/KnowledgeIndexService.kt` | BUG-031 |

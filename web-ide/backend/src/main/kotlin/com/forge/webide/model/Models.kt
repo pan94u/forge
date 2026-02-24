@@ -1,5 +1,6 @@
 package com.forge.webide.model
 
+import com.fasterxml.jackson.annotation.JsonCreator
 import com.fasterxml.jackson.annotation.JsonValue
 import java.time.Instant
 import java.util.UUID
@@ -14,6 +15,7 @@ data class Workspace(
     val owner: String = "",
     val repository: String? = null,
     val branch: String? = null,
+    val errorMessage: String? = null,
     val createdAt: Instant = Instant.now(),
     val updatedAt: Instant = Instant.now()
 )
@@ -110,14 +112,55 @@ data class KnowledgeDocument(
     val snippet: String = "",
     val author: String = "",
     val tags: List<String> = emptyList(),
+    val scope: KnowledgeScope = KnowledgeScope.GLOBAL,
+    val scopeId: String? = null,
     val relatedDocs: List<RelatedDoc> = emptyList(),
     val createdAt: Instant = Instant.now(),
     val updatedAt: Instant = Instant.now()
 )
 
 enum class DocumentType {
-    WIKI, ADR, RUNBOOK, API_DOC
+    WIKI, ADR, RUNBOOK, API_DOC;
+
+    companion object {
+        @JvmStatic
+        @JsonCreator
+        fun fromValue(value: String): DocumentType =
+            valueOf(value.uppercase().replace("-", "_"))
+    }
 }
+
+enum class KnowledgeScope {
+    GLOBAL, WORKSPACE, PERSONAL;
+
+    @JsonValue
+    fun toValue(): String = name.lowercase()
+
+    companion object {
+        @JvmStatic
+        @JsonCreator
+        fun fromValue(value: String): KnowledgeScope =
+            valueOf(value.uppercase())
+    }
+}
+
+data class CreateKnowledgeDocRequest(
+    val title: String,
+    val type: DocumentType,
+    val content: String,
+    val snippet: String? = null,
+    val author: String? = null,
+    val tags: List<String>? = null,
+    val scope: KnowledgeScope = KnowledgeScope.GLOBAL,
+    val scopeId: String? = null
+)
+
+data class UpdateKnowledgeDocRequest(
+    val title: String? = null,
+    val content: String? = null,
+    val snippet: String? = null,
+    val tags: List<String>? = null
+)
 
 data class RelatedDoc(
     val id: String,

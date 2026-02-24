@@ -64,11 +64,11 @@ class ClaudeAgentServiceTest {
         hitlCheckpointManager = mockk(relaxed = true)
         baselineAutoChecker = mockk(relaxed = true)
 
-        // Default routing: always route to development profile
+        // Default routing: always route to development profile (confidence above 0.5 to skip intent confirmation)
         every { profileRouter.route(any(), any()) } returns ProfileRoutingResult(
             profile = defaultProfile,
-            confidence = 0.3,
-            reason = "Default fallback"
+            confidence = 0.6,
+            reason = "Keyword detected: test"
         )
         every { skillLoader.loadSkillsForProfile(any(), any()) } returns emptyList()
         every { skillLoader.loadProfile(any()) } returns defaultProfile
@@ -78,6 +78,7 @@ class ClaudeAgentServiceTest {
 
         service = ClaudeAgentService(
             claudeAdapter = claudeAdapter,
+            modelRegistry = mockk(relaxed = true),
             mcpProxyService = mcpProxyService,
             knowledgeGapDetectorService = knowledgeGapDetectorService,
             chatSessionRepository = chatSessionRepository,
@@ -92,7 +93,8 @@ class ClaudeAgentServiceTest {
             userModelConfigService = mockk(relaxed = true),
             agenticLoopOrchestrator = agenticLoopOrchestrator,
             hitlCheckpointManager = hitlCheckpointManager,
-            baselineAutoChecker = baselineAutoChecker
+            baselineAutoChecker = baselineAutoChecker,
+            interactionEvaluationService = mockk(relaxed = true)
         )
 
         // Default: no conversation history
@@ -148,7 +150,7 @@ class ClaudeAgentServiceTest {
     fun `streamMessage emits content events`() {
         every { mcpProxyService.listTools() } returns emptyList()
         // Mock agenticStream to emit content events via callback and return result
-        coEvery { agenticLoopOrchestrator.agenticStream(any(), any(), any(), any(), any()) } coAnswers {
+        coEvery { agenticLoopOrchestrator.agenticStream(any(), any(), any(), any(), any(), any()) } coAnswers {
             @Suppress("UNCHECKED_CAST")
             val onEvent = args[3] as (Map<String, Any?>) -> Unit
             onEvent(mapOf("type" to "content", "content" to "Hello"))
@@ -193,7 +195,7 @@ class ClaudeAgentServiceTest {
             ))
         )
         // Mock agenticStream to simulate tool calling flow
-        coEvery { agenticLoopOrchestrator.agenticStream(any(), any(), any(), any(), any()) } coAnswers {
+        coEvery { agenticLoopOrchestrator.agenticStream(any(), any(), any(), any(), any(), any()) } coAnswers {
             @Suppress("UNCHECKED_CAST")
             val onEvent = args[3] as (Map<String, Any?>) -> Unit
             onEvent(mapOf("type" to "tool_use_start", "toolCallId" to "toolu_001", "toolName" to "search_knowledge"))
@@ -252,7 +254,7 @@ class ClaudeAgentServiceTest {
             McpTool("search_knowledge", "Search", emptyMap())
         )
         // Mock agenticStream to simulate tool execution error
-        coEvery { agenticLoopOrchestrator.agenticStream(any(), any(), any(), any(), any()) } coAnswers {
+        coEvery { agenticLoopOrchestrator.agenticStream(any(), any(), any(), any(), any(), any()) } coAnswers {
             @Suppress("UNCHECKED_CAST")
             val onEvent = args[3] as (Map<String, Any?>) -> Unit
             onEvent(mapOf("type" to "tool_use_start", "toolCallId" to "toolu_001", "toolName" to "search_knowledge"))

@@ -1,8 +1,24 @@
-# Forge Web IDE — 设计基线 v10
+# Forge — AI 驱动的智能交付平台 — 设计基线 v12
 
-> 基线日期: 2026-02-23 | Phase 6 产品可用性加固（v9 → v10）
+> 基线日期: 2026-02-23 | Session 32 — MiniMax 多模型 + 知识写入 + Context Usage 增强（v11 → v12）
 > 本文档冻结当前已验证的 UI/API/数据模型/架构设计细节，作为未来修改的对照基准。
 > 任何对本文档覆盖范围的修改，必须先意识到偏离、再决定是否接受。
+>
+> **v12 变更摘要**: Session 32 — MiniMax 多模型支持 + 知识写入 + Agentic Loop 增强：
+> H2 持久化恢复（docker-compose DB_DRIVER 默认改回 org.h2.Driver）、
+> MiniMax 模型支持（3 模型 MiniMax-M2.5/M2.5-lightning/M2.5-highspeed，复用 ClaudeAdapter，ModelProperties +minimax 字段，ClaudeConfig adapter 注册）、
+> 模型选择端到端打通（前端 selectedModel → WebSocket modelId → ChatWebSocketHandler → ClaudeAgentService 动态 adapter 选择 → AgenticLoopOrchestrator activeAdapter）、
+> ModelRegistry +providerForModel()、
+> 前端 ModelSettingsDialog +MiniMax 供应商、ModelSelector +MiniMax label、
+> 知识库本地写入（PageCreateTool local mode：KNOWLEDGE_MODE=local 时直接写 Markdown 文件到 knowledge-base/<space>/，LocalKnowledgeProvider +reload()）、
+> knowledge-base volume 改为可写、
+> Agentic Loop MAX_AGENTIC_TURNS 8→50、
+> context_usage 每 turn 发送（含 turn 字段）、
+> 前端 Context Usage 卡片始终显示（去除 isStreaming 条件）、
+> HITL checkpoint 禁用（保留 intent confirmation）、
+> 单元测试 156。
+>
+> **v11 变更摘要**: Phase 7 — 异步化 + 知识库 Scope 分层：Git Clone 异步化（WorkspaceService cloneAsync + 前端进度条 UI）、WorkspaceEntity +errorMessage、知识库三层 Scope（Global/Workspace/Personal，KnowledgeDocumentEntity DB 持久化，KnowledgeIndexService 从 ConcurrentHashMap→JPA）、KnowledgeController CRUD 端点（POST/PUT/DELETE /api/knowledge/docs）、知识搜索 scope 参数（cascade 优先级 workspace>personal>global）、前端 KnowledgeSearch scope filter、MCP search_knowledge +scope 参数、品牌重定位（AI 驱动的智能交付平台）、Flyway V7/V8、单元测试 156。
 >
 > **v10 变更摘要**: Phase 6 — 产品可用性加固：Workspace 持久化（ConcurrentHashMap→DB+磁盘、WorkspaceEntity JPA）、Git 仓库载入（GitService git clone --depth 1）、用户 API Key 生效（CompletionOptions.apiKeyOverride per-request override）、代码转知识（codebase-profiler Skill + analyze-structure.py + analyze_codebase MCP 工具 #17）、架构重构（ClaudeAgentService 1097→4 服务 max 547 LOC、McpProxyService 1515→5 服务 max 480 LOC）、Flyway V6（workspaces 表）、单元测试 157→156。
 >
@@ -62,7 +78,8 @@
 │  +重命名 │   - 5 秒自动保存 (v5)            │   - Tool Call 展开    │
 │  +删除   ├──────────────────────────────────┤   - Profile Badge     │
 │  (v5)    │ Terminal Panel (可折叠底部)        │   - 代码块 Apply (v5)  │
-│          │   - WebSocket 终端连接            │   - Context Usage (v8) │
+│          │   - WebSocket 终端连接            │   - Context Usage 常显  │
+│          │                                  │     65% · T3 · P1 (v12)│
 │          │   - 彩色输出                      │ (可折叠)               │
 └──────────┴──────────────────────────────────┴───────────────────────┘
 ```
@@ -318,7 +335,7 @@ layout.tsx Auth Guard: isAuthenticated()?
 | POST | `/api/mcp/tools/call` | `McpToolCallRequest { name, arguments }` | `McpToolCallResponse` | 调用工具 |
 | POST | `/api/mcp/tools/cache/invalidate` | — | `{ status: "cache_invalidated" }` | 清除工具缓存 |
 
-**MCP 工具清单**（v4 创建，v5: 6→9，v7: 9→12，v8: 12→14，v9 补录: 14→16，v10: 16→17）:
+**MCP 工具清单**（v4 创建，v5: 6→9，v7: 9→12，v8: 12→14，v9 补录: 14→16，v10: 16→17，v12: 17→18）:
 
 | 工具 | MCP Server | 说明 |
 |------|-----------|------|
@@ -339,6 +356,7 @@ layout.tsx Auth Guard: isAuthenticated()?
 | `list_baselines` | backend (local) | 列出可用底线脚本 |
 | `get_service_info` | service-graph-mcp | 获取服务信息 |
 | `analyze_codebase` | backend (local) | 对 workspace 执行结构分析脚本，返回 JSON（文件树+技术栈+统计）（v10 新增） |
+| `page_create` | knowledge-mcp | 创建知识页面（local mode 写 Markdown 到 knowledge-base/<space>/，wiki mode 调 Confluence API）（v12 新增） |
 
 **Workspace 工具安全规则**（v5 新增）:
 - 路径遍历检查：包含 `..` 的路径一律拒绝（`isError: true`）
@@ -479,7 +497,7 @@ layout.tsx Auth Guard: isAuthenticated()?
 
 | WebSocket | 路径 | 方向 | 消息格式 |
 |-----------|------|------|---------|
-| AI Chat | `/ws/chat/{sessionId}` | Client→Server | `{ type: "message", content: string, contexts: ContextReference[] }` |
+| AI Chat | `/ws/chat/{sessionId}` | Client→Server | `{ type: "message", content: string, contexts: ContextReference[], modelId?: string }` |
 | | | Server→Client | `StreamEvent` JSON (每行一个事件) |
 | Terminal | `/ws/terminal/{workspaceId}` | 双向 | 终端输入/输出文本 |
 | Workflow | `/ws/workflow/{id}` | Server→Client | 工作流执行步骤事件 |
@@ -510,7 +528,7 @@ type StreamEvent =
   | { type: "file_changed",                         // 文件变更通知（v5 新增）
       path?: string,                                //   变更的文件路径
       action?: string }                             //   "created" | "modified"
-  | { type: "hitl_checkpoint",                       // HITL 人工审批检查点（v9 补录）
+  | { type: "hitl_checkpoint",                       // HITL 人工审批检查点（v9 补录）（v12: 已禁用，保留事件定义）
       checkpointId?: string,                          //   检查点 ID
       checkpoint?: string,                            //   检查点名称
       deliverables?: string[],                        //   交付物列表
@@ -522,7 +540,8 @@ type StreamEvent =
   | { type: "context_usage",                         // Context Window 使用率（v8 新增）
       tokensUsed?: number,                            //   当前 token 用量
       tokenBudget?: number,                           //   token 预算 (25000)
-      compressionPhase?: number }                     //   压缩阶段 (0=none, 1=truncate, 2=summarize, 3=full)
+      compressionPhase?: number,                      //   压缩阶段 (0=none, 1=truncate, 2=summarize, 3=full)
+      turn?: number }                                 //   当前 agentic turn 序号（v12 新增）
   | { type: "error", content?: string }             // 错误
   | { type: "done" }                                // 流结束
 ```
@@ -942,6 +961,13 @@ docker compose -f docker-compose.trial.yml up --build
 - knowledge-mcp: `wget --spider http://localhost:8081/health/live` (10s 间隔, 5 次重试, 15s 启动等待)（v6 新增）
 - database-mcp: `wget --spider http://localhost:8082/health/live` (10s 间隔, 5 次重试, 15s 启动等待)（v6 新增）
 
+**v12 Docker 配置变更**:
+- `DB_DRIVER` 默认改回 `org.h2.Driver`（从 org.postgresql.Driver 恢复 H2 持久化）
+- `DB_URL` 默认: `jdbc:h2:file:./data/forge;AUTO_SERVER=TRUE`
+- `knowledge-base` volume 改为可写（移除 `:ro`，支持 page_create 本地写入）
+- 新增环境变量: `MINIMAX_API_KEY`, `MINIMAX_API_URL`
+- 新增 `forge-backend-data` named volume（H2 文件持久化）
+
 ### 4.4 前后端通信方式
 
 **优先级**: WebSocket → SSE fallback → HTTP 同步兜底
@@ -1032,7 +1058,7 @@ emit profile_active 事件 → 前端显示 Profile Badge + Confidence 圆点
     │
     ▼
 emit ooda_phase("decide") + metricsService.recordOodaPhase("decide")
-agenticStream() — 最多 MAX_AGENTIC_TURNS(5) 轮
+agenticStream() — 最多 MAX_AGENTIC_TURNS(50) 轮（v12: 8→50，safety cap，模型自主决定何时停止）
     │
     ├─ 每轮: ClaudeAdapter.streamWithTools(systemPrompt=动态prompt)
     │   ├─ Prompt Caching: system prompt 以 content block + cache_control 发送
@@ -1040,6 +1066,7 @@ agenticStream() — 最多 MAX_AGENTIC_TURNS(5) 轮
     │   └─ agenticStream: ToolUseEnd 仅在 currentToolId.isNotBlank() 时处理（v3 防御）
     │
     ├─ 每轮结束: metricsService.recordTurnDuration(turn, ms)   ← v4 新增
+    ├─ 每轮结束: emit context_usage 事件（含 turn 序号）         ← v12 新增
     │
     ├─ 如果 stop_reason == TOOL_USE:
     │    ├─ emit ooda_phase("act") + metricsService.recordOodaPhase("act")
@@ -1134,7 +1161,43 @@ McpToolCallResponse { content: List<McpContent>, isError: Boolean }
 > v7 核心改变：system prompt 只注入 Skill Level 1 metadata（name + description + scripts 列表），
 > Agent 通过 `read_skill` MCP 工具按需读取完整 SKILL.md 内容。
 
-### 4.6 Spring Security 配置
+### 4.6 模型 Provider 支持（v12 新增 MiniMax）
+
+**支持的 Provider**:
+
+| Provider | 协议 | Adapter | 模型数 | 说明 |
+|----------|------|---------|--------|------|
+| anthropic | Anthropic Messages API | ClaudeAdapter | — | 默认 provider |
+| bedrock | AWS Bedrock | BedrockAdapter | — | AWS 托管 |
+| gemini | Google Gemini | GeminiAdapter | — | Google AI |
+| dashscope | 阿里通义千问 | DashscopeAdapter | — | 阿里云 |
+| openai | OpenAI API | OpenAiAdapter | — | OpenAI |
+| minimax | Anthropic-compatible | ClaudeAdapter（复用） | 3 | v12 新增 |
+
+**MiniMax 模型**（v12 新增）:
+
+| 模型 ID | 能力层级 | Context Window |
+|---------|---------|---------------|
+| MiniMax-M2.5 | MEDIUM | 1,000,000 tokens |
+| MiniMax-M2.5-lightning | LOW | 1,000,000 tokens |
+| MiniMax-M2.5-highspeed | LOW | 1,000,000 tokens |
+
+**模型选择端到端流程**（v12 新增）:
+```
+前端 ModelSelector（选择模型）
+    → selectedModel state
+    → WebSocket message { modelId: "MiniMax-M2.5" }
+    → ChatWebSocketHandler 解析 modelId
+    → ClaudeAgentService 动态 adapter 选择
+    → ModelRegistry.providerForModel(modelId) 查找 provider
+    → AgenticLoopOrchestrator 使用 activeAdapter 发送请求
+```
+
+**ModelRegistry 扩展**:
+- `providerForModel(modelId): String?` — 根据模型 ID 查找所属 provider（v12 新增）
+- MiniMax 使用 Anthropic-compatible 协议，复用 ClaudeAdapter，通过不同 baseUrl 路由
+
+### 4.7 Spring Security 配置
 
 **当前状态**: 支持安全模式开关（v5 更新）
 
@@ -1161,7 +1224,7 @@ McpToolCallResponse { content: List<McpContent>, isError: Boolean }
 | Token Endpoint | `http://keycloak:8080/realms/forge/protocol/openid-connect/token` |
 | 预置用户 | admin/admin (管理员), demo/demo (测试用户) |
 
-### 4.7 后端技术栈
+### 4.8 后端技术栈
 
 | 层 | 技术 | 版本 |
 |---|------|------|
@@ -1418,7 +1481,7 @@ const [oodaPhase, setOodaPhase] = useState<OodaPhase | null>(null);
 
 ---
 
-> 基线版本: v10
+> 基线版本: v12
 > 初始冻结日期: 2026-02-18 (v1, Phase 1.5)
 > v2 更新日期: 2026-02-18 (Phase 2 E2E 验证后)
 > v3 更新日期: 2026-02-18 (Sprint 2A 验收通过后)
@@ -1430,4 +1493,6 @@ const [oodaPhase, setOodaPhase] = useState<OodaPhase | null>(null);
 > v8 更新日期: 2026-02-22 (Phase 5 — 记忆与上下文管理：3 层记忆架构 + 消息压缩 + Memory UI + Rate Limit 退避)
 > v9 更新日期: 2026-02-22 (全量交叉校验 — 补录 3 Controller / 3 Entity / 2 MCP 工具 / 3 SSE 事件)
 > v10 更新日期: 2026-02-23 (Phase 6 — 产品可用性加固：Workspace 持久化 + Git 载入 + API Key override + codebase-profiler + 架构重构)
-> 下次评审: Phase 7 启动前
+> v11 更新日期: 2026-02-23 (Phase 7 — 异步化 + 知识库 Scope 分层)
+> v12 更新日期: 2026-02-23 (Session 32 — MiniMax 多模型支持 + 知识写入 + Agentic Loop 增强)
+> 下次评审: Session 33 启动前

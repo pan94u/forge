@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { KnowledgeSearch } from "@/components/knowledge/KnowledgeSearch";
 import { DocViewer } from "@/components/knowledge/DocViewer";
 import { ArchDiagramViewer } from "@/components/knowledge/ArchDiagramViewer";
@@ -20,6 +21,8 @@ const tabs: { id: KnowledgeTab; label: string; icon: React.ElementType }[] = [
 export default function KnowledgePage() {
   const [activeTab, setActiveTab] = useState<KnowledgeTab>("docs");
   const [selectedDocId, setSelectedDocId] = useState<string | null>(null);
+  const searchParams = useSearchParams();
+  const workspaceId = searchParams.get("workspaceId") ?? undefined;
 
   return (
     <div className="flex h-full flex-col">
@@ -52,6 +55,7 @@ export default function KnowledgePage() {
               <KnowledgeSearch
                 onSelectDocument={(docId) => setSelectedDocId(docId)}
                 selectedDocId={selectedDocId}
+                workspaceId={workspaceId}
               />
             </div>
             <div className="flex-1 overflow-auto">

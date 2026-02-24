@@ -2,6 +2,7 @@ package com.forge.webide.controller
 
 import com.forge.webide.model.*
 import com.forge.webide.service.KnowledgeIndexService
+import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.*
 import org.springframework.web.reactive.function.client.WebClient
@@ -17,18 +18,32 @@ class KnowledgeController(
     fun searchKnowledge(
         @RequestParam(required = false) q: String?,
         @RequestParam(required = false) type: String?,
+        @RequestParam(required = false) scope: String?,
+        @RequestParam(required = false) workspaceId: String?,
+        @RequestParam(required = false) userId: String?,
         @RequestParam(defaultValue = "20") limit: Int
     ): ResponseEntity<List<KnowledgeDocument>> {
+        val docType = type?.let {
+            try {
+                DocumentType.valueOf(it.uppercase().replace("-", "_"))
+            } catch (e: IllegalArgumentException) {
+                null
+            }
+        }
+        val docScope = scope?.let {
+            try {
+                KnowledgeScope.valueOf(it.uppercase())
+            } catch (e: IllegalArgumentException) {
+                null
+            }
+        }
         val results = knowledgeIndexService.search(
             query = q ?: "",
-            type = type?.let {
-                try {
-                    DocumentType.valueOf(it.uppercase().replace("-", "_"))
-                } catch (e: IllegalArgumentException) {
-                    null
-                }
-            },
-            limit = limit
+            type = docType,
+            limit = limit,
+            scope = docScope,
+            workspaceId = workspaceId,
+            userId = userId
         )
         return ResponseEntity.ok(results)
     }
@@ -40,6 +55,33 @@ class KnowledgeController(
         val doc = knowledgeIndexService.getDocument(id)
             ?: return ResponseEntity.notFound().build()
         return ResponseEntity.ok(doc)
+    }
+
+    @PostMapping("/docs")
+    fun createDocument(
+        @RequestBody request: CreateKnowledgeDocRequest
+    ): ResponseEntity<KnowledgeDocument> {
+        val doc = knowledgeIndexService.createDocument(request)
+        return ResponseEntity.status(HttpStatus.CREATED).body(doc)
+    }
+
+    @PutMapping("/docs/{id}")
+    fun updateDocument(
+        @PathVariable id: String,
+        @RequestBody request: UpdateKnowledgeDocRequest
+    ): ResponseEntity<KnowledgeDocument> {
+        val doc = knowledgeIndexService.updateDocument(id, request)
+            ?: return ResponseEntity.notFound().build()
+        return ResponseEntity.ok(doc)
+    }
+
+    @DeleteMapping("/docs/{id}")
+    fun deleteDocument(
+        @PathVariable id: String
+    ): ResponseEntity<Void> {
+        val deleted = knowledgeIndexService.deleteDocument(id)
+        return if (deleted) ResponseEntity.noContent().build()
+        else ResponseEntity.notFound().build()
     }
 
     @GetMapping("/services")

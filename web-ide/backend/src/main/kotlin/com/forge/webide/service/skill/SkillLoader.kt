@@ -490,6 +490,7 @@ class SkillLoader(
         }
 
         val hitlCheckpoint = yamlMap["hitl-checkpoint"]?.toString() ?: ""
+        val mode = yamlMap["mode"]?.toString() ?: "default"
 
         return ProfileDefinition(
             name = name,
@@ -498,7 +499,8 @@ class SkillLoader(
             baselines = baselines,
             hitlCheckpoint = hitlCheckpoint,
             oodaGuidance = body.trim(),
-            sourcePath = path.toString()
+            sourcePath = path.toString(),
+            mode = mode
         )
     }
 

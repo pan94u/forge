@@ -116,7 +116,7 @@ Always be concise but thorough in your responses."""
         }
 
         // [9] Available MCP tools + progressive loading protocol
-        val toolsSection = buildToolsSection()
+        val toolsSection = buildToolsSection(profile.mode)
         if (toolsSection.isNotBlank()) {
             sections.add(toolsSection)
         }
@@ -256,7 +256,7 @@ Always be concise but thorough in your responses."""
         """.trimMargin()
     }
 
-    private fun buildToolsSection(): String {
+    private fun buildToolsSection(activeProfileMode: String = "default"): String {
         return try {
             val tools = mcpProxyService.listTools()
             if (tools.isEmpty()) return ""
@@ -279,9 +279,9 @@ Always be concise but thorough in your responses."""
             sb.appendLine("5. **执行**: 如 Skill 提供脚本，使用 `run_skill_script` 执行确定性操作")
             sb.appendLine("6. **原则**: 不要猜测 Skill 内容，始终先 read 再使用")
 
-            // Add delivery behavior guidance for workspace tools
+            // Add behavior guidance based on profile mode
             val hasWorkspaceTools = tools.any { it.name == "workspace_write_file" }
-            if (hasWorkspaceTools) {
+            if (hasWorkspaceTools && activeProfileMode != "read-only") {
                 sb.appendLine()
                 sb.appendLine("### Delivery Behavior")
                 sb.appendLine()
@@ -292,6 +292,19 @@ Always be concise but thorough in your responses."""
                 sb.appendLine("4. After writing files, briefly summarize which files you created or modified")
                 sb.appendLine("5. To modify existing files, first use `workspace_read_file` to read them, then use `workspace_write_file` to write the complete updated content")
                 sb.appendLine("6. Choose appropriate file paths based on the project structure and conventions")
+            }
+
+            if (activeProfileMode == "read-only") {
+                sb.appendLine()
+                sb.appendLine("### Analysis Behavior (Read-Only Mode)")
+                sb.appendLine()
+                sb.appendLine("You are in **read-only analysis mode**. Your role is to observe, analyze, and report — NOT to modify code.")
+                sb.appendLine("1. Use `workspace_list_files` and `workspace_read_file` to understand the project")
+                sb.appendLine("2. Use `search_knowledge` and `get_session_history` to gather historical context")
+                sb.appendLine("3. **Do NOT use `workspace_write_file`** unless the user explicitly requests saving a report/document")
+                sb.appendLine("4. Output structured analysis reports in chat (Markdown format)")
+                sb.appendLine("5. Focus on: project status, code quality, progress assessment, risk identification")
+                sb.appendLine("6. When generating documents (architecture diagrams, reports), present in chat first, then ask if the user wants to save")
             }
 
             // Add baseline tool usage guidance

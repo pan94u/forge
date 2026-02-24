@@ -2,6 +2,7 @@ package com.forge.webide.service
 
 import com.forge.adapter.model.CompletionOptions
 import com.forge.adapter.model.Message
+import com.forge.adapter.model.ModelAdapter
 import com.forge.adapter.model.ToolDefinition
 import com.forge.webide.service.skill.SkillLoader
 import kotlinx.coroutines.runBlocking
@@ -39,7 +40,8 @@ class BaselineAutoChecker(
         options: CompletionOptions,
         tools: List<ToolDefinition>,
         workspaceId: String,
-        onEvent: (Map<String, Any?>) -> Unit
+        onEvent: (Map<String, Any?>) -> Unit,
+        adapter: ModelAdapter? = null
     ): AgenticResult {
         // Determine which baselines to run from the profile
         val profile = skillLoader.loadProfile(promptResult.activeProfile)
@@ -141,7 +143,8 @@ $failureContext
                         options = options,
                         tools = tools,
                         onEvent = onEvent,
-                        workspaceId = workspaceId
+                        workspaceId = workspaceId,
+                        adapter = adapter
                     )
                 }
             } catch (e: Exception) {

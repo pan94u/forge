@@ -31,6 +31,9 @@ class WorkspaceEntity(
     @Column(name = "local_path")
     var localPath: String? = null,
 
+    @Column(name = "error_message", length = 1000)
+    var errorMessage: String? = null,
+
     @Column(name = "created_at", nullable = false)
     val createdAt: Instant = Instant.now(),
 

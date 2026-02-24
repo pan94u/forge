@@ -1,4 +1,7 @@
-# Forge Platform — AI-Powered Intelligent Delivery Platform
+# Forge Platform — AI 驱动的智能交付平台
+
+> **愿景**：重构软件交付流程本身——不是给每个人配一个 AI 助手，而是用 SuperAgent + Skill 体系将 5-7 人团队的交付能力压缩到 1-2 人 + AI 协同完成。
+> **定位**：面向全软件交付生命周期的智能交付平台（AI Delivery Platform），涵盖编码、知识管理、质量保障、跨栈迁移、持续进化。
 
 ## 交互偏好
 

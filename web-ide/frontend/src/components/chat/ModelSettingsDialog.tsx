@@ -35,6 +35,12 @@ const PROVIDERS = [
     keyPlaceholder: "",
   },
   {
+    id: "minimax",
+    name: "MiniMax",
+    fields: ["apiKey", "baseUrl"] as const,
+    keyPlaceholder: "sk-...",
+  },
+  {
     id: "openai",
     name: "OpenAI Compatible",
     fields: ["apiKey", "baseUrl"] as const,

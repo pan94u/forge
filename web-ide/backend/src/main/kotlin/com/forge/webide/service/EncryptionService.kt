@@ -34,6 +34,7 @@ class EncryptionService(
         private const val IV_LENGTH = 12
         private const val TAG_LENGTH_BITS = 128
         private const val KEY_LENGTH_BYTES = 32
+        private const val DEV_PREFIX = "DEV:"
     }
 
     private val secretKey: SecretKey? by lazy {
@@ -57,11 +58,15 @@ class EncryptionService(
 
     /**
      * 加密明文字符串。
-     * 如果加密密钥未配置，抛出异常。
+     * 如果加密密钥未配置，降级为 Base64 编码（仅适用于开发环境）。
      */
     fun encrypt(plaintext: String): String {
         if (plaintext.isBlank()) return ""
-        val key = secretKey ?: throw IllegalStateException("Encryption key is not configured. Please set FORGE_ENCRYPTION_KEY environment variable.")
+        val key = secretKey
+        if (key == null) {
+            logger.warn("使用 Base64 降级存储（无加密），请在生产环境设置 FORGE_ENCRYPTION_KEY")
+            return DEV_PREFIX + Base64.getEncoder().encodeToString(plaintext.toByteArray(Charsets.UTF_8))
+        }
 
         val iv = ByteArray(IV_LENGTH)
         secureRandom.nextBytes(iv)
@@ -78,11 +83,21 @@ class EncryptionService(
 
     /**
      * 解密密文字符串。
-     * 如果加密密钥未配置，抛出异常。
+     * 如果加密密钥未配置，降级从 Base64 解码。
      */
     fun decrypt(ciphertext: String): String {
         if (ciphertext.isBlank()) return ""
-        val key = secretKey ?: throw IllegalStateException("Encryption key is not configured. Please set FORGE_ENCRYPTION_KEY environment variable.")
+
+        // 降级模式：Base64 编码的明文
+        if (ciphertext.startsWith(DEV_PREFIX)) {
+            return String(Base64.getDecoder().decode(ciphertext.removePrefix(DEV_PREFIX)), Charsets.UTF_8)
+        }
+
+        val key = secretKey
+        if (key == null) {
+            logger.warn("尝试解密 AES 密文但无加密密钥，返回空字符串")
+            return ""
+        }
 
         return try {
             val combined = Base64.getDecoder().decode(ciphertext)

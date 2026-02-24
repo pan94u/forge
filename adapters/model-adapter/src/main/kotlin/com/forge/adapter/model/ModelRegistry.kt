@@ -66,6 +66,12 @@ class ModelRegistry(
     fun adapterForProvider(provider: String): ModelAdapter? = adapters[provider]
 
     /**
+     * Get the provider name for a given model ID.
+     * Returns null if the model is not found.
+     */
+    fun providerForModel(modelId: String): String? = modelToProvider[modelId]
+
+    /**
      * Get the adapter that supports a given model ID.
      * Falls back to the default adapter if the model is not found.
      */

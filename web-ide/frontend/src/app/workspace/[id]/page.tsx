@@ -18,7 +18,254 @@ import { MonacoEditor } from "@/components/editor/MonacoEditor";
 import { FileExplorer } from "@/components/editor/FileExplorer";
 import { TerminalPanel } from "@/components/editor/TerminalPanel";
 import { AiChatSidebar } from "@/components/chat/AiChatSidebar";
+import { Loader2 } from "lucide-react";
 import { workspaceApi, type Workspace, type FileNode } from "@/lib/workspace-api";
+
+// Progress bar milestones for simulated progress during git clone
+const PROGRESS_STEPS = [
+  { target: 15, duration: 2000 },
+  { target: 40, duration: 8000 },
+  { target: 70, duration: 12000 },
+  { target: 90, duration: 8000 },
+  { target: 99, duration: 30000 },
+];
+
+function CreateWorkspaceForm() {
+  const [creating, setCreating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [cloning, setCloning] = useState(false);
+  const [cloningWsId, setCloningWsId] = useState<string | null>(null);
+  const [progress, setProgress] = useState(0);
+  const progressRef = useRef<NodeJS.Timeout | null>(null);
+  const pollRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Simulated progress animation
+  const startProgress = useCallback(() => {
+    let stepIdx = 0;
+    let current = 0;
+
+    const tick = () => {
+      if (stepIdx >= PROGRESS_STEPS.length) return;
+      const step = PROGRESS_STEPS[stepIdx];
+      const increment = (step.target - current) / (step.duration / 100);
+
+      const interval = setInterval(() => {
+        current = Math.min(current + increment, step.target);
+        setProgress(Math.round(current));
+        if (current >= step.target) {
+          clearInterval(interval);
+          stepIdx++;
+          if (stepIdx < PROGRESS_STEPS.length) {
+            tick();
+          }
+        }
+      }, 100);
+
+      progressRef.current = interval;
+    };
+
+    tick();
+  }, []);
+
+  // Poll workspace status during clone
+  const startPolling = useCallback((wsId: string) => {
+    const poll = async () => {
+      try {
+        const ws = await workspaceApi.getWorkspace(wsId);
+        if (ws.status === "active") {
+          // Clone succeeded
+          setProgress(100);
+          if (progressRef.current) clearInterval(progressRef.current);
+          if (pollRef.current) clearInterval(pollRef.current);
+          setTimeout(() => {
+            window.location.href = `/workspace/${wsId}`;
+          }, 1000);
+        } else if (ws.status === "error") {
+          // Clone failed
+          if (progressRef.current) clearInterval(progressRef.current);
+          if (pollRef.current) clearInterval(pollRef.current);
+          setError(ws.errorMessage || "Git clone failed");
+          setCloning(false);
+          setCreating(false);
+          setProgress(0);
+        }
+        // status === "creating" → keep polling
+      } catch {
+        // Network error, keep polling
+      }
+    };
+
+    pollRef.current = setInterval(poll, 2000);
+  }, []);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (progressRef.current) clearInterval(progressRef.current);
+      if (pollRef.current) clearInterval(pollRef.current);
+    };
+  }, []);
+
+  return (
+    <div className="flex h-full items-center justify-center">
+      <div className="max-w-md space-y-6 text-center">
+        <h2 className="text-2xl font-bold">Create New Workspace</h2>
+        <p className="text-muted-foreground">
+          Set up a new development workspace with AI assistance.
+        </p>
+        {error && (
+          <div className="rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive text-left">
+            {error}
+          </div>
+        )}
+
+        {/* Progress bar during git clone */}
+        {cloning && (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-muted-foreground">
+                {progress < 100 ? "Cloning repository..." : "Clone complete!"}
+              </span>
+              <span className="font-mono text-primary">{progress}%</span>
+            </div>
+            <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+              <div
+                className={`h-full rounded-full transition-all duration-300 ${
+                  progress >= 100
+                    ? "bg-green-500"
+                    : "bg-primary"
+                }`}
+                style={{ width: `${progress}%` }}
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {progress < 40
+                ? "Connecting to repository..."
+                : progress < 70
+                  ? "Downloading files..."
+                  : progress < 100
+                    ? "Finalizing workspace..."
+                    : "Redirecting..."}
+            </p>
+          </div>
+        )}
+
+        {!cloning && (
+        <form
+          className="space-y-4 text-left"
+          onSubmit={async (e) => {
+            e.preventDefault();
+            if (creating) return;
+            setError(null);
+            const form = e.target as HTMLFormElement;
+            const name = (form.elements.namedItem("name") as HTMLInputElement).value.trim();
+            const desc = (form.elements.namedItem("description") as HTMLInputElement).value.trim();
+            const repo = (form.elements.namedItem("repository") as HTMLInputElement).value.trim();
+            const branch = (form.elements.namedItem("branch") as HTMLInputElement).value.trim();
+            if (!name) { setError("Workspace 名称不能为空"); return; }
+            if (repo && !/^https?:\/\/.+/.test(repo)) {
+              setError("Git URL 格式无效，需以 http:// 或 https:// 开头");
+              return;
+            }
+            setCreating(true);
+            try {
+              const ws = await workspaceApi.createWorkspace({
+                name,
+                description: desc,
+                repository: repo || undefined,
+                branch: branch || undefined,
+              });
+
+              if (ws.status === "creating") {
+                // Async clone — show progress bar and poll
+                setCloningWsId(ws.id);
+                setCloning(true);
+                startProgress();
+                startPolling(ws.id);
+              } else {
+                // No git repo — workspace is already active
+                window.location.href = `/workspace/${ws.id}`;
+              }
+            } catch (err) {
+              setError("创建失败: " + (err instanceof Error ? err.message : String(err)));
+              setCreating(false);
+            }
+          }}
+        >
+          <div>
+            <label className="block text-sm font-medium" htmlFor="name">
+              Workspace Name
+            </label>
+            <input
+              id="name"
+              name="name"
+              required
+              disabled={creating}
+              className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm disabled:opacity-50"
+              placeholder="my-project"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium" htmlFor="description">
+              Description
+            </label>
+            <input
+              id="description"
+              name="description"
+              disabled={creating}
+              className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm disabled:opacity-50"
+              placeholder="A brief description"
+            />
+          </div>
+          <div className="rounded-md border border-border p-3 space-y-3">
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+              Import from Git (optional)
+            </p>
+            <div>
+              <label className="block text-sm font-medium" htmlFor="repository">
+                Git Repository URL
+              </label>
+              <input
+                id="repository"
+                name="repository"
+                disabled={creating}
+                className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm disabled:opacity-50"
+                placeholder="https://github.com/user/repo.git"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium" htmlFor="branch">
+                Branch
+              </label>
+              <input
+                id="branch"
+                name="branch"
+                disabled={creating}
+                className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm disabled:opacity-50"
+                placeholder="main"
+              />
+            </div>
+          </div>
+          <button
+            type="submit"
+            disabled={creating}
+            className="flex w-full items-center justify-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+          >
+            {creating ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                {" 创建中..."}
+              </>
+            ) : (
+              "Create Workspace"
+            )}
+          </button>
+        </form>
+        )}
+      </div>
+    </div>
+  );
+}
 
 export default function WorkspacePage() {
   const params = useParams();
@@ -146,95 +393,7 @@ export default function WorkspacePage() {
   const breadcrumbParts = activeFile?.split("/").filter(Boolean) ?? [];
 
   if (workspaceId === "new") {
-    return (
-      <div className="flex h-full items-center justify-center">
-        <div className="max-w-md space-y-6 text-center">
-          <h2 className="text-2xl font-bold">Create New Workspace</h2>
-          <p className="text-muted-foreground">
-            Set up a new development workspace with AI assistance.
-          </p>
-          <form
-            className="space-y-4 text-left"
-            onSubmit={async (e) => {
-              e.preventDefault();
-              const form = e.target as HTMLFormElement;
-              const name = (form.elements.namedItem("name") as HTMLInputElement).value;
-              const desc = (form.elements.namedItem("description") as HTMLInputElement).value;
-              const repo = (form.elements.namedItem("repository") as HTMLInputElement).value;
-              const branch = (form.elements.namedItem("branch") as HTMLInputElement).value;
-              try {
-                const ws = await workspaceApi.createWorkspace({
-                  name,
-                  description: desc,
-                  repository: repo || undefined,
-                  branch: branch || undefined,
-                });
-                window.location.href = `/workspace/${ws.id}`;
-              } catch (err) {
-                console.error("Failed to create workspace:", err);
-              }
-            }}
-          >
-            <div>
-              <label className="block text-sm font-medium" htmlFor="name">
-                Workspace Name
-              </label>
-              <input
-                id="name"
-                name="name"
-                required
-                className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                placeholder="my-project"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium" htmlFor="description">
-                Description
-              </label>
-              <input
-                id="description"
-                name="description"
-                className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                placeholder="A brief description"
-              />
-            </div>
-            <div className="rounded-md border border-border p-3 space-y-3">
-              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                Import from Git (optional)
-              </p>
-              <div>
-                <label className="block text-sm font-medium" htmlFor="repository">
-                  Git Repository URL
-                </label>
-                <input
-                  id="repository"
-                  name="repository"
-                  className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                  placeholder="https://github.com/user/repo.git"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium" htmlFor="branch">
-                  Branch
-                </label>
-                <input
-                  id="branch"
-                  name="branch"
-                  className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                  placeholder="main"
-                />
-              </div>
-            </div>
-            <button
-              type="submit"
-              className="w-full rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
-            >
-              Create Workspace
-            </button>
-          </form>
-        </div>
-      </div>
-    );
+    return <CreateWorkspaceForm />;
   }
 
   if (workspaceLoading) {

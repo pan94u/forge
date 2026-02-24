@@ -20,6 +20,7 @@ import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
 import java.time.Instant
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 
 /**
@@ -38,6 +39,7 @@ import java.util.concurrent.Executors
 @Service
 class ClaudeAgentService(
     private val claudeAdapter: ModelAdapter,
+    private val modelRegistry: ModelRegistry,
     private val mcpProxyService: McpProxyService,
     private val knowledgeGapDetectorService: KnowledgeGapDetectorService,
     private val chatSessionRepository: ChatSessionRepository,
@@ -53,7 +55,8 @@ class ClaudeAgentService(
     // Extracted services
     private val agenticLoopOrchestrator: AgenticLoopOrchestrator,
     private val hitlCheckpointManager: HitlCheckpointManager,
-    private val baselineAutoChecker: BaselineAutoChecker
+    private val baselineAutoChecker: BaselineAutoChecker,
+    private val interactionEvaluationService: com.forge.webide.service.learning.InteractionEvaluationService
 ) {
     private val logger = LoggerFactory.getLogger(ClaudeAgentService::class.java)
     private val executor = Executors.newFixedThreadPool(10)
@@ -62,17 +65,31 @@ class ClaudeAgentService(
     private var model: String = "claude-sonnet-4-6"
 
     /**
-     * Resolve the user's API key for the given session.
+     * Resolve the user's API key for the given session and provider.
      * Looks up userId from the chat session entity, then queries UserModelConfigService.
      * Returns null if no user key is configured (adapter falls back to server default).
      */
-    private fun resolveUserApiKey(sessionId: String): String? {
+    private fun resolveUserApiKey(sessionId: String, provider: String = "anthropic"): String? {
         return try {
             val session = chatSessionRepository.findById(sessionId).orElse(null) ?: return null
-            val userId = session.userId.takeIf { it.isNotBlank() && it != "anonymous" } ?: return null
-            userModelConfigService.getDecryptedApiKey(userId, "anthropic")
+            val userId = session.userId.takeIf { it.isNotBlank() } ?: return null
+            userModelConfigService.getDecryptedApiKey(userId, provider)
         } catch (e: Exception) {
             logger.debug("Failed to resolve user API key for session {}: {}", sessionId, e.message)
+            null
+        }
+    }
+
+    /**
+     * Resolve the user's base URL override for the given session and provider.
+     */
+    private fun resolveUserBaseUrl(sessionId: String, provider: String): String? {
+        return try {
+            val session = chatSessionRepository.findById(sessionId).orElse(null) ?: return null
+            val userId = session.userId.takeIf { it.isNotBlank() } ?: return null
+            val config = userModelConfigService.getUserConfig(userId, provider)
+            config?.baseUrl?.takeIf { it.isNotBlank() }
+        } catch (e: Exception) {
             null
         }
     }
@@ -126,7 +143,8 @@ class ClaudeAgentService(
         sessionId: String,
         message: String,
         contexts: List<ContextReference>,
-        workspaceId: String
+        workspaceId: String,
+        modelId: String? = null
     ): ChatMessageResponse {
         val fullMessage = buildContextualMessage(message, contexts)
         val history = loadConversationHistory(sessionId)
@@ -145,9 +163,13 @@ class ClaudeAgentService(
             val promptResult = buildDynamicSystemPrompt(message, workspaceId)
             logger.info("Profile: {}, Skills: {}", promptResult.activeProfile, promptResult.loadedSkills)
 
-            val userApiKey = resolveUserApiKey(sessionId)
+            // Resolve adapter and model based on modelId
+            val actualModel = modelId ?: model
+            val adapter = if (modelId != null) modelRegistry.adapterForModel(modelId) else claudeAdapter
+            val provider = if (modelId != null) modelRegistry.providerForModel(modelId) ?: "anthropic" else "anthropic"
+            val userApiKey = resolveUserApiKey(sessionId, provider)
             val options = CompletionOptions(
-                model = model,
+                model = actualModel,
                 maxTokens = 4096,
                 systemPrompt = promptResult.systemPrompt,
                 apiKeyOverride = userApiKey
@@ -155,7 +177,7 @@ class ClaudeAgentService(
 
             // Run single-turn completion with rate limit retry
             val result = runBlocking {
-                val events = agenticLoopOrchestrator.streamWithRetry { claudeAdapter.streamWithTools(messages, options, tools) }.toList()
+                val events = agenticLoopOrchestrator.streamWithRetry { adapter.streamWithTools(messages, options, tools) }.toList()
                 agenticLoopOrchestrator.collectStreamResult(events)
             }
 
@@ -175,17 +197,41 @@ class ClaudeAgentService(
         }
     }
 
+    companion object {
+        /** Confidence threshold below which intent confirmation is triggered */
+        const val INTENT_CONFIRMATION_THRESHOLD = 0.5
+    }
+
+    // Pending intent confirmations: sessionId → CompletableFuture<String>
+    private val pendingIntentConfirmations = ConcurrentHashMap<String, java.util.concurrent.CompletableFuture<String>>()
+
+    /**
+     * Resolve an intent confirmation (called from WebSocket handler when user selects an option).
+     */
+    fun resolveIntentConfirmation(sessionId: String, selectedProfile: String) {
+        val future = pendingIntentConfirmations.remove(sessionId)
+        if (future != null) {
+            future.complete(selectedProfile)
+            logger.info("Intent confirmation resolved for session {}: {}", sessionId, selectedProfile)
+        } else {
+            logger.warn("No pending intent confirmation for session {}", sessionId)
+        }
+    }
+
     /**
      * Stream a message with real-time events via the agentic loop.
      *
      * Supports multi-turn tool calling: Claude requests tools -> tools execute ->
      * results feed back -> Claude continues. Max turns defined in [AgenticLoopOrchestrator].
+     *
+     * Phase 7: Low-confidence routing triggers intent confirmation before proceeding.
      */
     fun streamMessage(
         sessionId: String,
         message: String,
         contexts: List<ContextReference>,
         workspaceId: String,
+        modelId: String? = null,
         onEvent: (Map<String, Any?>) -> Unit,
         onComplete: (ChatMessage) -> Unit,
         onError: (Exception) -> Unit
@@ -210,12 +256,76 @@ class ClaudeAgentService(
                 metricsService.recordOodaPhase("observe")
                 emitSubStep(onEvent, "解析用户意图（${message.length} 字符）")
 
-                val promptResult = buildDynamicSystemPrompt(message, workspaceId)
-                logger.info("Stream profile: {}, Skills: {}", promptResult.activeProfile, promptResult.loadedSkills)
+                var promptResult = buildDynamicSystemPrompt(message, workspaceId)
+                logger.info("Stream profile: {}, Skills: {}, confidence: {}", promptResult.activeProfile, promptResult.loadedSkills, promptResult.confidence)
 
-                val userApiKey = resolveUserApiKey(sessionId)
+                // Low-confidence intent confirmation
+                if (promptResult.confidence < INTENT_CONFIRMATION_THRESHOLD) {
+                    logger.info("Low confidence routing ({}) for session {}, requesting intent confirmation",
+                        promptResult.confidence, sessionId)
+
+                    val confirmationFuture = java.util.concurrent.CompletableFuture<String>()
+                    pendingIntentConfirmations[sessionId] = confirmationFuture
+
+                    onEvent(mapOf(
+                        "type" to "intent_confirmation",
+                        "currentProfile" to promptResult.activeProfile,
+                        "confidence" to promptResult.confidence,
+                        "reason" to promptResult.routingReason,
+                        "options" to listOf(
+                            mapOf("id" to "evaluation-profile", "label" to "分析/评估", "description" to "查看进度、评估代码、生成报告"),
+                            mapOf("id" to "development-profile", "label" to "开发/修复", "description" to "写代码、修 Bug、实现功能"),
+                            mapOf("id" to "planning-profile", "label" to "规划/需求", "description" to "需求分析、产品规划"),
+                            mapOf("id" to "design-profile", "label" to "设计/架构", "description" to "架构设计、API 设计、数据库设计"),
+                            mapOf("id" to "testing-profile", "label" to "测试", "description" to "写测试、测试分析"),
+                            mapOf("id" to "ops-profile", "label" to "运维/部署", "description" to "部署、发布、监控")
+                        )
+                    ))
+
+                    try {
+                        val selectedProfile = confirmationFuture.get(60, java.util.concurrent.TimeUnit.SECONDS)
+                        pendingIntentConfirmations.remove(sessionId)
+
+                        if (selectedProfile != promptResult.activeProfile) {
+                            val confirmedProfile = skillLoader.loadProfile(selectedProfile)
+                            if (confirmedProfile != null) {
+                                val memoryContext = if (workspaceId.isNotBlank()) {
+                                    try { memoryContextLoader.loadMemoryContext(workspaceId, confirmedProfile.name) }
+                                    catch (e: Exception) { com.forge.webide.service.memory.MemoryContext() }
+                                } else { com.forge.webide.service.memory.MemoryContext() }
+                                val skills = skillLoader.loadSkillsForProfile(confirmedProfile, message)
+                                val systemPrompt = systemPromptAssembler.assemble(confirmedProfile, skills, memoryContext)
+                                promptResult = DynamicPromptResult(
+                                    systemPrompt = systemPrompt,
+                                    activeProfile = confirmedProfile.name,
+                                    loadedSkills = skills.map { it.name },
+                                    routingReason = "User confirmed: $selectedProfile",
+                                    confidence = 1.0
+                                )
+                            }
+                        } else {
+                            promptResult = promptResult.copy(
+                                confidence = 1.0,
+                                routingReason = "User confirmed: ${promptResult.routingReason}"
+                            )
+                        }
+
+                        emitSubStep(onEvent, "用户确认意图：${promptResult.activeProfile}")
+                    } catch (e: java.util.concurrent.TimeoutException) {
+                        pendingIntentConfirmations.remove(sessionId)
+                        logger.info("Intent confirmation timed out for session {}, proceeding with default", sessionId)
+                        emitSubStep(onEvent, "意图确认超时，使用默认路由: ${promptResult.activeProfile}")
+                    }
+                }
+
+                // Resolve adapter and model based on modelId
+                val actualModel = modelId ?: model
+                val adapter = if (modelId != null) modelRegistry.adapterForModel(modelId) else claudeAdapter
+                val provider = if (modelId != null) modelRegistry.providerForModel(modelId) ?: "anthropic" else "anthropic"
+                val userApiKey = resolveUserApiKey(sessionId, provider)
+                logger.info("Stream profile: {}, model: {}, provider: {}", promptResult.activeProfile, actualModel, provider)
                 val options = CompletionOptions(
-                    model = model,
+                    model = actualModel,
                     maxTokens = 4096,
                     systemPrompt = promptResult.systemPrompt,
                     apiKeyOverride = userApiKey
@@ -252,7 +362,8 @@ class ClaudeAgentService(
                         options = options,
                         tools = tools,
                         onEvent = onEvent,
-                        workspaceId = workspaceId
+                        workspaceId = workspaceId,
+                        adapter = adapter
                     )
                 }
 
@@ -268,76 +379,13 @@ class ClaudeAgentService(
                         options = options,
                         tools = tools,
                         workspaceId = workspaceId,
-                        onEvent = onEvent
+                        onEvent = onEvent,
+                        adapter = adapter
                     )
                 }
 
-                // HITL checkpoint: if profile has a hitlCheckpoint defined, pause for approval
-                val activeProfileDef = skillLoader.loadProfile(promptResult.activeProfile)
-                if (activeProfileDef != null && activeProfileDef.hitlCheckpoint.isNotBlank()) {
-                    val deliverables = finalResult.toolCalls
-                        .filter { it.name == "workspace_write_file" && it.status != "error" }
-                        .mapNotNull { tc -> tc.input["path"] as? String }
-
-                    val decision = hitlCheckpointManager.awaitHitlCheckpoint(
-                        sessionId = sessionId,
-                        profile = activeProfileDef,
-                        deliverables = deliverables,
-                        baselineResults = null,
-                        onEvent = onEvent
-                    )
-
-                    when (decision.action) {
-                        HitlAction.REJECT -> {
-                            // Terminate: send summary and return
-                            val rejectContent = finalResult.content +
-                                "\n\n---\n⛔ 用户拒绝了此阶段产出。反馈: ${decision.feedback ?: "无"}"
-                            finalResult = AgenticResult(content = rejectContent, toolCalls = finalResult.toolCalls)
-                        }
-                        HitlAction.MODIFY -> {
-                            // Re-enter agentic loop with modified prompt
-                            val modifiedMessages = (history + Message(role = Message.Role.USER, content = fullMessage)).toMutableList()
-                            modifiedMessages.add(Message(role = Message.Role.ASSISTANT, content = finalResult.content))
-                            modifiedMessages.add(Message(role = Message.Role.USER, content = decision.modifiedPrompt ?: decision.feedback ?: "请修改"))
-
-                            emitSubStep(onEvent, "根据修改指令重新执行...")
-                            onEvent(mapOf("type" to "ooda_phase", "phase" to "orient", "detail" to "根据修改指令重入"))
-
-                            finalResult = runBlocking {
-                                agenticLoopOrchestrator.agenticStream(
-                                    messages = modifiedMessages,
-                                    options = options,
-                                    tools = tools,
-                                    onEvent = onEvent,
-                                    workspaceId = workspaceId
-                                )
-                            }
-                        }
-                        HitlAction.APPROVE -> {
-                            // Re-enter agentic loop to continue execution after approval
-                            emitSubStep(onEvent, "用户已批准「${activeProfileDef.hitlCheckpoint}」，继续执行...")
-                            onEvent(mapOf("type" to "ooda_phase", "phase" to "orient", "detail" to "审批通过，继续执行"))
-
-                            val continueMessages = (history + Message(role = Message.Role.USER, content = fullMessage)).toMutableList()
-                            continueMessages.add(Message(role = Message.Role.ASSISTANT, content = finalResult.content))
-                            continueMessages.add(Message(role = Message.Role.USER, content =
-                                "用户已审批通过「${activeProfileDef.hitlCheckpoint}」。" +
-                                (if (decision.feedback.isNullOrBlank()) "" else "用户反馈: ${decision.feedback}。") +
-                                "请输出本阶段的完整总结报告，包括：1) 已完成的工作 2) 产出物清单 3) 关键决策 4) 建议的下一步。"
-                            ))
-
-                            finalResult = runBlocking {
-                                agenticLoopOrchestrator.agenticStream(
-                                    messages = continueMessages,
-                                    options = options,
-                                    tools = tools,
-                                    onEvent = onEvent,
-                                    workspaceId = workspaceId
-                                )
-                            }
-                        }
-                    }
-                }
+                // HITL checkpoint: disabled — will be redesigned later
+                // (previous implementation triggered at inappropriate times)
 
                 // OODA: Complete -- response delivered
                 onEvent(mapOf("type" to "ooda_phase", "phase" to "complete"))
@@ -353,6 +401,7 @@ class ClaudeAgentService(
                 knowledgeGapDetectorService.analyzeForGaps(message, finalResult.content, contexts)
 
                 // Persist execution record for quality dashboard
+                val toolSuccessCount = finalResult.toolCalls.count { it.status != "error" }
                 try {
                     val gson = com.google.gson.Gson()
                     val toolCallsSummary = finalResult.toolCalls.map { tc ->
@@ -369,6 +418,25 @@ class ClaudeAgentService(
                     ))
                 } catch (e: Exception) {
                     logger.warn("Failed to save execution record: {}", e.message)
+                }
+
+                // Phase 7: Record interaction evaluation for Learning Loop
+                try {
+                    val profileDef = skillLoader.loadProfile(promptResult.activeProfile)
+                    interactionEvaluationService.recordEvaluation(
+                        sessionId = sessionId,
+                        workspaceId = workspaceId,
+                        profile = promptResult.activeProfile,
+                        mode = profileDef?.mode ?: "default",
+                        routingConfidence = promptResult.confidence,
+                        intentConfirmed = promptResult.confidence >= 1.0 && promptResult.routingReason.startsWith("User confirmed"),
+                        toolCallCount = finalResult.toolCalls.size,
+                        toolSuccessCount = toolSuccessCount,
+                        turnCount = finalResult.toolCalls.size.coerceAtLeast(1),
+                        durationMs = messageDurationMs
+                    )
+                } catch (e: Exception) {
+                    logger.warn("Failed to record interaction evaluation: {}", e.message)
                 }
 
                 // Generate session summary and update memory layers asynchronously (non-blocking)

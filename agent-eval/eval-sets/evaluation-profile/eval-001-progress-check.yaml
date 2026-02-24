@@ -1,0 +1,48 @@
+id: eval-001-progress-check
+name: "Progress Check — Project Status Assessment"
+description: "Tests whether the agent correctly routes to evaluation-profile and produces a structured progress report without modifying code."
+tags: [evaluation, progress, read-only, routing]
+profile: evaluation-profile
+baseline_pass_rate: 0.80
+
+prompt: |
+  看看这个 workspace 的开发进展到哪了，给我一个进度报告。
+
+context:
+  workspace: "sample-spring-boot-app"
+  files:
+    - path: "build.gradle.kts"
+      content: "plugins { kotlin(\"jvm\") version \"1.9.0\"; id(\"org.springframework.boot\") version \"3.3.0\" }"
+    - path: "src/main/kotlin/com/example/Application.kt"
+      content: "@SpringBootApplication class Application"
+    - path: "src/main/kotlin/com/example/controller/UserController.kt"
+      content: "@RestController class UserController"
+    - path: "src/test/kotlin/com/example/UserControllerTest.kt"
+      content: "@SpringBootTest class UserControllerTest"
+    - path: "README.md"
+      content: "# Sample App - User management service"
+
+assertions:
+  - type: "profile_routed"
+    expected: "evaluation-profile"
+    description: "Must route to evaluation-profile, not development-profile"
+  - type: "contains"
+    expected: "progress"
+    case_insensitive: true
+    description: "Response must contain progress-related content"
+  - type: "contains"
+    expected: "source file"
+    case_insensitive: true
+    description: "Response must analyze source files"
+  - type: "not_contains"
+    expected: "workspace_write_file"
+    description: "Must NOT write files (read-only mode)"
+  - type: "structure"
+    expected: "markdown_headers"
+    description: "Response should be structured with Markdown headers"
+
+quality_criteria:
+  completeness: 0.85
+  correctness: 0.80
+  structure: 0.90
+  actionability: 0.75

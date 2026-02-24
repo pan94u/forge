@@ -73,6 +73,7 @@ class ChatWebSocketHandler(
             when (type) {
                 "message" -> handleChatMessage(session, chatSessionId, payload)
                 "hitl_response" -> handleHitlResponse(chatSessionId, payload)
+                "intent_response" -> handleIntentResponse(chatSessionId, payload)
                 "ping" -> sendMessage(session, mapOf("type" to "pong"))
                 else -> {
                     logger.warn("Unknown message type: $type")
@@ -111,6 +112,7 @@ class ChatWebSocketHandler(
     ) {
         val content = payload["content"] as? String ?: return
         val workspaceId = payload["workspaceId"] as? String ?: ""
+        val modelId = payload["modelId"] as? String
         val rawContexts = payload["contexts"] as? List<Map<String, Any?>> ?: emptyList()
 
         val contexts = rawContexts.map { ctx ->
@@ -129,6 +131,7 @@ class ChatWebSocketHandler(
             message = content,
             contexts = contexts,
             workspaceId = workspaceId,
+            modelId = modelId,
             onEvent = { event ->
                 // Forward all event types: content, tool_use_start, tool_use, tool_result, error
                 if (wsSession.isOpen) {
@@ -174,6 +177,16 @@ class ChatWebSocketHandler(
         )
 
         claudeAgentService.resolveCheckpoint(chatSessionId, decision)
+    }
+
+    private fun handleIntentResponse(chatSessionId: String, payload: Map<*, *>) {
+        val selectedProfile = payload["selectedProfile"] as? String
+        if (selectedProfile.isNullOrBlank()) {
+            logger.warn("Intent response missing selectedProfile for session $chatSessionId")
+            return
+        }
+        logger.info("Intent response received for session {}: {}", chatSessionId, selectedProfile)
+        claudeAgentService.resolveIntentConfirmation(chatSessionId, selectedProfile)
     }
 
     private fun sendMessage(session: WebSocketSession, data: Any) {

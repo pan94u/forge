@@ -6,6 +6,7 @@ import com.forge.webide.service.memory.MessageCompressor
 import com.forge.webide.service.memory.TokenEstimator
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import java.time.Instant
@@ -30,7 +31,8 @@ class AgenticLoopOrchestrator(
     private val logger = LoggerFactory.getLogger(AgenticLoopOrchestrator::class.java)
 
     companion object {
-        const val MAX_AGENTIC_TURNS = 8
+        /** Absolute safety cap to prevent infinite loops. */
+        const val MAX_AGENTIC_TURNS = 50
     }
 
     /**
@@ -47,8 +49,10 @@ class AgenticLoopOrchestrator(
         options: CompletionOptions,
         tools: List<ToolDefinition>,
         onEvent: (Map<String, Any?>) -> Unit,
-        workspaceId: String = ""
+        workspaceId: String = "",
+        adapter: ModelAdapter? = null
     ): AgenticResult {
+        val activeAdapter = adapter ?: claudeAdapter
         var currentMessages = messages.toMutableList()
         var allToolCalls = mutableListOf<ToolCallRecord>()
         var finalContent = ""
@@ -57,20 +61,25 @@ class AgenticLoopOrchestrator(
 
         for (turn in 1..MAX_AGENTIC_TURNS) {
             lastTurn = turn
-            logger.debug("Agentic turn $turn / $MAX_AGENTIC_TURNS")
+            logger.debug("Agentic turn $turn")
 
             // Compress messages if context is getting large
             val compressed = messageCompressor.compressIfNeeded(currentMessages)
             if (compressed.phase > 0) {
                 currentMessages = compressed.messages.toMutableList()
                 logger.info("Context compressed: phase={}, tokens={}", compressed.phase, compressed.tokenCount)
-                onEvent(mapOf(
-                    "type" to "context_usage",
-                    "tokensUsed" to compressed.tokenCount,
-                    "tokenBudget" to MessageCompressor.MAX_CONVERSATION_TOKENS,
-                    "compressionPhase" to compressed.phase
-                ))
             }
+
+            // Always emit context usage so the frontend can show the indicator
+            val currentTokens = if (compressed.phase > 0) compressed.tokenCount
+                else tokenEstimator.estimateMessages(currentMessages)
+            onEvent(mapOf(
+                "type" to "context_usage",
+                "tokensUsed" to currentTokens,
+                "tokenBudget" to MessageCompressor.MAX_CONVERSATION_TOKENS,
+                "compressionPhase" to compressed.phase,
+                "turn" to turn
+            ))
 
             // Accumulate events from this turn
             var turnText = StringBuilder()
@@ -83,7 +92,7 @@ class AgenticLoopOrchestrator(
             val turnStartMs = System.currentTimeMillis()
 
             // Stream and emit events in real-time (with rate limit retry)
-            streamWithRetry { claudeAdapter.streamWithTools(currentMessages, options, tools) }.collect { event ->
+            streamWithRetry { activeAdapter.streamWithTools(currentMessages, options, tools) }.collect { event ->
                 if (!firstEventReceived) {
                     firstEventReceived = true
                     logger.debug("First event received for turn $turn in ${System.currentTimeMillis() - turnStartMs}ms: ${event::class.simpleName}")
@@ -154,7 +163,7 @@ class AgenticLoopOrchestrator(
                 // OODA: Act -- executing tools
                 onEvent(mapOf("type" to "ooda_phase", "phase" to "act",
                     "detail" to "执行 ${currentToolUses.size} 个工具",
-                    "turn" to turn, "maxTurns" to MAX_AGENTIC_TURNS))
+                    "turn" to turn))
                 metricsService.recordOodaPhase("act")
 
                 // Build assistant message with tool uses
@@ -168,7 +177,7 @@ class AgenticLoopOrchestrator(
                 // Execute each tool and collect results
                 val toolResults = mutableListOf<ToolResult>()
                 for ((toolIdx, toolUse) in currentToolUses.withIndex()) {
-                    emitSubStep(onEvent, "Turn $turn/$MAX_AGENTIC_TURNS — 调用 ${toolUse.name} (${toolIdx + 1}/${currentToolUses.size})")
+                    emitSubStep(onEvent, "Turn $turn — 调用 ${toolUse.name} (${toolIdx + 1}/${currentToolUses.size})")
                     val startMs = System.currentTimeMillis()
                     val result = try {
                         val mcpResult = mcpProxyService.callTool(toolUse.name, toolUse.input, workspaceId.ifBlank { null })
@@ -275,7 +284,7 @@ class AgenticLoopOrchestrator(
             ))
 
             var summaryText = StringBuilder()
-            claudeAdapter.streamWithTools(currentMessages, options, emptyList()).collect { event ->
+            activeAdapter.streamWithTools(currentMessages, options, emptyList()).collect { event ->
                 when (event) {
                     is StreamEvent.ContentDelta -> {
                         summaryText.append(event.text)
@@ -294,19 +303,26 @@ class AgenticLoopOrchestrator(
     /**
      * Wrap a streaming API call with exponential backoff retry on rate limit (429).
      * Retries up to [maxRetries] times with delays of 1s, 2s, 4s... (max 30s).
+     *
+     * IMPORTANT: RateLimitException can be thrown both during Flow creation AND
+     * during Flow collection (when the HTTP SSE connection is established).
+     * This wrapper catches both cases by re-collecting on rate limit errors.
      */
     suspend fun streamWithRetry(
         maxRetries: Int = 3,
         block: suspend () -> Flow<StreamEvent>
-    ): Flow<StreamEvent> {
+    ): Flow<StreamEvent> = flow {
         var lastException: Exception? = null
-        for (attempt in 0 until maxRetries) {
+        for (attempt in 0..maxRetries) {
             try {
-                return block()
+                val upstream = block()
+                upstream.collect { event -> emit(event) }
+                return@flow // success
             } catch (e: RateLimitException) {
                 lastException = e
+                if (attempt >= maxRetries) break
                 val delayMs = (1000L * (1 shl attempt)).coerceAtMost(30_000L)
-                logger.warn("Rate limited, retrying in ${delayMs}ms (attempt ${attempt + 1}/$maxRetries)")
+                logger.warn("Rate limited (during stream), retrying in ${delayMs}ms (attempt ${attempt + 1}/$maxRetries)")
                 delay(delayMs)
             }
         }

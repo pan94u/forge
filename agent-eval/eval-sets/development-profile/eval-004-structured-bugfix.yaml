@@ -1,0 +1,48 @@
+id: eval-004-structured-bugfix
+name: "Structured Bug Fix — 5-Whys Root Cause Analysis"
+description: "Tests whether the agent uses the bug-fix-workflow skill to perform structured diagnosis with root cause analysis."
+tags: [development, bugfix, structured, 5-whys]
+profile: development-profile
+baseline_pass_rate: 0.80
+
+prompt: |
+  帮我诊断并修复这个 bug：API 返回的 workspace status 字段是 "ACTIVE"（大写），但前端期望小写 "active"。
+
+context:
+  workspace: "forge-platform"
+  files:
+    - path: "src/main/kotlin/com/forge/webide/entity/WorkspaceEntity.kt"
+      content: |
+        enum class WorkspaceStatus { CREATING, ACTIVE, SUSPENDED, ERROR }
+        @Entity class WorkspaceEntity(
+          @Enumerated(EnumType.STRING) val status: WorkspaceStatus = WorkspaceStatus.CREATING
+        )
+    - path: "src/main/kotlin/com/forge/webide/controller/WorkspaceController.kt"
+      content: |
+        @GetMapping("/{id}") fun getWorkspace(@PathVariable id: String) = workspaceRepository.findById(id)
+
+assertions:
+  - type: "profile_routed"
+    expected: "development-profile"
+    description: "Must route to development-profile"
+  - type: "contains"
+    expected: "root cause"
+    case_insensitive: true
+    description: "Response must include root cause analysis"
+  - type: "contains"
+    expected: "JsonValue"
+    case_insensitive: true
+    description: "Fix should use @JsonValue annotation for lowercase serialization"
+  - type: "contains"
+    expected: "enum"
+    case_insensitive: true
+    description: "Must identify enum serialization as the issue"
+  - type: "tool_used"
+    expected: "workspace_write_file"
+    description: "Must write the fix to workspace"
+
+quality_criteria:
+  completeness: 0.90
+  correctness: 0.90
+  structure: 0.85
+  actionability: 0.90

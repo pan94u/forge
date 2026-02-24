@@ -17,7 +17,8 @@ import java.time.temporal.ChronoUnit
  */
 @Service
 class SkillFeedbackService(
-    private val executionRecordRepository: ExecutionRecordRepository
+    private val executionRecordRepository: ExecutionRecordRepository,
+    private val evaluationRepository: com.forge.webide.repository.InteractionEvaluationRepository
 ) {
     private val logger = LoggerFactory.getLogger(SkillFeedbackService::class.java)
     private val gson = Gson()
@@ -79,11 +80,28 @@ class SkillFeedbackService(
         val totalExecutions = records.size
         val avgDuration = if (records.isNotEmpty()) records.map { it.totalDurationMs }.average().toLong() else 0L
 
+        // Phase 7: Enrich with evaluation scores
+        val evaluationScores = try {
+            val evalSince = Instant.now().minus(days.toLong(), ChronoUnit.DAYS)
+            val evals = evaluationRepository.findByCreatedAtAfterOrderByCreatedAtDesc(evalSince)
+            val byProfile = evals.groupBy { it.profile }
+            byProfile.mapValues { (_, recs) ->
+                mapOf(
+                    "avgIntent" to "%.2f".format(recs.map { it.intentScore }.average()),
+                    "avgCompletion" to "%.2f".format(recs.map { it.completionScore }.average()),
+                    "avgQuality" to "%.2f".format(recs.map { it.qualityScore }.average()),
+                    "avgExperience" to "%.2f".format(recs.map { it.experienceScore }.average()),
+                    "count" to recs.size.toString()
+                )
+            }
+        } catch (_: Exception) { emptyMap() }
+
         return FeedbackReport(
             dateRange = "${LocalDate.now().minusDays(days.toLong())} to ${LocalDate.now()}",
             totalExecutions = totalExecutions,
             avgDurationMs = avgDuration,
             profileSummaries = profileSummaries,
+            evaluationScores = evaluationScores,
             generatedAt = Instant.now().toString()
         )
     }
@@ -113,6 +131,17 @@ class SkillFeedbackService(
                 appendLine("|---------|-----------|-------------|-----------|-----------|")
                 for (p in report.profileSummaries) {
                     appendLine("| ${p.name} | ${p.executionCount} | ${p.avgDurationMs}ms | ${"%.1f".format(p.avgTurns)} | ${p.topTools.take(3).joinToString(", ")} |")
+                }
+                // Phase 7: Evaluation scores section
+                if (report.evaluationScores.isNotEmpty()) {
+                    appendLine()
+                    appendLine("## Evaluation Scores (4D)")
+                    appendLine()
+                    appendLine("| Profile | Intent | Completion | Quality | Experience | Samples |")
+                    appendLine("|---------|--------|------------|---------|------------|---------|")
+                    for ((profile, scores) in report.evaluationScores) {
+                        appendLine("| $profile | ${scores["avgIntent"]} | ${scores["avgCompletion"]} | ${scores["avgQuality"]} | ${scores["avgExperience"]} | ${scores["count"]} |")
+                    }
                 }
             }
 
@@ -145,6 +174,7 @@ class SkillFeedbackService(
         val totalExecutions: Int,
         val avgDurationMs: Long,
         val profileSummaries: List<ProfileSummary>,
+        val evaluationScores: Map<String, Map<String, String>> = emptyMap(),
         val generatedAt: String
     )
 

@@ -11,7 +11,9 @@ import {
   Clock,
   ArrowRight,
   Activity,
+  Trash2,
 } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
 import { workspaceApi, type Workspace } from "@/lib/workspace-api";
 
 interface ActivityItem {
@@ -73,6 +75,9 @@ function formatTimeAgo(timestamp: string): string {
 }
 
 export default function DashboardPage() {
+  const queryClient = useQueryClient();
+  const [deletingId, setDeletingId] = React.useState<string | null>(null);
+
   const {
     data: workspaces,
     isLoading: workspacesLoading,
@@ -81,6 +86,21 @@ export default function DashboardPage() {
     queryKey: ["workspaces"],
     queryFn: () => workspaceApi.listWorkspaces(),
   });
+
+  const handleDelete = async (e: React.MouseEvent, wsId: string, wsName: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!confirm(`确认删除 workspace「${wsName}」？此操作不可恢复。`)) return;
+    setDeletingId(wsId);
+    try {
+      await workspaceApi.deleteWorkspace(wsId);
+      queryClient.invalidateQueries({ queryKey: ["workspaces"] });
+    } catch (err) {
+      alert("删除失败: " + (err instanceof Error ? err.message : String(err)));
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
   const {
     data: activities,
@@ -166,7 +186,7 @@ export default function DashboardPage() {
                   <Link
                     key={ws.id}
                     href={`/workspace/${ws.id}`}
-                    className="flex items-center gap-4 rounded-lg border border-border bg-card p-4 transition-colors hover:border-primary/50 hover:bg-accent"
+                    className="group flex items-center gap-4 rounded-lg border border-border bg-card p-4 transition-colors hover:border-primary/50 hover:bg-accent"
                   >
                     <FolderOpen className="h-8 w-8 text-forge-400" />
                     <div className="flex-1 min-w-0">
@@ -187,11 +207,21 @@ export default function DashboardPage() {
                           ? "bg-green-500/10 text-green-400"
                           : ws.status === "suspended"
                             ? "bg-yellow-500/10 text-yellow-400"
-                            : "bg-muted text-muted-foreground"
+                            : ws.status === "error"
+                              ? "bg-red-500/10 text-red-400"
+                              : "bg-muted text-muted-foreground"
                       }`}
                     >
                       {ws.status}
                     </span>
+                    <button
+                      onClick={(e) => handleDelete(e, ws.id, ws.name)}
+                      disabled={deletingId === ws.id}
+                      className="rounded p-1 text-muted-foreground opacity-0 transition-all hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100 disabled:opacity-50"
+                      title="删除 workspace"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
                   </Link>
                 ))
               ) : (

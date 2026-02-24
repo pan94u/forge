@@ -8,6 +8,7 @@ export interface Workspace {
   owner: string;
   repository?: string;
   branch?: string;
+  errorMessage?: string;
 }
 
 export interface FileNode {

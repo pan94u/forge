@@ -1,0 +1,39 @@
+id: eval-002-knowledge-distill
+name: "Knowledge Distillation — Experience Extraction"
+description: "Tests the agent's ability to analyze session history and extract reusable patterns and lessons."
+tags: [evaluation, knowledge, distill, learning-loop]
+profile: evaluation-profile
+baseline_pass_rate: 0.75
+
+prompt: |
+  总结最近的开发经验，提炼出可复用的 pattern 和教训，建议写入知识库。
+
+context:
+  workspace: "forge-platform"
+  session_history:
+    - summary: "Session 28: Fixed enum serialization bug across 5 entities. Root cause: Kotlin enum default serializes to uppercase but frontend expects lowercase."
+    - summary: "Session 29: Added WebSocket CORS support. Pitfall: allowed-origins must be comma-separated string, not YAML list."
+    - summary: "Session 30: Implemented 3-layer memory system. Lesson: workspace memory should be limited to 4000 chars for token budget."
+
+assertions:
+  - type: "profile_routed"
+    expected: "evaluation-profile"
+    description: "Must route to evaluation-profile"
+  - type: "contains"
+    expected: "pattern"
+    case_insensitive: true
+    description: "Response must identify patterns"
+  - type: "contains"
+    expected: "enum"
+    case_insensitive: true
+    description: "Response must reference the enum serialization pattern"
+  - type: "contains"
+    expected: "knowledge"
+    case_insensitive: true
+    description: "Response must suggest knowledge base entries"
+
+quality_criteria:
+  completeness: 0.80
+  correctness: 0.85
+  structure: 0.85
+  actionability: 0.80

@@ -11,6 +11,7 @@ import java.nio.file.*
 import java.nio.file.attribute.BasicFileAttributes
 import java.time.Instant
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.Executors
 
 /**
  * Manages workspace lifecycle with DB persistence (metadata) and disk storage (files).
@@ -31,6 +32,9 @@ class WorkspaceService(
     // Hot cache for file trees (rebuilt from disk, invalidated on writes)
     private val fileTreeCache = ConcurrentHashMap<String, List<FileNode>>()
 
+    // Thread pool for async git clone operations
+    private val cloneExecutor = Executors.newFixedThreadPool(2)
+
     private val basePath: Path by lazy { Paths.get(dataDir).toAbsolutePath() }
 
     @PostConstruct
@@ -45,38 +49,63 @@ class WorkspaceService(
     // =========================================================================
 
     fun createWorkspace(request: CreateWorkspaceRequest, userId: String): Workspace {
+        val needsClone = !request.repository.isNullOrBlank()
+
         val entity = WorkspaceEntity(
             name = request.name,
             description = request.description ?: "",
-            status = WorkspaceStatus.ACTIVE,
+            status = if (needsClone) WorkspaceStatus.CREATING else WorkspaceStatus.ACTIVE,
             owner = userId,
             repository = request.repository,
-            branch = request.branch ?: if (!request.repository.isNullOrBlank()) "main" else null
+            branch = request.branch ?: if (needsClone) "main" else null
         )
 
         val wsDir = basePath.resolve(entity.id)
         Files.createDirectories(wsDir)
         entity.localPath = wsDir.toString()
 
-        if (!request.repository.isNullOrBlank()) {
-            // Git clone into workspace directory
-            try {
-                gitService.cloneRepository(request.repository, entity.branch, wsDir)
-            } catch (e: GitOperationException) {
-                logger.error("Failed to clone repository: {}", e.message)
-                // Clean up the empty dir, mark workspace as error
-                entity.status = WorkspaceStatus.ERROR
-                workspaceRepository.save(entity)
-                throw RuntimeException("Git clone failed: ${e.message}", e)
-            }
+        if (needsClone) {
+            // Save with CREATING status, start async clone, return immediately
+            workspaceRepository.save(entity)
+            logger.info("Created workspace '{}' ({}) — starting async git clone", entity.name, entity.id)
+            cloneAsync(entity.id, request.repository!!, entity.branch, wsDir)
         } else {
-            // Empty workspace — create default files
+            // Empty workspace — create default files synchronously
             initializeDefaultFiles(wsDir)
+            workspaceRepository.save(entity)
+            logger.info("Created workspace '{}' ({}) for user {}", entity.name, entity.id, userId)
         }
 
-        workspaceRepository.save(entity)
-        logger.info("Created workspace '{}' ({}) for user {}", entity.name, entity.id, userId)
         return entity.toModel()
+    }
+
+    /**
+     * Async git clone: runs in background thread, updates workspace status on completion.
+     */
+    private fun cloneAsync(workspaceId: String, repository: String, branch: String?, wsDir: Path) {
+        cloneExecutor.submit {
+            try {
+                logger.info("Async clone started: workspace={}, repo={}", workspaceId, repository)
+                gitService.cloneRepository(repository, branch, wsDir)
+
+                // Clone succeeded → ACTIVE
+                workspaceRepository.findById(workspaceId).ifPresent { entity ->
+                    entity.status = WorkspaceStatus.ACTIVE
+                    entity.updatedAt = Instant.now()
+                    workspaceRepository.save(entity)
+                    logger.info("Async clone completed: workspace={}", workspaceId)
+                }
+            } catch (e: Exception) {
+                // Clone failed → ERROR with message
+                logger.error("Async clone failed: workspace={}, error={}", workspaceId, e.message)
+                workspaceRepository.findById(workspaceId).ifPresent { entity ->
+                    entity.status = WorkspaceStatus.ERROR
+                    entity.errorMessage = e.message?.take(1000) ?: "Git clone failed"
+                    entity.updatedAt = Instant.now()
+                    workspaceRepository.save(entity)
+                }
+            }
+        }
     }
 
     fun listWorkspaces(userId: String): List<Workspace> {
@@ -359,6 +388,7 @@ class WorkspaceService(
         owner = owner,
         repository = repository,
         branch = branch,
+        errorMessage = errorMessage,
         createdAt = createdAt,
         updatedAt = updatedAt
     )
