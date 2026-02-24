@@ -310,6 +310,14 @@ class ClaudeAgentService(
                             )
                         }
 
+                        // Inject clarification instruction: AI should ask user what they specifically want
+                        val clarifyInstruction = "\n\n[IMPORTANT] 用户的原始消息比较模糊，系统已通过意图确认将你切换到 ${promptResult.activeProfile.replace("-profile", "")} 模式。" +
+                            "请先用简短的一句话确认你理解了用户的需求方向，然后**主动追问**用户具体想做什么（给出 2-3 个具体选项），" +
+                            "等用户明确后再开始执行。不要直接猜测并执行任务。"
+                        promptResult = promptResult.copy(
+                            systemPrompt = promptResult.systemPrompt + clarifyInstruction
+                        )
+
                         emitSubStep(onEvent, "用户确认意图：${promptResult.activeProfile}")
                     } catch (e: java.util.concurrent.TimeoutException) {
                         pendingIntentConfirmations.remove(sessionId)

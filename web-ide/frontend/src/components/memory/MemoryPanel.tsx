@@ -70,6 +70,10 @@ export function MemoryPanel({ workspaceId }: MemoryPanelProps) {
 
   return (
     <div className="flex h-full flex-col">
+      {/* Guide */}
+      <div className="px-3 py-2 text-xs text-muted-foreground bg-muted/30 border-b border-border">
+        AI 会自动记住工作上下文。工作区记忆跨会话保留，阶段记忆在任务切换时更新，会话历史记录每次对话摘要。
+      </div>
       {/* Sub-tabs */}
       <div className="flex items-center gap-1 border-b border-border px-3 py-1.5">
         {(

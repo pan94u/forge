@@ -21,7 +21,7 @@ class MessageCompressor(
     private val logger = LoggerFactory.getLogger(MessageCompressor::class.java)
 
     companion object {
-        const val MAX_CONVERSATION_TOKENS = 25_000
+        const val MAX_CONVERSATION_TOKENS = 180_000
         private const val TOOL_OUTPUT_TRUNCATE_CHARS = 500
         private const val RECENT_TURNS_TO_KEEP = 3
     }

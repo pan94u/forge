@@ -284,6 +284,7 @@ export default function WorkspacePage() {
   const [leftWidth, setLeftWidth] = useState(256);
   const [rightWidth, setRightWidth] = useState(384);
   const isDraggingRef = useRef<"left" | "right" | null>(null);
+  const preFocusStateRef = useRef({ left: true, right: true });
 
   // Persist panel widths to localStorage
   useEffect(() => {
@@ -337,12 +338,13 @@ export default function WorkspacePage() {
 
   const toggleFocusChat = () => {
     if (focusChat) {
-      // Exit focus mode: restore panels
+      // Exit focus mode: restore previous panel state
       setFocusChat(false);
-      setLeftPanelOpen(true);
-      setRightPanelOpen(true);
+      setLeftPanelOpen(preFocusStateRef.current.left);
+      setRightPanelOpen(preFocusStateRef.current.right);
     } else {
-      // Enter focus mode: hide left + center, AI Chat fullscreen
+      // Save current state before entering focus mode
+      preFocusStateRef.current = { left: leftPanelOpen, right: rightPanelOpen };
       setFocusChat(true);
       setLeftPanelOpen(false);
       setRightPanelOpen(true);

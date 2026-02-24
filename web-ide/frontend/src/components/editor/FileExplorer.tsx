@@ -154,6 +154,7 @@ function TreeNode({
       {node.type === "directory" && expanded && node.children && (
         <div>
           {node.children
+            .filter((child) => child.name !== ".gitkeep")
             .sort((a, b) => {
               if (a.type === b.type) return a.name.localeCompare(b.name);
               return a.type === "directory" ? -1 : 1;
@@ -395,6 +396,7 @@ export function FileExplorer({
           </div>
         ) : (
           files
+            .filter((node) => node.name !== ".gitkeep")
             .sort((a, b) => {
               if (a.type === b.type) return a.name.localeCompare(b.name);
               return a.type === "directory" ? -1 : 1;

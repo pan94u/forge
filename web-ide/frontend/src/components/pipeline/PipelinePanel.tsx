@@ -125,6 +125,10 @@ export function PipelinePanel() {
 
   return (
     <div className="space-y-4 p-4 overflow-auto h-full">
+      {/* Guide */}
+      <div className="text-xs text-muted-foreground bg-muted/30 rounded-md p-2 mb-2">
+        知识管道自动从执行记录中提取可复用知识、检测知识缺口、分析 Skill 质量趋势。点击「运行」手动触发分析。
+      </div>
       {/* Header */}
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-semibold">知识管道</h3>

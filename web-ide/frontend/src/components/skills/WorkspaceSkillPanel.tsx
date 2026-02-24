@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { type SkillView } from "@/lib/skill-api";
+import { type SkillView, skillApi } from "@/lib/skill-api";
 
 interface WorkspaceSkillPanelProps {
   workspaceId: string;
@@ -49,6 +49,24 @@ export function WorkspaceSkillPanel({ workspaceId }: WorkspaceSkillPanelProps) {
     } else {
       setSelectedSkill(name);
       loadSkillContent(name);
+    }
+  };
+
+  const handleToggle = async (skill: SkillView, e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      if (skill.enabled) {
+        await skillApi.disableSkill(workspaceId, skill.name);
+      } else {
+        await skillApi.enableSkill(workspaceId, skill.name);
+      }
+      setSkills((prev) =>
+        prev.map((s) =>
+          s.name === skill.name ? { ...s, enabled: !s.enabled } : s
+        )
+      );
+    } catch (err) {
+      console.error("Failed to toggle skill:", err);
     }
   };
 
@@ -180,10 +198,23 @@ export function WorkspaceSkillPanel({ workspaceId }: WorkspaceSkillPanelProps) {
                     {skill.description}
                   </p>
                 </div>
-                <div className="flex flex-shrink-0 items-center gap-1 text-[10px] text-muted-foreground">
+                <div className="flex flex-shrink-0 items-center gap-2 text-[10px] text-muted-foreground">
                   {skill.scriptCount > 0 && (
                     <span>{skill.scriptCount} scripts</span>
                   )}
+                  <button
+                    onClick={(e) => handleToggle(skill, e)}
+                    className={`relative inline-flex h-4 w-7 flex-shrink-0 items-center rounded-full transition-colors ${
+                      skill.enabled ? "bg-green-500" : "bg-muted-foreground/30"
+                    }`}
+                    title={skill.enabled ? "Disable skill" : "Enable skill"}
+                  >
+                    <span
+                      className={`inline-block h-3 w-3 rounded-full bg-white transition-transform ${
+                        skill.enabled ? "translate-x-3.5" : "translate-x-0.5"
+                      }`}
+                    />
+                  </button>
                 </div>
               </button>
             ))}

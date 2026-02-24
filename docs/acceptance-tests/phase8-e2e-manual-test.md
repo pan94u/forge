@@ -268,28 +268,31 @@
 - [x] 质量面板加载（可能显示空状态或有数据）
 - [x] 无报错
 
-### TC-5.3 Skills Tab
+### TC-5.3 Skills Tab — [PASS] + BUG
 - 点击 "Skills" Tab
-- [ ] 显示当前 workspace 可用的 Skills 列表
+- [x] 显示当前 workspace 可用的 Skills 列表
 - [ ] 每个 Skill 有启用/禁用开关
 - 切换某个 Skill 的启用状态
 - [ ] 状态切换成功
+- **BUG #8**: Skills Tab 没有启用/禁用开关，无法切换 Skill 状态
 
-### TC-5.4 记忆 Tab
+### TC-5.4 记忆 Tab — [PASS] + UX问题
 - 点击 "记忆" Tab
-- [ ] 显示 3 层记忆架构（Workspace Memory / Stage Memory / Session Summary）
-- [ ] 如果有对话历史，能看到 Session Summary
-- UX评分（1-5）: ___
+- [x] 显示 3 层记忆架构（Workspace Memory / Stage Memory / Session Summary）
+- [x] 如果有对话历史，能看到 Session Summary
+- UX评分（1-5）: **3**
+- **UX问题**: 缺乏引导说明——用户看到记忆数据后不知道意味着什么、能做什么。应增加简短说明文案或操作提示
 
-### TC-5.5 管道 Tab（Phase 8 新功能）
+### TC-5.5 管道 Tab（Phase 8 新功能） — [PASS] + UX问题
 - 点击 "管道" Tab
-- [ ] PipelinePanel 正常加载
-- [ ] 看到 3 个摘要卡片（知识缺口 / 质量记录 / 待确认模式）
+- [x] PipelinePanel 正常加载
+- [x] 看到 3 个摘要卡片（知识缺口 / 质量记录 / 待确认模式）
 - 点击 "运行" 按钮手动触发管道
-- [ ] 管道运行完成（刷新或显示结果）
-- [ ] 如果有 Skill 质量数据，显示质量柱状图
-- [ ] 如果有知识缺口，显示缺口统计
-- UX评分（1-5）: ___
+- [x] 管道运行完成（刷新或显示结果）
+- [x] 如果有 Skill 质量数据，显示质量柱状图
+- [x] 如果有知识缺口，显示缺口统计
+- UX评分（1-5）: **3**
+- **UX问题**: 同记忆 Tab，缺乏引导说明——用户不清楚管道的作用和可执行的操作
 
 ---
 
@@ -297,60 +300,62 @@
 
 > 模拟用户浏览和搜索知识。
 
-### TC-6.1 知识搜索
+### TC-6.1 知识搜索 — [PASS] ✅
 - 进入 `/knowledge` 页面
-- [ ] 4 个 Tab 正常显示（Docs / Architecture / Services / APIs）
+- [x] 4 个 Tab 正常显示（Docs / Architecture / Services / APIs）
 - 在搜索框输入关键词（如 `profile`）
-- [ ] 搜索结果正常返回
+- [x] 搜索结果正常返回
 - 点击某个文档
-- [ ] 右侧面板显示文档内容（Markdown 渲染）
+- [x] 右侧面板显示文档内容（Markdown 渲染）
 
-### TC-6.2 Architecture Tab
+### TC-6.2 Architecture Tab — [PASS] ✅
 - 切换到 Architecture Tab
-- [ ] 架构图正常显示（Mermaid 渲染）
-- [ ] 可以缩放/拖拽
+- [x] 架构图正常显示（Mermaid 渲染）
+- [x] 可以缩放/拖拽
 
-### TC-6.3 Service Graph Tab
+### TC-6.3 Service Graph Tab — [PASS] ✅
 - 切换到 Service Graph Tab
-- [ ] 服务依赖图正常显示
-- [ ] 节点可交互
+- [x] 服务依赖图正常显示
+- [x] 节点可交互
 
-### TC-6.4 API Explorer Tab
+### TC-6.4 API Explorer Tab — [PASS] ✅
 - 切换到 API Explorer Tab
-- [ ] API 列表正常显示
-- [ ] 点击某个 API 能看到详情
+- [x] API 列表正常显示
+- [x] 点击某个 API 能看到详情
 
 ---
 
 ## 旅程 7：Skill 管理（5 min）
 
-### TC-7.1 Skill 列表
+### TC-7.1 Skill 列表 — [PASS] ✅
 - 进入 `/skills` 页面
-- [ ] Skill 列表加载（应有 30+ skills）
-- [ ] 4 个 Scope Tab 正常（All / Platform / Workspace / Custom）
-- [ ] 搜索框能过滤 Skill
-- [ ] Tag 过滤能正常工作
+- [x] Skill 列表加载（应有 30+ skills）
+- [x] 4 个 Scope Tab 正常（All / Platform / Workspace / Custom）
+- [x] 搜索框能过滤 Skill
+- [x] Tag 过滤能正常工作
 
-### TC-7.2 Skill 详情
+### TC-7.2 Skill 详情 — [PASS] ✅
 - 点击某个 Skill（如 `code-generation`）
-- [ ] 右侧显示 Skill 详情（名称/描述/Tags/脚本列表）
-- [ ] 如果有脚本，能看到脚本列表
+- [x] 右侧显示 Skill 详情（名称/描述/Tags/脚本列表）
+- [x] 如果有脚本，能看到脚本列表
 
-### TC-7.3 Platform Skill 保护
+### TC-7.3 Platform Skill 保护 — [SKIP]
 - 尝试删除一个 Platform Skill
 - [ ] 应该被阻止（返回错误或按钮禁用）
+- **跳过原因**: 当前 Skill 页面无启用/禁用/删除按钮（同 BUG #8），无法测试保护机制
 
 ---
 
 ## 旅程 8：评估仪表板（3 min）
 
-### TC-8.1 评估页面
-- 进入 `/evaluations` 页面
-- [ ] 页面正常加载
+### TC-8.1 评估页面 — [PASS] + BUG
+- 进入 `/evaluations` 页面（只能通过 URL 直接访问，无侧边栏入口 — BUG #1）
+- [x] 页面正常加载
 - [ ] 时间选择器可切换（7 / 30 / 90 天）
-- [ ] 4D 评分展示区域可见（Intent / Completion / Quality / Experience）
+- [x] 4D 评分展示区域可见（Intent / Completion / Quality / Experience）
 - [ ] 如果有数据，Profile 分布图正常显示
 - [ ] 最近交互表格正常
+- **BUG #9**: 页面数据全部不可交互（时间选择器、图表、表格均无响应），仅为静态展示
 
 ---
 
@@ -435,20 +440,20 @@
 
 ## 汇总表
 
-| 旅程 | 分类 | TC 数 | Pass | Fail | UX问题 | 备注 |
+| 旅程 | 分类 | TC 数 | Pass | Fail | Bug/UX | 备注 |
 |------|------|-------|------|------|--------|------|
-| 1 | Dashboard + 导航 | 3 | | | | |
-| 2 | Workspace 生命周期 | 5 | | | | |
-| 3 | IDE 文件操作 | 5 | | | | |
-| 4 | AI 对话核心 | 14 | | | | |
-| 5 | Chat 5-Tab | 5 | | | | |
-| 6 | 知识库 | 4 | | | | |
-| 7 | Skill 管理 | 3 | | | | |
-| 8 | 评估仪表板 | 1 | | | | |
-| 9 | 工作流编辑器 | 2 | | | | |
-| 10 | AI 驱动交付 | 3 | | | | |
-| 11 | 错误处理 | 5 | | | | |
-| **合计** | | **50** | | | | |
+| 1 | Dashboard + 导航 | 3 | 3 | 0 | 1 Bug | BUG#1 Sidebar缺Evaluations |
+| 2 | Workspace 生命周期 | 5 | 5 | 0 | 0 | 全部通过 |
+| 3 | IDE 文件操作 | 5 | 5 | 0 | 1 Bug + 1 UX | BUG#2 .gitkeep; 左栏拖拽手感 |
+| 4 | AI 对话核心 | 14 | 14 | 0 | 4 Bug + 2 UX | BUG#3~7; 消息排序/Intent UX |
+| 5 | Chat 5-Tab | 5 | 5 | 0 | 1 Bug + 2 UX | BUG#8; 记忆/管道缺引导 |
+| 6 | 知识库 | 4 | 4 | 0 | 0 | 全部通过 |
+| 7 | Skill 管理 | 3 | 2 | 0 | 1 Skip | TC-7.3 无法测试(同BUG#8) |
+| 8 | 评估仪表板 | 1 | 1 | 0 | 1 Bug | BUG#9 数据不可交互 |
+| 9 | 工作流编辑器 | 2 | - | - | - | 待测 |
+| 10 | AI 驱动交付 | 3 | - | - | - | 待测 |
+| 11 | 错误处理 | 5 | - | - | - | 待测 |
+| **合计** | | **50** | **39** | **0** | **9 Bug + 5 UX** | 已测 40/50，剩余 10 |
 
 ---
 
@@ -477,6 +482,8 @@
 | 5 | 4 | TC-4.5 | Intent Confirmation 选 Profile 后直接执行 | 选 Profile 后应追问具体意图再执行 | 选择后直接执行，AI 仍不知道用户真正想做什么 | Medium |
 | 6 | 4 | TC-4.7 | workspace_list_files 只返回文件夹+文件个数 | 用户期望看到所有文件名列表 | 只显示目录摘要（文件夹名+数量） | Low |
 | 7 | 4 | TC-4.10 | Focus Mode 切换时页面显示异常 | 切换 Focus Mode 布局应正常过渡 | 页面显示错乱（见截图 bug25） | Medium |
+| 8 | 5 | TC-5.3 | Skills Tab 无启用/禁用开关 | 每个 Skill 应有 toggle 开关 | 只展示列表，无法切换状态 | Medium |
+| 9 | 8 | TC-8.1 | Evaluations 页面数据全部不可交互 | 时间选择器/图表/表格应可操作 | 页面为纯静态展示，无交互响应 | Medium |
 
 ---
 

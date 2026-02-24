@@ -16,7 +16,7 @@ import {
   ChevronRight,
   Activity,
 } from "lucide-react";
-import { ChatMessage, type Message } from "@/components/chat/ChatMessage";
+import { ChatMessage, type Message, type ContentSegment } from "@/components/chat/ChatMessage";
 import {
   ContextPicker,
   type ContextItem,
@@ -139,7 +139,7 @@ export function AiChatSidebar({
             data.map((m) => ({
               id: m.id,
               role:
-                m.role === "user" ? ("user" as const) : ("assistant" as const),
+                m.role.toLowerCase() === "user" ? ("user" as const) : ("assistant" as const),
               content: m.content,
               timestamp: m.timestamp,
             })),
@@ -260,6 +260,7 @@ export function AiChatSidebar({
     const assistantId = `assistant-${Date.now()}`;
     let fullContent = "";
     const toolCalls: Message["toolCalls"] = [];
+    const segments: ContentSegment[] = [];
 
     const abortController = new AbortController();
     abortRef.current = abortController;
@@ -339,13 +340,21 @@ export function AiChatSidebar({
             case "thinking":
               setThinkingText(event.content ?? "");
               break;
-            case "content":
-              fullContent += event.content ?? "";
+            case "content": {
+              const chunk = event.content ?? "";
+              fullContent += chunk;
+              // Build segments: append to last text segment or create new one
+              const lastSeg = segments[segments.length - 1];
+              if (lastSeg && lastSeg.type === "text") {
+                lastSeg.content += chunk;
+              } else {
+                segments.push({ type: "text", content: chunk });
+              }
               setMessages((prev) => {
                 const existing = prev.find((m) => m.id === assistantId);
                 if (existing) {
                   return prev.map((m) =>
-                    m.id === assistantId ? { ...m, content: fullContent } : m,
+                    m.id === assistantId ? { ...m, content: fullContent, segments: [...segments] } : m,
                   );
                 }
                 return [
@@ -356,27 +365,32 @@ export function AiChatSidebar({
                     content: fullContent,
                     timestamp: new Date().toISOString(),
                     toolCalls,
+                    segments: [...segments],
                   },
                 ];
               });
               setThinkingText("");
               break;
-            case "tool_use":
-              toolCalls.push({
+            }
+            case "tool_use": {
+              const tc = {
                 id: event.toolCallId ?? `tool-${Date.now()}`,
                 name: event.toolName ?? "unknown",
                 input: event.toolInput ?? {},
                 output: undefined,
-                status: "running",
-              });
+                status: "running" as const,
+              };
+              toolCalls.push(tc);
+              segments.push({ type: "tool_call", toolCall: tc });
               setMessages((prev) =>
                 prev.map((m) =>
                   m.id === assistantId
-                    ? { ...m, toolCalls: [...toolCalls] }
+                    ? { ...m, toolCalls: [...toolCalls], segments: [...segments] }
                     : m,
                 ),
               );
               break;
+            }
             case "tool_result":
               {
                 const idx = toolCalls.findIndex(
@@ -389,10 +403,16 @@ export function AiChatSidebar({
                     status: "complete",
                   };
                 }
+                // Also update the tool_call in segments
+                for (const seg of segments) {
+                  if (seg.type === "tool_call" && seg.toolCall.id === event.toolCallId) {
+                    seg.toolCall = { ...seg.toolCall, output: event.content, status: "complete" };
+                  }
+                }
                 setMessages((prev) =>
                   prev.map((m) =>
                     m.id === assistantId
-                      ? { ...m, toolCalls: [...toolCalls] }
+                      ? { ...m, toolCalls: [...toolCalls], segments: [...segments] }
                       : m,
                   ),
                 );

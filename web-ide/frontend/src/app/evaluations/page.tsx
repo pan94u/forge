@@ -149,6 +149,8 @@ export default function EvaluationsPage() {
   const [recentEvaluations, setRecentEvaluations] = useState<EvaluationRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [days, setDays] = useState(30);
+  const [expandedRow, setExpandedRow] = useState<string | null>(null);
+  const [profileFilter, setProfileFilter] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -190,6 +192,10 @@ export default function EvaluationsPage() {
       ? summaryByProfile.reduce((s, p) => s + p.avgExperienceScore * p.count, 0) / summaryByProfile.reduce((s, p) => s + p.count, 0)
       : 0,
   };
+
+  const filteredEvaluations = profileFilter
+    ? recentEvaluations.filter((e) => e.profile === profileFilter)
+    : recentEvaluations;
 
   if (loading) {
     return (
@@ -238,7 +244,13 @@ export default function EvaluationsPage() {
           ) : (
             <div className="space-y-3">
               {summaryByProfile.map((s) => (
-                <div key={s.groupKey} className="space-y-1">
+                <div
+                  key={s.groupKey}
+                  className={`space-y-1 cursor-pointer rounded-md p-1.5 -mx-1.5 transition-colors ${
+                    profileFilter === s.groupKey ? "bg-primary/10 ring-1 ring-primary/30" : "hover:bg-muted/50"
+                  }`}
+                  onClick={() => setProfileFilter(profileFilter === s.groupKey ? null : s.groupKey)}
+                >
                   <div className="flex items-center justify-between text-xs">
                     <span className="font-medium">{s.groupKey.replace("-profile", "")}</span>
                     <span className="text-muted-foreground">{s.count} interactions</span>
@@ -279,8 +291,18 @@ export default function EvaluationsPage() {
 
       {/* Recent Evaluations Table */}
       <div className="rounded-lg border border-border">
-        <div className="px-4 py-3 border-b border-border">
-          <h2 className="text-sm font-medium">Recent Interactions ({recentEvaluations.length})</h2>
+        <div className="px-4 py-3 border-b border-border flex items-center justify-between">
+          <h2 className="text-sm font-medium">
+            Recent Interactions ({filteredEvaluations.length})
+            {profileFilter && (
+              <button
+                onClick={() => setProfileFilter(null)}
+                className="ml-2 text-xs text-primary hover:underline"
+              >
+                Clear filter
+              </button>
+            )}
+          </h2>
         </div>
         <div className="overflow-auto max-h-96">
           <table className="w-full text-xs">
@@ -298,25 +320,63 @@ export default function EvaluationsPage() {
               </tr>
             </thead>
             <tbody>
-              {recentEvaluations.map((e) => (
-                <tr key={e.id} className="border-t border-border hover:bg-muted/30">
-                  <td className="px-3 py-2 text-muted-foreground">
-                    {new Date(e.createdAt).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
-                  </td>
-                  <td className="px-3 py-2">{e.profile.replace("-profile", "")}</td>
-                  <td className="px-3 py-2 text-muted-foreground">{CATEGORY_LABELS[e.capabilityCategory] ?? (e.capabilityCategory || "-")}</td>
-                  <td className="px-3 py-2 text-center font-mono">{Math.round(e.intentScore * 100)}%</td>
-                  <td className="px-3 py-2 text-center font-mono">{Math.round(e.completionScore * 100)}%</td>
-                  <td className="px-3 py-2 text-center font-mono">{Math.round(e.qualityScore * 100)}%</td>
-                  <td className="px-3 py-2 text-center font-mono">{Math.round(e.experienceScore * 100)}%</td>
-                  <td className="px-3 py-2 text-center">{e.toolCallCount}</td>
-                  <td className="px-3 py-2 text-center text-muted-foreground">{(e.durationMs / 1000).toFixed(1)}s</td>
-                </tr>
+              {filteredEvaluations.map((e) => (
+                <React.Fragment key={e.id}>
+                  <tr
+                    className="border-t border-border hover:bg-muted/30 cursor-pointer"
+                    onClick={() => setExpandedRow(expandedRow === e.id ? null : e.id)}
+                  >
+                    <td className="px-3 py-2 text-muted-foreground">
+                      {new Date(e.createdAt).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                    </td>
+                    <td className="px-3 py-2">{e.profile.replace("-profile", "")}</td>
+                    <td className="px-3 py-2 text-muted-foreground">{CATEGORY_LABELS[e.capabilityCategory] ?? (e.capabilityCategory || "-")}</td>
+                    <td className="px-3 py-2 text-center font-mono">{Math.round(e.intentScore * 100)}%</td>
+                    <td className="px-3 py-2 text-center font-mono">{Math.round(e.completionScore * 100)}%</td>
+                    <td className="px-3 py-2 text-center font-mono">{Math.round(e.qualityScore * 100)}%</td>
+                    <td className="px-3 py-2 text-center font-mono">{Math.round(e.experienceScore * 100)}%</td>
+                    <td className="px-3 py-2 text-center">{e.toolCallCount}</td>
+                    <td className="px-3 py-2 text-center text-muted-foreground">{(e.durationMs / 1000).toFixed(1)}s</td>
+                  </tr>
+                  {expandedRow === e.id && (
+                    <tr className="border-t border-border bg-muted/20">
+                      <td colSpan={9} className="px-4 py-3">
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+                          <div>
+                            <span className="text-muted-foreground">Session:</span>{" "}
+                            <span className="font-mono">{e.sessionId.slice(0, 8)}...</span>
+                          </div>
+                          <div>
+                            <span className="text-muted-foreground">Mode:</span> {e.mode || "-"}
+                          </div>
+                          <div>
+                            <span className="text-muted-foreground">Turns:</span> {e.turnCount}
+                          </div>
+                          <div>
+                            <span className="text-muted-foreground">Tools:</span> {e.toolCallCount} calls
+                          </div>
+                          {e.userFeedback && (
+                            <div className="col-span-full">
+                              <span className="text-muted-foreground">Feedback:</span> {e.userFeedback}
+                            </div>
+                          )}
+                          {(e.manualIntentScore !== null) && (
+                            <div className="col-span-full text-muted-foreground">
+                              Manual scores: Intent {e.manualIntentScore} / Complete {e.manualCompletionScore} / Quality {e.manualQualityScore} / UX {e.manualExperienceScore}
+                            </div>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </React.Fragment>
               ))}
-              {recentEvaluations.length === 0 && (
+              {filteredEvaluations.length === 0 && (
                 <tr>
                   <td colSpan={9} className="px-3 py-8 text-center text-muted-foreground">
-                    No evaluation records yet. Start chatting with the AI to generate data.
+                    {profileFilter
+                      ? "No records for this profile. Click 'Clear filter' to see all."
+                      : "No evaluation records yet. Start chatting with the AI to generate data."}
                   </td>
                 </tr>
               )}

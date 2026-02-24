@@ -14,6 +14,7 @@ import {
   PanelLeftOpen,
   Server,
   Sparkles,
+  BarChart3,
 } from "lucide-react";
 
 interface SidebarProps {
@@ -64,6 +65,12 @@ const navItems: NavItem[] = [
     href: "/skills",
     icon: Sparkles,
     label: "Skills",
+    roles: ["developer"],
+  },
+  {
+    href: "/evaluations",
+    icon: BarChart3,
+    label: "Evaluations",
     roles: ["developer"],
   },
   {

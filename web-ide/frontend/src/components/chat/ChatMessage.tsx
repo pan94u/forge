@@ -22,6 +22,10 @@ export interface ToolCall {
   status: "running" | "complete" | "error";
 }
 
+export type ContentSegment =
+  | { type: "text"; content: string }
+  | { type: "tool_call"; toolCall: ToolCall };
+
 export interface Message {
   id: string;
   role: "user" | "assistant";
@@ -29,6 +33,7 @@ export interface Message {
   timestamp: string;
   contexts?: Array<{ type: string; label: string }>;
   toolCalls?: ToolCall[];
+  segments?: ContentSegment[];
 }
 
 interface ChatMessageProps {
@@ -322,11 +327,32 @@ function ToolCallDisplay({ toolCall }: { toolCall: ToolCall }) {
   );
 }
 
+function SegmentedContent({ segments, workspaceId }: { segments: ContentSegment[]; workspaceId?: string }) {
+  return (
+    <>
+      {segments.map((seg, i) => {
+        if (seg.type === "text" && seg.content.trim()) {
+          return (
+            <div key={`seg-${i}`} className="rounded-lg px-3 py-2 text-sm bg-card border border-border">
+              {renderMarkdown(seg.content, workspaceId)}
+            </div>
+          );
+        }
+        if (seg.type === "tool_call") {
+          return <ToolCallDisplay key={seg.toolCall.id} toolCall={seg.toolCall} />;
+        }
+        return null;
+      })}
+    </>
+  );
+}
+
 export function ChatMessage({ message, workspaceId }: ChatMessageProps) {
   const isUser = message.role === "user";
+  const hasSegments = !isUser && message.segments && message.segments.length > 0;
   const renderedContent = useMemo(
-    () => renderMarkdown(message.content, isUser ? undefined : workspaceId),
-    [message.content, isUser, workspaceId]
+    () => hasSegments ? null : renderMarkdown(message.content, isUser ? undefined : workspaceId),
+    [message.content, isUser, workspaceId, hasSegments]
   );
 
   return (
@@ -362,24 +388,31 @@ export function ChatMessage({ message, workspaceId }: ChatMessageProps) {
           </div>
         )}
 
-        {/* Message body */}
-        <div
-          className={`rounded-lg px-3 py-2 text-sm ${
-            isUser
-              ? "bg-primary text-primary-foreground"
-              : "bg-card border border-border"
-          }`}
-        >
-          {renderedContent}
-        </div>
+        {/* Segmented content (chronological text + tool calls) */}
+        {hasSegments ? (
+          <SegmentedContent segments={message.segments!} workspaceId={workspaceId} />
+        ) : (
+          <>
+            {/* Message body */}
+            <div
+              className={`rounded-lg px-3 py-2 text-sm ${
+                isUser
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-card border border-border"
+              }`}
+            >
+              {renderedContent}
+            </div>
 
-        {/* Tool calls */}
-        {message.toolCalls && message.toolCalls.length > 0 && (
-          <div className="space-y-1">
-            {message.toolCalls.map((tc) => (
-              <ToolCallDisplay key={tc.id} toolCall={tc} />
-            ))}
-          </div>
+            {/* Tool calls (fallback for non-segmented messages) */}
+            {message.toolCalls && message.toolCalls.length > 0 && (
+              <div className="space-y-1">
+                {message.toolCalls.map((tc) => (
+                  <ToolCallDisplay key={tc.id} toolCall={tc} />
+                ))}
+              </div>
+            )}
+          </>
         )}
 
         {/* Timestamp */}
