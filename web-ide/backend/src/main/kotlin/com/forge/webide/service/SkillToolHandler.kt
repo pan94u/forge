@@ -19,7 +19,8 @@ import java.util.concurrent.TimeUnit
 @Service
 class SkillToolHandler(
     private val skillLoader: SkillLoader,
-    private val skillUsageRepository: SkillUsageRepository
+    private val skillUsageRepository: SkillUsageRepository,
+    private val skillQualityHookService: com.forge.webide.service.skill.SkillQualityHookService
 ) {
 
     private val logger = LoggerFactory.getLogger(SkillToolHandler::class.java)
@@ -27,7 +28,7 @@ class SkillToolHandler(
     fun handle(toolName: String, args: Map<String, Any?>, workspaceId: String?): McpToolCallResponse {
         return when (toolName) {
             "read_skill" -> handleReadSkill(args)
-            "run_skill_script" -> handleRunSkillScript(args)
+            "run_skill_script" -> handleRunSkillScript(args, workspaceId)
             "list_skills" -> handleListSkills(args)
             else -> McpProxyService.errorResponse("Unknown skill tool: $toolName")
         }
@@ -95,7 +96,7 @@ class SkillToolHandler(
     /**
      * Execute a skill's script and return stdout + exitCode (Level 3).
      */
-    private fun handleRunSkillScript(arguments: Map<String, Any?>): McpToolCallResponse {
+    private fun handleRunSkillScript(arguments: Map<String, Any?>, workspaceId: String? = null): McpToolCallResponse {
         val skillName = arguments["skill_name"] as? String
             ?: return McpProxyService.errorResponse("'skill_name' parameter is required")
 
@@ -146,12 +147,14 @@ class SkillToolHandler(
 
         return try {
             logger.info("Executing skill script: {} (skill={})", scriptPath, skillName)
+            val startTime = System.currentTimeMillis()
             val process = ProcessBuilder(fullCommand)
                 .directory(skillDir.toFile())
                 .redirectErrorStream(false)
                 .start()
 
             val completed = process.waitFor(60, TimeUnit.SECONDS)
+            val executionTimeMs = System.currentTimeMillis() - startTime
             if (!completed) {
                 process.destroyForcibly()
                 return McpProxyService.errorResponse("Script execution timed out after 60 seconds")
@@ -161,9 +164,37 @@ class SkillToolHandler(
             val stderr = process.errorStream.bufferedReader().readText().take(10_000)
             val exitCode = process.exitValue()
 
+            // Phase 8.2: Run quality hook
+            val qualityResult = try {
+                skillQualityHookService.checkQuality(
+                    skillName = skillName,
+                    scriptPath = scriptPath,
+                    exitCode = exitCode,
+                    stdout = stdout,
+                    stderr = stderr,
+                    executionTimeMs = executionTimeMs,
+                    workspaceId = workspaceId,
+                    qualityConfig = skill.quality?.let {
+                        com.forge.webide.service.skill.SkillQualityConfig(
+                            requiredSections = it.requiredSections,
+                            forbiddenPatterns = it.forbiddenPatterns,
+                            minOutputLength = it.minOutputLength,
+                            skipDefaultChecks = it.skipDefaultChecks,
+                            customValidator = it.customValidator
+                        )
+                    }
+                )
+            } catch (e: Exception) {
+                logger.debug("Quality hook failed for skill {}: {}", skillName, e.message)
+                null
+            }
+
             val output = buildString {
                 appendLine("Script: $scriptPath")
                 appendLine("Exit code: $exitCode")
+                if (qualityResult != null) {
+                    appendLine("Quality: ${qualityResult.overallStatus}")
+                }
                 if (stdout.isNotBlank()) {
                     appendLine()
                     appendLine("Output:")
@@ -174,12 +205,16 @@ class SkillToolHandler(
                     appendLine("Errors:")
                     appendLine(stderr)
                 }
+                if (qualityResult?.autoFixInstruction != null) {
+                    appendLine()
+                    appendLine("[Quality Hook] ${qualityResult.autoFixInstruction}")
+                }
             }
 
             trackSkillUsage(skillName, "SCRIPT_RUN", scriptDef.scriptType.name, exitCode == 0)
             McpToolCallResponse(
                 content = listOf(McpContent(type = "text", text = output)),
-                isError = exitCode != 0
+                isError = exitCode != 0 && qualityResult?.overallStatus != "PARTIAL_SUCCESS"
             )
         } catch (e: Exception) {
             trackSkillUsage(skillName, "SCRIPT_RUN", scriptDef.scriptType.name, false)

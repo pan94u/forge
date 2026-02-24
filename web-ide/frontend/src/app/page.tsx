@@ -161,7 +161,7 @@ export default function DashboardPage() {
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-semibold">Recent Projects</h2>
               <Link
-                href="/workspace/new"
+                href="/workspaces"
                 className="text-sm text-primary hover:underline"
               >
                 View all

@@ -185,7 +185,7 @@ class ClaudeAgentService(
             persistMessage(sessionId, Message.Role.USER, fullMessage)
             persistMessage(sessionId, Message.Role.ASSISTANT, result.content, result.toolCalls)
 
-            knowledgeGapDetectorService.analyzeForGaps(message, result.content, contexts)
+            knowledgeGapDetectorService.analyzeForGaps(message, result.content, contexts, workspaceId)
 
             ChatMessageResponse(result.content, result.toolCalls)
         } catch (e: Exception) {

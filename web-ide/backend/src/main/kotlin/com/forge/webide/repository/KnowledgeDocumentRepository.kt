@@ -8,4 +8,5 @@ interface KnowledgeDocumentRepository : JpaRepository<KnowledgeDocumentEntity, S
     fun findByScopeAndScopeId(scope: KnowledgeScope, scopeId: String?): List<KnowledgeDocumentEntity>
     fun findByScopeIn(scopes: List<KnowledgeScope>): List<KnowledgeDocumentEntity>
     fun findByScopeAndScopeIdIn(scope: KnowledgeScope, scopeIds: List<String>): List<KnowledgeDocumentEntity>
+    fun findByTitleAndScope(title: String, scope: KnowledgeScope): KnowledgeDocumentEntity?
 }

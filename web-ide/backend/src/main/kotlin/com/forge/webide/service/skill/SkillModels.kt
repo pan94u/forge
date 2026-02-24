@@ -55,6 +55,17 @@ data class SkillScript(
  * - Level 2: SKILL.md content — read on-demand via read_skill tool
  * - Level 3: Sub-files + scripts — read/executed on-demand
  */
+/**
+ * Quality configuration from SKILL.md frontmatter (Layer 2 rules).
+ */
+data class SkillQualityConfig(
+    val requiredSections: List<String> = emptyList(),
+    val forbiddenPatterns: List<String> = emptyList(),
+    val minOutputLength: Int = 0,
+    val skipDefaultChecks: List<String> = emptyList(),
+    val customValidator: String? = null
+)
+
 data class SkillDefinition(
     val name: String,
     val description: String,
@@ -72,7 +83,9 @@ data class SkillDefinition(
     val subFiles: List<SkillSubFile> = emptyList(),
     val scripts: List<SkillScript> = emptyList(),
     val enabled: Boolean = true,
-    val isUserCreated: Boolean = false
+    val isUserCreated: Boolean = false,
+    // Phase 8.2: Quality config from frontmatter
+    val quality: SkillQualityConfig? = null
 ) {
     /** Check if this skill matches a given profile by stage mapping. */
     fun matchesProfile(profileName: String): Boolean {

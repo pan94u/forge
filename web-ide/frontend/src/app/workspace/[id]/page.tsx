@@ -13,6 +13,8 @@ import {
   Save,
   Play,
   Settings,
+  Maximize2,
+  Minimize2,
 } from "lucide-react";
 import { MonacoEditor } from "@/components/editor/MonacoEditor";
 import { FileExplorer } from "@/components/editor/FileExplorer";
@@ -278,6 +280,74 @@ export default function WorkspacePage() {
   const [fileContent, setFileContent] = useState<string>("");
   const [isEditing, setIsEditing] = useState(false);
   const [openFiles, setOpenFiles] = useState<string[]>([]);
+  const [focusChat, setFocusChat] = useState(false);
+  const [leftWidth, setLeftWidth] = useState(256);
+  const [rightWidth, setRightWidth] = useState(384);
+  const isDraggingRef = useRef<"left" | "right" | null>(null);
+
+  // Persist panel widths to localStorage
+  useEffect(() => {
+    const saved = localStorage.getItem("forge_panel_widths");
+    if (saved) {
+      try {
+        const { left, right } = JSON.parse(saved);
+        if (left) setLeftWidth(left);
+        if (right) setRightWidth(right);
+      } catch { /* ignore */ }
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!isDraggingRef.current) {
+      localStorage.setItem("forge_panel_widths", JSON.stringify({ left: leftWidth, right: rightWidth }));
+    }
+  }, [leftWidth, rightWidth]);
+
+  // Draggable splitter logic
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isDraggingRef.current) return;
+      e.preventDefault();
+      if (isDraggingRef.current === "left") {
+        setLeftWidth(Math.max(160, Math.min(480, e.clientX)));
+      } else if (isDraggingRef.current === "right") {
+        setRightWidth(Math.max(280, Math.min(800, window.innerWidth - e.clientX)));
+      }
+    };
+    const handleMouseUp = () => {
+      if (isDraggingRef.current) {
+        isDraggingRef.current = null;
+        document.body.style.cursor = "";
+        document.body.style.userSelect = "";
+      }
+    };
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleMouseUp);
+    return () => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+    };
+  }, []);
+
+  const startDrag = (panel: "left" | "right") => {
+    isDraggingRef.current = panel;
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+  };
+
+  const toggleFocusChat = () => {
+    if (focusChat) {
+      // Exit focus mode: restore panels
+      setFocusChat(false);
+      setLeftPanelOpen(true);
+      setRightPanelOpen(true);
+    } else {
+      // Enter focus mode: hide left + center, AI Chat fullscreen
+      setFocusChat(true);
+      setLeftPanelOpen(false);
+      setRightPanelOpen(true);
+    }
+  };
 
   const { data: workspace, isLoading: workspaceLoading } = useQuery<Workspace>({
     queryKey: ["workspace", workspaceId],
@@ -472,6 +542,14 @@ export default function WorkspacePage() {
             <Settings className="h-3.5 w-3.5" />
           </button>
           <button
+            onClick={toggleFocusChat}
+            className={`flex items-center gap-1 rounded px-2 py-1 text-xs hover:bg-accent ${focusChat ? "bg-primary/10 text-primary" : ""}`}
+            title={focusChat ? "Exit Focus Chat" : "Focus Chat (fullscreen AI)"}
+          >
+            {focusChat ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
+            {focusChat ? "Exit" : "Focus"}
+          </button>
+          <button
             onClick={() => setRightPanelOpen(!rightPanelOpen)}
             className="rounded p-1 hover:bg-accent"
             title="Toggle AI chat"
@@ -488,91 +566,111 @@ export default function WorkspacePage() {
       {/* Main Content */}
       <div className="flex flex-1 overflow-hidden">
         {/* Left Panel - File Explorer */}
-        {leftPanelOpen && (
-          <div className="w-64 flex-shrink-0 border-r border-border overflow-auto">
-            <FileExplorer
-              files={fileTree ?? []}
-              activeFile={activeFile}
-              onFileSelect={handleFileSelect}
-              workspaceId={workspaceId}
-              onFileTreeChanged={() =>
-                queryClient.invalidateQueries({ queryKey: ["files", workspaceId] })
-              }
+        {leftPanelOpen && !focusChat && (
+          <>
+            <div style={{ width: leftWidth }} className="flex-shrink-0 border-r border-border overflow-auto">
+              <FileExplorer
+                files={fileTree ?? []}
+                activeFile={activeFile}
+                onFileSelect={handleFileSelect}
+                workspaceId={workspaceId}
+                onFileTreeChanged={() =>
+                  queryClient.invalidateQueries({ queryKey: ["files", workspaceId] })
+                }
+              />
+            </div>
+            {/* Left splitter */}
+            <div
+              className="w-1 flex-shrink-0 cursor-col-resize bg-transparent hover:bg-primary/30 active:bg-primary/50 transition-colors"
+              onMouseDown={() => startDrag("left")}
             />
-          </div>
+          </>
         )}
 
-        {/* Center - Editor + Terminal */}
-        <div className="flex flex-1 flex-col overflow-hidden">
-          {/* File Tabs */}
-          {openFiles.length > 0 && (
-            <div className="flex h-9 items-center border-b border-border bg-card overflow-x-auto">
-              {openFiles.map((fp) => {
-                const fileName = fp.split("/").pop() ?? fp;
-                const isActive = fp === activeFile;
-                const isUnsaved = unsavedFiles.has(fp);
-                return (
-                  <div
-                    key={fp}
-                    className={`flex items-center gap-1 border-r border-border px-3 py-1 text-xs cursor-pointer ${
-                      isActive
-                        ? "bg-background text-foreground"
-                        : "text-muted-foreground hover:text-foreground"
-                    }`}
-                    onClick={() => handleFileSelect(fp)}
-                  >
-                    {isUnsaved && (
-                      <span className="h-2 w-2 rounded-full bg-primary flex-shrink-0" title="Unsaved changes" />
-                    )}
-                    <span>{fileName}</span>
-                    <button
-                      className="ml-1 rounded-sm hover:bg-muted p-0.5"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleCloseFile(fp);
-                      }}
+        {/* Center - Editor + Terminal (hidden in Focus Chat mode) */}
+        {!focusChat && (
+          <div className="flex flex-1 flex-col overflow-hidden">
+            {/* File Tabs */}
+            {openFiles.length > 0 && (
+              <div className="flex h-9 items-center border-b border-border bg-card overflow-x-auto">
+                {openFiles.map((fp) => {
+                  const fileName = fp.split("/").pop() ?? fp;
+                  const isActive = fp === activeFile;
+                  const isUnsaved = unsavedFiles.has(fp);
+                  return (
+                    <div
+                      key={fp}
+                      className={`flex items-center gap-1 border-r border-border px-3 py-1 text-xs cursor-pointer ${
+                        isActive
+                          ? "bg-background text-foreground"
+                          : "text-muted-foreground hover:text-foreground"
+                      }`}
+                      onClick={() => handleFileSelect(fp)}
                     >
-                      x
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-          )}
+                      {isUnsaved && (
+                        <span className="h-2 w-2 rounded-full bg-primary flex-shrink-0" title="Unsaved changes" />
+                      )}
+                      <span>{fileName}</span>
+                      <button
+                        className="ml-1 rounded-sm hover:bg-muted p-0.5"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleCloseFile(fp);
+                        }}
+                      >
+                        x
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
 
-          {/* Editor */}
-          <div className="flex-1 overflow-hidden">
-            {activeFile ? (
-              <MonacoEditor
-                value={fileContent}
-                onChange={handleContentChange}
-                filePath={activeFile}
-                readOnly={!isEditing}
-                onToggleEdit={() => setIsEditing(!isEditing)}
-              />
-            ) : (
-              <div className="flex h-full items-center justify-center text-muted-foreground">
-                <div className="text-center">
-                  <p className="text-lg font-medium">No file open</p>
-                  <p className="mt-1 text-sm">
-                    Select a file from the explorer to start editing
-                  </p>
+            {/* Editor */}
+            <div className="flex-1 overflow-hidden">
+              {activeFile ? (
+                <MonacoEditor
+                  value={fileContent}
+                  onChange={handleContentChange}
+                  filePath={activeFile}
+                  readOnly={!isEditing}
+                  onToggleEdit={() => setIsEditing(!isEditing)}
+                />
+              ) : (
+                <div className="flex h-full items-center justify-center text-muted-foreground">
+                  <div className="text-center">
+                    <p className="text-lg font-medium">No file open</p>
+                    <p className="mt-1 text-sm">
+                      Select a file from the explorer to start editing
+                    </p>
+                  </div>
                 </div>
+              )}
+            </div>
+
+            {/* Bottom Panel - Terminal */}
+            {bottomPanelOpen && (
+              <div className="h-64 flex-shrink-0 border-t border-border">
+                <TerminalPanel workspaceId={workspaceId} />
               </div>
             )}
           </div>
+        )}
 
-          {/* Bottom Panel - Terminal */}
-          {bottomPanelOpen && (
-            <div className="h-64 flex-shrink-0 border-t border-border">
-              <TerminalPanel workspaceId={workspaceId} />
-            </div>
-          )}
-        </div>
+        {/* Right splitter (when not in focus mode) */}
+        {rightPanelOpen && !focusChat && (
+          <div
+            className="w-1 flex-shrink-0 cursor-col-resize bg-transparent hover:bg-primary/30 active:bg-primary/50 transition-colors"
+            onMouseDown={() => startDrag("right")}
+          />
+        )}
 
         {/* Right Panel - AI Chat */}
         {rightPanelOpen && (
-          <div className="w-96 flex-shrink-0 border-l border-border">
+          <div
+            style={focusChat ? undefined : { width: rightWidth }}
+            className={`flex-shrink-0 border-l border-border ${focusChat ? "flex-1" : ""}`}
+          >
             <AiChatSidebar
               workspaceId={workspaceId}
               activeFile={activeFile}

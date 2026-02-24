@@ -1,6 +1,7 @@
 package com.forge.webide.service.learning
 
 import com.forge.webide.repository.ExecutionRecordRepository
+import com.forge.webide.repository.SkillQualityRecordRepository
 import com.google.gson.Gson
 import org.slf4j.LoggerFactory
 import org.springframework.scheduling.annotation.Scheduled
@@ -18,7 +19,8 @@ import java.time.temporal.ChronoUnit
 @Service
 class SkillFeedbackService(
     private val executionRecordRepository: ExecutionRecordRepository,
-    private val evaluationRepository: com.forge.webide.repository.InteractionEvaluationRepository
+    private val evaluationRepository: com.forge.webide.repository.InteractionEvaluationRepository,
+    private val qualityRecordRepository: SkillQualityRecordRepository
 ) {
     private val logger = LoggerFactory.getLogger(SkillFeedbackService::class.java)
     private val gson = Gson()
@@ -153,6 +155,63 @@ class SkillFeedbackService(
     }
 
     /**
+     * Cross-analyze skill quality records + execution records to generate
+     * Skill update suggestions (Phase 8.3 — Pipeline 3).
+     */
+    fun generateSkillUpdateSuggestions(days: Int = 30): List<SkillUpdateSuggestion> {
+        val suggestions = mutableListOf<SkillUpdateSuggestion>()
+        try {
+            val since = Instant.now().minus(days.toLong(), ChronoUnit.DAYS)
+            val qualityRecords = qualityRecordRepository.findByCreatedAtAfter(since)
+            val bySkill = qualityRecords.groupBy { it.skillName }
+
+            for ((skillName, recs) in bySkill) {
+                val total = recs.size
+                if (total < 3) continue
+
+                val passed = recs.count { it.overallStatus == "PASSED" }
+                val passRate = passed.toDouble() / total
+
+                if (passRate < 0.7) {
+                    val topFailures = recs
+                        .filter { it.overallStatus != "PASSED" }
+                        .mapNotNull { it.layer1Details }
+                        .flatMap { it.split("; ") }
+                        .filter { it != "All platform checks passed" }
+                        .groupBy { it }
+                        .entries
+                        .sortedByDescending { it.value.size }
+                        .take(2)
+
+                    val failureDetail = topFailures.joinToString("; ") { "${it.key} (${it.value.size}x)" }
+                    suggestions.add(SkillUpdateSuggestion(
+                        skillName = skillName,
+                        type = "QUALITY_IMPROVEMENT",
+                        passRate = passRate,
+                        sampleSize = total,
+                        suggestion = "Skill '$skillName' has ${"%.0f".format(passRate * 100)}% pass rate. Top issues: $failureDetail. Consider updating scripts or adding quality rules."
+                    ))
+                }
+
+                // Check for high execution times
+                val avgTime = recs.map { it.executionTimeMs }.average()
+                if (avgTime > 30_000) {
+                    suggestions.add(SkillUpdateSuggestion(
+                        skillName = skillName,
+                        type = "PERFORMANCE",
+                        passRate = passRate,
+                        sampleSize = total,
+                        suggestion = "Skill '$skillName' average execution time is ${"%.1f".format(avgTime / 1000)}s. Consider optimizing scripts."
+                    ))
+                }
+            }
+        } catch (e: Exception) {
+            logger.warn("Failed to generate skill update suggestions: {}", e.message)
+        }
+        return suggestions
+    }
+
+    /**
      * Get the latest feedback report content.
      */
     fun getLatestReport(): String? {
@@ -184,5 +243,13 @@ class SkillFeedbackService(
         val avgDurationMs: Long,
         val avgTurns: Double,
         val topTools: List<String>
+    )
+
+    data class SkillUpdateSuggestion(
+        val skillName: String,
+        val type: String,
+        val passRate: Double,
+        val sampleSize: Int,
+        val suggestion: String
     )
 }

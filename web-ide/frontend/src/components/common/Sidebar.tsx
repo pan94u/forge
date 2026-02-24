@@ -37,7 +37,7 @@ const navItems: NavItem[] = [
     roles: ["developer", "product"],
   },
   {
-    href: "/workspace/new",
+    href: "/workspaces",
     icon: FolderOpen,
     label: "Workspaces",
     roles: ["developer", "product"],

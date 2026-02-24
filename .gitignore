@@ -46,3 +46,6 @@ web-ide/frontend/tsconfig.tsbuildinfo
 *.pem
 *.key
 credentials.json
+
+# Confidential docs (knowledge assets, analysis, baselines, etc.)
+docs/

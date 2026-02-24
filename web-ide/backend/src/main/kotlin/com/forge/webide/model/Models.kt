@@ -120,7 +120,7 @@ data class KnowledgeDocument(
 )
 
 enum class DocumentType {
-    WIKI, ADR, RUNBOOK, API_DOC;
+    WIKI, ADR, RUNBOOK, API_DOC, PATTERN, STUB;
 
     companion object {
         @JvmStatic

@@ -13,6 +13,7 @@ import com.forge.webide.service.skill.SkillContentType
 import com.forge.webide.repository.SkillUsageRepository
 import com.forge.webide.service.memory.SessionSummaryService
 import com.forge.webide.service.memory.WorkspaceMemoryService
+import com.forge.webide.service.skill.SkillQualityHookService
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
@@ -43,6 +44,7 @@ class McpProxyServiceTest {
     private val workspaceMemoryService = mockk<WorkspaceMemoryService>(relaxed = true)
     private val sessionSummaryService = mockk<SessionSummaryService>(relaxed = true)
     private val knowledgeIndexService = mockk<KnowledgeIndexService>(relaxed = true)
+    private val skillQualityHookService = mockk<SkillQualityHookService>(relaxed = true)
 
     private lateinit var workspaceService: WorkspaceService
     private lateinit var service: McpProxyService
@@ -76,7 +78,7 @@ class McpProxyServiceTest {
         // Build handler beans
         val builtinToolHandler = BuiltinToolHandler(baselineService, dataSource, knowledgeIndexService)
         val workspaceToolHandler = WorkspaceToolHandler(workspaceService)
-        val skillToolHandler = SkillToolHandler(skillLoader, skillUsageRepository)
+        val skillToolHandler = SkillToolHandler(skillLoader, skillUsageRepository, skillQualityHookService)
         val memoryToolHandler = MemoryToolHandler(workspaceMemoryService, sessionSummaryService, workspaceService)
 
         service = McpProxyService(builtinToolHandler, workspaceToolHandler, skillToolHandler, memoryToolHandler)

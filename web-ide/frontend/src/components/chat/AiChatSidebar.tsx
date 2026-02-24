@@ -32,6 +32,7 @@ import { HitlApprovalPanel } from "@/components/chat/HitlApprovalPanel";
 import { QualityPanel } from "@/components/dashboard/QualityPanel";
 import { MemoryPanel } from "@/components/memory/MemoryPanel";
 import { WorkspaceSkillPanel } from "@/components/skills/WorkspaceSkillPanel";
+import { PipelinePanel } from "@/components/pipeline/PipelinePanel";
 
 const OODA_PHASES: {
   key: OodaPhase;
@@ -68,7 +69,7 @@ export function AiChatSidebar({
   activeFile,
   fileContent,
 }: AiChatSidebarProps) {
-  const [activeTab, setActiveTab] = useState<"chat" | "quality" | "skills" | "memory">("chat");
+  const [activeTab, setActiveTab] = useState<"chat" | "quality" | "skills" | "memory" | "pipeline">("chat");
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
@@ -542,6 +543,7 @@ export function AiChatSidebar({
             { key: "quality" as const, label: "质量" },
             { key: "skills" as const, label: "Skills" },
             { key: "memory" as const, label: "记忆" },
+            { key: "pipeline" as const, label: "管道" },
           ]).map((tab) => (
             <button
               key={tab.key}
@@ -611,6 +613,13 @@ export function AiChatSidebar({
       {activeTab === "memory" && (
         <div className="flex-1 overflow-hidden">
           <MemoryPanel workspaceId={workspaceId} />
+        </div>
+      )}
+
+      {/* Pipeline Tab */}
+      {activeTab === "pipeline" && (
+        <div className="flex-1 overflow-auto">
+          <PipelinePanel />
         </div>
       )}
 
