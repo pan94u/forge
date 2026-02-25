@@ -54,7 +54,7 @@ Forge is a Gradle monorepo (Kotlin DSL) with the following modules:
 3. **Baseline guarantees quality floor**: Baseline scripts must pass regardless of model
 4. **Dual-loop architecture**: Delivery Loop (what) + Learning Loop (getting better)
 5. **Adapter isolation**: Skills/baselines stable; models/runtime swappable via adapters
-6. **MCP 工具聚合**: 5 MCP Server × 20 细粒度工具 → McpProxyService 17 聚合工具（5 handler 拆分路由）
+6. **MCP 工具聚合**: 5 MCP Server × 20 细粒度工具 → McpProxyService 20 聚合工具（5 handler 拆分路由）
 7. **本地构建 + Docker 打包**: 不在 Docker 内编译（网络不可靠），本地 bootJar/npm build 后 Docker 只 COPY 产物
 
 ## Language & Conventions
@@ -74,7 +74,7 @@ Forge is a Gradle monorepo (Kotlin DSL) with the following modules:
 - **环境变量**: `ANTHROPIC_API_KEY`, `FORGE_SECURITY_ENABLED`, `FORGE_PLUGINS_PATH=/plugins`
 - **Volume 挂载**: `plugins/` 和 `knowledge-base/` 必须挂载为只读
 
-## MCP 工具清单（19 个）
+## MCP 工具清单（20 个）
 
 | 工具 | 来源 | 说明 |
 |------|------|------|
@@ -87,6 +87,7 @@ Forge is a Gradle monorepo (Kotlin DSL) with the following modules:
 | read_skill | builtin | 按需读取 SKILL.md 或子文件内容 |
 | run_skill_script | builtin | 执行 Skill 脚本，60s 超时 |
 | list_skills | builtin | 列出可用 Skill metadata |
+| page_create | knowledge | 创建知识页面（local mode 写 Markdown 到 knowledge-base/） |
 | workspace_write_file | workspace | 写文件到 workspace（需 workspaceId） |
 | workspace_read_file | workspace | 读取 workspace 文件 |
 | workspace_list_files | workspace | 列出 workspace 文件树 |
