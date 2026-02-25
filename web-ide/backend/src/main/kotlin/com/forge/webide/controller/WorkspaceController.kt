@@ -2,8 +2,11 @@ package com.forge.webide.controller
 
 import com.forge.webide.model.*
 import com.forge.webide.service.GitStatus
+import com.forge.webide.service.WorkspaceRuntimeService
 import com.forge.webide.service.WorkspaceService
+import jakarta.servlet.http.HttpServletRequest
 import org.springframework.http.HttpStatus
+import org.springframework.http.MediaType
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.*
 import java.security.Principal
@@ -11,7 +14,8 @@ import java.security.Principal
 @RestController
 @RequestMapping("/api/workspaces")
 class WorkspaceController(
-    private val workspaceService: WorkspaceService
+    private val workspaceService: WorkspaceService,
+    private val runtimeService: WorkspaceRuntimeService
 ) {
 
     @PostMapping
@@ -114,6 +118,80 @@ class WorkspaceController(
     ): ResponseEntity<Void> {
         workspaceService.deleteFile(id, path)
         return ResponseEntity.noContent().build()
+    }
+
+    // =========================================================================
+    // Running services management
+    // =========================================================================
+
+    @GetMapping("/{id}/services")
+    fun listServices(
+        @PathVariable id: String
+    ): ResponseEntity<List<ServiceInfo>> {
+        val services = runtimeService.getServices(id).map { svc ->
+            ServiceInfo(
+                port = svc.port,
+                command = svc.command,
+                status = if (svc.process.isAlive) "running" else "stopped",
+                startTime = svc.startTime.toString(),
+                proxyUrl = "/api/workspaces/$id/proxy/${svc.port}/"
+            )
+        }
+        return ResponseEntity.ok(services)
+    }
+
+    @DeleteMapping("/{id}/services/{port}")
+    fun stopService(
+        @PathVariable id: String,
+        @PathVariable port: Int
+    ): ResponseEntity<Void> {
+        val stopped = runtimeService.stopService(id, port)
+        return if (stopped) ResponseEntity.noContent().build()
+        else ResponseEntity.notFound().build()
+    }
+
+    // =========================================================================
+    // File preview (serves files with proper Content-Type for browser rendering)
+    // =========================================================================
+
+    @GetMapping("/{id}/preview/**")
+    fun previewFile(
+        @PathVariable id: String,
+        request: HttpServletRequest
+    ): ResponseEntity<ByteArray> {
+        // Extract file path from URL: /api/workspaces/{id}/preview/path/to/file.html
+        val prefix = "/api/workspaces/$id/preview/"
+        val path = request.requestURI.removePrefix(prefix)
+        if (path.isBlank()) return ResponseEntity.notFound().build()
+
+        val content = workspaceService.getFileBytes(id, path)
+            ?: return ResponseEntity.notFound().build()
+
+        val contentType = getMediaType(path)
+        return ResponseEntity.ok()
+            .contentType(contentType)
+            .body(content)
+    }
+
+    private fun getMediaType(path: String): MediaType {
+        val ext = path.substringAfterLast('.', "").lowercase()
+        return when (ext) {
+            "html", "htm" -> MediaType.parseMediaType("text/html; charset=utf-8")
+            "css" -> MediaType.parseMediaType("text/css; charset=utf-8")
+            "js", "mjs" -> MediaType.parseMediaType("application/javascript; charset=utf-8")
+            "json" -> MediaType.APPLICATION_JSON
+            "png" -> MediaType.IMAGE_PNG
+            "jpg", "jpeg" -> MediaType.IMAGE_JPEG
+            "gif" -> MediaType.IMAGE_GIF
+            "svg" -> MediaType.parseMediaType("image/svg+xml")
+            "ico" -> MediaType.parseMediaType("image/x-icon")
+            "txt" -> MediaType.TEXT_PLAIN
+            "xml" -> MediaType.APPLICATION_XML
+            "woff" -> MediaType.parseMediaType("font/woff")
+            "woff2" -> MediaType.parseMediaType("font/woff2")
+            "ttf" -> MediaType.parseMediaType("font/ttf")
+            else -> MediaType.APPLICATION_OCTET_STREAM
+        }
     }
 
     // =========================================================================

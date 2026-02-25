@@ -20,6 +20,7 @@ import { MonacoEditor } from "@/components/editor/MonacoEditor";
 import { FileExplorer } from "@/components/editor/FileExplorer";
 import { TerminalPanel } from "@/components/editor/TerminalPanel";
 import { AiChatSidebar } from "@/components/chat/AiChatSidebar";
+import { ServicePanel } from "@/components/workspace/ServicePanel";
 import { Loader2 } from "lucide-react";
 import { workspaceApi, type Workspace, type FileNode } from "@/lib/workspace-api";
 
@@ -650,11 +651,17 @@ export default function WorkspacePage() {
               )}
             </div>
 
-            {/* Bottom Panel - Terminal */}
+            {/* Bottom Panel - Terminal + Services */}
             {bottomPanelOpen && (
-              <div className="h-64 flex-shrink-0 border-t border-border">
-                <TerminalPanel workspaceId={workspaceId} />
+              <div className="h-64 flex-shrink-0 border-t border-border flex flex-col">
+                <div className="flex-1 overflow-hidden">
+                  <TerminalPanel workspaceId={workspaceId} />
+                </div>
+                <ServicePanel workspaceId={workspaceId} />
               </div>
+            )}
+            {!bottomPanelOpen && (
+              <ServicePanel workspaceId={workspaceId} />
             )}
           </div>
         )}

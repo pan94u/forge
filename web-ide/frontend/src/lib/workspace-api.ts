@@ -19,6 +19,14 @@ export interface FileNode {
   children?: FileNode[];
 }
 
+export interface ServiceInfo {
+  port: number;
+  command: string;
+  status: string;
+  startTime: string;
+  proxyUrl: string | null;
+}
+
 export interface CreateWorkspaceRequest {
   name: string;
   description?: string;
@@ -249,6 +257,45 @@ class WorkspaceApi {
     if (!response.ok) {
       throw new Error(`Failed to delete file: ${response.status}`);
     }
+  }
+
+  /**
+   * List running services for a workspace.
+   */
+  async listServices(workspaceId: string): Promise<ServiceInfo[]> {
+    const response = await fetch(
+      `${this.baseUrl}/api/workspaces/${workspaceId}/services`,
+      { headers: this.headers() }
+    );
+
+    handleAuthError(response);
+    if (!response.ok) {
+      throw new Error(`Failed to list services: ${response.status}`);
+    }
+
+    return response.json();
+  }
+
+  /**
+   * Stop a running service by port.
+   */
+  async stopService(workspaceId: string, port: number): Promise<void> {
+    const response = await fetch(
+      `${this.baseUrl}/api/workspaces/${workspaceId}/services/${port}`,
+      { method: "DELETE", headers: this.headers() }
+    );
+
+    handleAuthError(response);
+    if (!response.ok) {
+      throw new Error(`Failed to stop service: ${response.status}`);
+    }
+  }
+
+  /**
+   * Get the proxy URL for accessing a workspace service.
+   */
+  getProxyUrl(workspaceId: string, port: number, path: string = "/"): string {
+    return `${this.baseUrl}/api/workspaces/${workspaceId}/proxy/${port}${path}`;
   }
 
   /**

@@ -86,6 +86,10 @@ services:
       timeout: 5s
       retries: 5
       start_period: 30s
+    ports:
+      - "3000-3005:3000-3005"
+      - "8000-8005:8000-8005"
+      - "8888:8888"
     depends_on:
       knowledge-mcp:
         condition: service_healthy

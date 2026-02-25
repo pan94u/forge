@@ -13,7 +13,8 @@ import org.springframework.stereotype.Service
  */
 @Service
 class WorkspaceToolHandler(
-    private val workspaceService: WorkspaceService
+    private val workspaceService: WorkspaceService,
+    private val runtimeService: WorkspaceRuntimeService
 ) {
 
     private val logger = LoggerFactory.getLogger(WorkspaceToolHandler::class.java)
@@ -65,6 +66,8 @@ class WorkspaceToolHandler(
                 }
                 "workspace_compile" -> handleWorkspaceCompile(workspaceId, args)
                 "workspace_test" -> handleWorkspaceTest(workspaceId, args)
+                "workspace_start_service" -> handleStartService(workspaceId, args)
+                "workspace_stop_service" -> handleStopService(workspaceId, args)
                 else -> McpProxyService.errorResponse("Unknown workspace tool: $toolName")
             }
         } catch (e: Exception) {
@@ -73,6 +76,44 @@ class WorkspaceToolHandler(
                 content = listOf(McpContent(type = "text", text = "Workspace tool error: ${e.message}")),
                 isError = true
             )
+        }
+    }
+
+    // ---- Service management tool implementations ----
+
+    private fun handleStartService(workspaceId: String, args: Map<String, Any?>): McpToolCallResponse {
+        val command = args["command"] as? String
+            ?: return McpProxyService.errorResponse("'command' parameter is required")
+        val port = (args["port"] as? Number)?.toInt()
+            ?: return McpProxyService.errorResponse("'port' parameter is required (integer)")
+
+        return try {
+            runtimeService.startService(workspaceId, command, port)
+            val proxyUrl = "/api/workspaces/$workspaceId/proxy/$port/"
+            McpToolCallResponse(
+                content = listOf(McpContent(
+                    type = "text",
+                    text = "Service started on port $port.\nCommand: $command\nAccess URL: $proxyUrl"
+                )),
+                isError = false
+            )
+        } catch (e: Exception) {
+            McpProxyService.errorResponse("Failed to start service: ${e.message}")
+        }
+    }
+
+    private fun handleStopService(workspaceId: String, args: Map<String, Any?>): McpToolCallResponse {
+        val port = (args["port"] as? Number)?.toInt()
+            ?: return McpProxyService.errorResponse("'port' parameter is required (integer)")
+
+        val stopped = runtimeService.stopService(workspaceId, port)
+        return if (stopped) {
+            McpToolCallResponse(
+                content = listOf(McpContent(type = "text", text = "Service on port $port stopped.")),
+                isError = false
+            )
+        } else {
+            McpProxyService.errorResponse("No running service found on port $port")
         }
     }
 

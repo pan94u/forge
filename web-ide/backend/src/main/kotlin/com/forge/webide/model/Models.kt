@@ -55,6 +55,16 @@ data class FileContentRequest(
     val content: String
 )
 
+// --- Runtime Service Models ---
+
+data class ServiceInfo(
+    val port: Int,
+    val command: String,
+    val status: String,
+    val startTime: String,
+    val proxyUrl: String? = null
+)
+
 // --- Chat Models ---
 
 data class ChatSession(

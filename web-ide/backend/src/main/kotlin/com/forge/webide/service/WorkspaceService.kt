@@ -27,6 +27,9 @@ class WorkspaceService(
     @Value("\${forge.workspaces.data-dir:./data/workspaces}") private val dataDir: String
 ) {
 
+    // Late-initialized to break circular dependency (RuntimeService depends on WorkspaceService)
+    internal var runtimeService: WorkspaceRuntimeService? = null
+
     private val logger = LoggerFactory.getLogger(WorkspaceService::class.java)
 
     // Hot cache for file trees (rebuilt from disk, invalidated on writes)
@@ -125,6 +128,9 @@ class WorkspaceService(
             throw IllegalAccessException("User $userId cannot delete workspace $id")
         }
 
+        // Stop all running services before deleting
+        runtimeService?.stopAllServices(id)
+
         // Remove files from disk
         val wsDir = getWorkspaceDir(id)
         if (Files.exists(wsDir)) {
@@ -149,6 +155,10 @@ class WorkspaceService(
 
     fun suspendWorkspace(id: String): Workspace? {
         val entity = workspaceRepository.findById(id).orElse(null) ?: return null
+
+        // Stop all running services before suspending
+        runtimeService?.stopAllServices(id)
+
         entity.status = WorkspaceStatus.SUSPENDED
         entity.updatedAt = Instant.now()
         workspaceRepository.save(entity)
@@ -171,6 +181,13 @@ class WorkspaceService(
         val filePath = getWorkspaceDir(workspaceId).resolve(path)
         if (!Files.exists(filePath) || !Files.isRegularFile(filePath)) return null
         return Files.readString(filePath)
+    }
+
+    fun getFileBytes(workspaceId: String, path: String): ByteArray? {
+        validatePath(path)
+        val filePath = getWorkspaceDir(workspaceId).resolve(path)
+        if (!Files.exists(filePath) || !Files.isRegularFile(filePath)) return null
+        return Files.readAllBytes(filePath)
     }
 
     fun saveFileContent(workspaceId: String, path: String, content: String) {
@@ -227,7 +244,7 @@ class WorkspaceService(
     // Internal helpers
     // =========================================================================
 
-    private fun getWorkspaceDir(workspaceId: String): Path {
+    internal fun getWorkspaceDir(workspaceId: String): Path {
         return basePath.resolve(workspaceId)
     }
 

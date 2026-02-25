@@ -1,6 +1,8 @@
 package com.forge.webide.websocket
 
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.forge.webide.service.WorkspaceRuntimeService
+import com.forge.webide.service.WorkspaceService
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Component
 import org.springframework.web.socket.CloseStatus
@@ -10,6 +12,7 @@ import org.springframework.web.socket.handler.TextWebSocketHandler
 import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.io.OutputStreamWriter
+import java.nio.file.Files
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 
@@ -22,7 +25,9 @@ import java.util.concurrent.Executors
  */
 @Component
 class TerminalWebSocketHandler(
-    private val objectMapper: ObjectMapper
+    private val objectMapper: ObjectMapper,
+    private val workspaceService: WorkspaceService,
+    private val runtimeService: WorkspaceRuntimeService
 ) : TextWebSocketHandler() {
 
     private val logger = LoggerFactory.getLogger(TerminalWebSocketHandler::class.java)
@@ -90,8 +95,27 @@ class TerminalWebSocketHandler(
                 val processBuilder = ProcessBuilder("/bin/sh", "-c", sanitizedCommand)
                     .redirectErrorStream(true)
 
+                // Set working directory to workspace directory
+                val workspaceId = sessionWorkspaceMap[session.id]
+                if (workspaceId != null) {
+                    val wsDir = workspaceService.getWorkspaceDir(workspaceId)
+                    if (Files.exists(wsDir)) {
+                        processBuilder.directory(wsDir.toFile())
+                    }
+                }
+
                 val process = processBuilder.start()
                 processMap[session.id] = process
+
+                // Detect port from command and register as a service
+                val detectedPort = detectPort(sanitizedCommand)
+                if (detectedPort != null && workspaceId != null) {
+                    runtimeService.registerService(workspaceId, detectedPort, sanitizedCommand, process)
+                    sendMessage(session, mapOf(
+                        "type" to "system",
+                        "content" to "Service detected on port $detectedPort"
+                    ))
+                }
 
                 val reader = BufferedReader(InputStreamReader(process.inputStream))
                 val outputBuilder = StringBuilder()
@@ -165,6 +189,42 @@ class TerminalWebSocketHandler(
         }
 
         return command
+    }
+
+    /**
+     * Detect a port number from common server-start commands.
+     */
+    private fun detectPort(command: String): Int? {
+        val cmd = command.trim()
+
+        // python3 -m http.server 8888
+        val httpServerMatch = Regex("""http\.server\s+(\d+)""").find(cmd)
+        if (httpServerMatch != null) return httpServerMatch.groupValues[1].toIntOrNull()
+
+        // Explicit port flags: -p 8080, --port 8080, --port=8080, :8080
+        val portFlagMatch = Regex("""(?:-p|--port)[=\s]+(\d+)""").find(cmd)
+        if (portFlagMatch != null) return portFlagMatch.groupValues[1].toIntOrNull()
+
+        // PORT=3001 node server.js
+        val envPortMatch = Regex("""PORT=(\d+)""").find(cmd)
+        if (envPortMatch != null) return envPortMatch.groupValues[1].toIntOrNull()
+
+        // npm start / npm run dev / npm run serve → default 3000
+        if (cmd.startsWith("npm start") || cmd.startsWith("npm run dev") || cmd.startsWith("npm run serve")) {
+            return 3000
+        }
+
+        // node server.js / node app.js → default 3000 (exclude flags like --version)
+        if (Regex("""^node\s+(?!-)\S+\.\w+""").containsMatchIn(cmd)) {
+            return 3000
+        }
+
+        // python3 -m http.server (no port) → default 8000
+        if (cmd.contains("http.server")) {
+            return 8000
+        }
+
+        return null
     }
 
     private fun sendMessage(session: WebSocketSession, data: Any) {

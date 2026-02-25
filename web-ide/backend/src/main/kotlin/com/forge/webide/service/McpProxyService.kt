@@ -403,6 +403,29 @@ class McpProxyService(
                     "type" to "object",
                     "properties" to mapOf<String, Any?>()
                 )
+            ),
+            McpTool(
+                name = "workspace_start_service",
+                description = "Start a service process in the workspace (e.g. HTTP server, Node.js app). The service runs in the background and is accessible via the reverse proxy URL at /api/workspaces/{workspaceId}/proxy/{port}/. Use this to let users preview generated web applications. IMPORTANT: Ports 8080-8082 are reserved by the platform. Recommended ports: 8888 for Python HTTP servers, 3000 for Node.js apps.",
+                inputSchema = mapOf(
+                    "type" to "object",
+                    "properties" to mapOf(
+                        "command" to mapOf("type" to "string", "description" to "Shell command to start the service (e.g. 'python3 -m http.server 8888', 'node server.js')"),
+                        "port" to mapOf("type" to "integer", "description" to "Port the service will listen on (3000-9999, excluding 8080-8082 which are reserved)")
+                    ),
+                    "required" to listOf("command", "port")
+                )
+            ),
+            McpTool(
+                name = "workspace_stop_service",
+                description = "Stop a running service in the workspace by port number.",
+                inputSchema = mapOf(
+                    "type" to "object",
+                    "properties" to mapOf(
+                        "port" to mapOf("type" to "integer", "description" to "Port of the service to stop")
+                    ),
+                    "required" to listOf("port")
+                )
             )
         )
     }
@@ -443,7 +466,8 @@ class McpProxyService(
 
         private val ALL_TOOLS = BUILTIN_TOOLS + SKILL_TOOLS + MEMORY_TOOLS + setOf(
             "workspace_write_file", "workspace_read_file", "workspace_list_files",
-            "workspace_compile", "workspace_test"
+            "workspace_compile", "workspace_test",
+            "workspace_start_service", "workspace_stop_service"
         )
 
         /**
