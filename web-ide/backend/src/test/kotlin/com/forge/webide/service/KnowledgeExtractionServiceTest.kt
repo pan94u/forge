@@ -6,10 +6,13 @@ import com.forge.webide.model.*
 import com.forge.webide.repository.KnowledgeExtractionLogRepository
 import com.forge.webide.repository.WorkspaceRepository
 import io.mockk.*
+import kotlinx.coroutines.delay
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import java.time.Instant
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 class KnowledgeExtractionServiceTest {
 
@@ -239,8 +242,20 @@ class KnowledgeExtractionServiceTest {
 
     @Test
     fun `duplicate extraction for same workspace returns existing jobId`() {
+        // Use a latch to keep the first job "running" while we trigger the second
+        val blockLatch = CountDownLatch(1)
+        every { knowledgeTagService.listTags("ws-dup") } returns sampleTags
+        coEvery {
+            agenticLoopOrchestrator.agenticStream(any(), any(), any(), any(), workspaceId = "ws-dup", any())
+        } coAnswers {
+            blockLatch.await(3, TimeUnit.SECONDS)
+            AgenticResult(content = "[]", toolCalls = emptyList())
+        }
+
         val jobId1 = service.triggerExtraction(ExtractionTriggerRequest("ws-dup"))
+        Thread.sleep(50) // Let the first job start and enter agenticStream (still "running")
         val jobId2 = service.triggerExtraction(ExtractionTriggerRequest("ws-dup"))
+        blockLatch.countDown() // Release the latch so job can complete
 
         assertThat(jobId2).isEqualTo(jobId1)
     }
