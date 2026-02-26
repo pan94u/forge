@@ -6,6 +6,7 @@ import com.forge.webide.model.*
 import com.forge.webide.repository.KnowledgeExtractionLogRepository
 import com.forge.webide.repository.WorkspaceRepository
 import org.slf4j.LoggerFactory
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Service
 import java.time.Instant
@@ -84,8 +85,15 @@ class KnowledgeExtractionService(
     // Scheduled batch extraction
     // =========================================================================
 
+    @Value("\${forge.knowledge.extraction-enabled:false}")
+    private var extractionEnabled: Boolean = false
+
     @Scheduled(cron = "\${forge.knowledge.extraction-cron:0 0 */4 * * *}")
     fun scheduledBatchExtraction() {
+        if (!extractionEnabled) {
+            logger.debug("Scheduled extraction disabled (forge.knowledge.extraction-enabled=false)")
+            return
+        }
         logger.info("Starting scheduled batch knowledge extraction")
         val cutoff = Instant.now().minus(4, ChronoUnit.HOURS)
 
