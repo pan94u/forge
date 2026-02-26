@@ -4,7 +4,6 @@ import com.forge.adapter.model.*
 import com.forge.webide.entity.KnowledgeExtractionLogEntity
 import com.forge.webide.model.*
 import com.forge.webide.repository.KnowledgeExtractionLogRepository
-import com.forge.webide.repository.WorkspaceRepository
 import io.mockk.*
 import kotlinx.coroutines.delay
 import org.assertj.core.api.Assertions.assertThat
@@ -22,7 +21,6 @@ class KnowledgeExtractionServiceTest {
     private lateinit var extractionLogRepository: KnowledgeExtractionLogRepository
     private lateinit var claudeAdapter: ModelAdapter
     private lateinit var modelRegistry: ModelRegistry
-    private lateinit var workspaceRepository: WorkspaceRepository
     private lateinit var service: KnowledgeExtractionService
 
     private val sampleTags = listOf(
@@ -39,7 +37,6 @@ class KnowledgeExtractionServiceTest {
         extractionLogRepository = mockk(relaxed = true)
         claudeAdapter = mockk(relaxed = true)
         modelRegistry = mockk(relaxed = true)
-        workspaceRepository = mockk(relaxed = true)
 
         service = KnowledgeExtractionService(
             agenticLoopOrchestrator,
@@ -47,8 +44,7 @@ class KnowledgeExtractionServiceTest {
             knowledgeTagService,
             extractionLogRepository,
             claudeAdapter,
-            modelRegistry,
-            workspaceRepository
+            modelRegistry
         )
 
         // Default mocks

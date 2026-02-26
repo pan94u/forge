@@ -4,13 +4,8 @@ import com.forge.adapter.model.*
 import com.forge.webide.entity.KnowledgeExtractionLogEntity
 import com.forge.webide.model.*
 import com.forge.webide.repository.KnowledgeExtractionLogRepository
-import com.forge.webide.repository.WorkspaceRepository
 import org.slf4j.LoggerFactory
-import org.springframework.beans.factory.annotation.Value
-import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Service
-import java.time.Instant
-import java.time.temporal.ChronoUnit
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
@@ -23,8 +18,7 @@ class KnowledgeExtractionService(
     private val knowledgeTagService: KnowledgeTagService,
     private val extractionLogRepository: KnowledgeExtractionLogRepository,
     private val claudeAdapter: ModelAdapter,
-    private val modelRegistry: ModelRegistry,
-    private val workspaceRepository: WorkspaceRepository
+    private val modelRegistry: ModelRegistry
 ) {
 
     private val logger = LoggerFactory.getLogger(KnowledgeExtractionService::class.java)
@@ -79,46 +73,6 @@ class KnowledgeExtractionService(
             else -> extractionLogRepository.findTop30ByOrderByCreatedAtDesc()
         }
         return entities.map { it.toModel() }
-    }
-
-    // =========================================================================
-    // Scheduled batch extraction
-    // =========================================================================
-
-    @Value("\${forge.knowledge.extraction-enabled:false}")
-    private var extractionEnabled: Boolean = false
-
-    @Scheduled(cron = "\${forge.knowledge.extraction-cron:0 0 */4 * * *}")
-    fun scheduledBatchExtraction() {
-        if (!extractionEnabled) {
-            logger.debug("Scheduled extraction disabled (forge.knowledge.extraction-enabled=false)")
-            return
-        }
-        logger.info("Starting scheduled batch knowledge extraction")
-        val cutoff = Instant.now().minus(4, ChronoUnit.HOURS)
-
-        val activeWorkspaces = workspaceRepository.findByStatusNot(WorkspaceStatus.SUSPENDED)
-            .filter { it.status == WorkspaceStatus.ACTIVE }
-
-        for (workspace in activeWorkspaces) {
-            val recentLogs = extractionLogRepository.findByWorkspaceIdAndCreatedAtAfter(workspace.id, cutoff)
-            if (recentLogs.isNotEmpty()) {
-                logger.debug("Skipping workspace {} — recently refreshed", workspace.id)
-                continue
-            }
-
-            try {
-                logger.info("Batch extraction for workspace: {} ({})", workspace.name, workspace.id)
-                val request = ExtractionTriggerRequest(workspaceId = workspace.id)
-                triggerExtraction(request)
-                // Wait for completion before next workspace to avoid API rate limits
-                Thread.sleep(5000)
-            } catch (e: Exception) {
-                logger.error("Batch extraction failed for workspace {}: {}", workspace.id, e.message)
-            }
-        }
-
-        logger.info("Scheduled batch extraction completed for {} workspaces", activeWorkspaces.size)
     }
 
     // =========================================================================
