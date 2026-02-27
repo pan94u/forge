@@ -450,3 +450,93 @@ data class TagExtractionResult(
     val reason: String?,
     val contentLength: Int
 )
+
+// --- Enterprise Console: Organization Models ---
+
+data class Organization(
+    val id: String,
+    val name: String,
+    val slug: String,
+    val description: String?,
+    val status: String,
+    val createdAt: Instant
+)
+
+data class OrgMember(
+    val orgId: String,
+    val userId: String,
+    val role: String,
+    val joinedAt: Instant
+)
+
+data class OrgModelConfig(
+    val id: String,
+    val orgId: String,
+    val provider: String,
+    val enabled: Boolean,
+    val apiKeyMasked: String?,
+    val baseUrl: String?,
+    val modelAllowlist: List<String>?,
+    val updatedAt: Instant
+)
+
+data class OrgDbConnection(
+    val id: String,
+    val orgId: String,
+    val name: String,
+    val jdbcUrl: String,
+    val username: String?,
+    val accessLevel: String,
+    val createdAt: Instant
+)
+
+data class OrgEnvConfig(
+    val id: String,
+    val orgId: String,
+    val category: String,
+    val configKey: String,
+    val configValue: String?,
+    val isSensitive: Boolean,
+    val description: String?
+)
+
+// --- Enterprise Console: Request Models ---
+
+data class CreateOrgRequest(
+    val name: String,
+    val slug: String,
+    val description: String? = null
+)
+
+data class UpdateOrgRequest(
+    val name: String? = null,
+    val description: String? = null,
+    val status: String? = null
+)
+
+data class AddMemberRequest(
+    val userId: String,
+    val role: String = "MEMBER"
+)
+
+data class UpsertModelConfigRequest(
+    val enabled: Boolean = true,
+    val apiKey: String? = null,
+    val baseUrl: String? = null,
+    val modelAllowlist: List<String>? = null
+)
+
+data class CreateDbConnectionRequest(
+    val name: String,
+    val jdbcUrl: String,
+    val username: String? = null,
+    val password: String? = null,
+    val accessLevel: String = "FULL_READ"
+)
+
+data class UpsertEnvConfigRequest(
+    val configKey: String,
+    val configValue: String?,
+    val isSensitive: Boolean = false,
+    val description: String? = null
+)

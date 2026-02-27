@@ -38,5 +38,8 @@ class WorkspaceEntity(
     val createdAt: Instant = Instant.now(),
 
     @Column(name = "updated_at", nullable = false)
-    var updatedAt: Instant = Instant.now()
+    var updatedAt: Instant = Instant.now(),
+
+    @Column(name = "org_id", length = 36)
+    var orgId: String? = null
 )

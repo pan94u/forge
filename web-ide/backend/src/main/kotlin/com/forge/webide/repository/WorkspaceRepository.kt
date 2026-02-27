@@ -9,4 +9,6 @@ interface WorkspaceRepository : JpaRepository<WorkspaceEntity, String> {
     fun findByOwnerOrOwnerIn(owner: String, fallbacks: List<String>): List<WorkspaceEntity>
 
     fun findByStatusNot(status: WorkspaceStatus): List<WorkspaceEntity>
+
+    fun findByOrgId(orgId: String): List<WorkspaceEntity>
 }

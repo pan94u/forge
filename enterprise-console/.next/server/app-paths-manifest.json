@@ -1,0 +1,10 @@
+{
+  "/_not-found/page": "app/_not-found/page.js",
+  "/orgs/[id]/db-connections/page": "app/orgs/[id]/db-connections/page.js",
+  "/orgs/[id]/model-config/page": "app/orgs/[id]/model-config/page.js",
+  "/orgs/[id]/page": "app/orgs/[id]/page.js",
+  "/orgs/new/page": "app/orgs/new/page.js",
+  "/orgs/page": "app/orgs/page.js",
+  "/page": "app/page.js",
+  "/orgs/[id]/build-env/page": "app/orgs/[id]/build-env/page.js"
+}

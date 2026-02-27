@@ -16,6 +16,7 @@ import {
   Sparkles,
   BarChart3,
   ChevronRight,
+  Building2,
 } from "lucide-react";
 import { Workspace, workspaceApi } from "@/lib/workspace-api";
 
@@ -193,6 +194,20 @@ export function Sidebar({ collapsed, onToggleCollapse, role }: SidebarProps) {
           </div>
         ))}
       </nav>
+
+      {/* Admin Link */}
+      <div className="border-t border-border px-2 pt-2">
+        <a
+          href="http://localhost:9001"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-3 rounded-md px-2.5 py-2 text-sm font-medium text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+          title="Enterprise Console"
+        >
+          <Building2 className="h-4 w-4 flex-shrink-0" />
+          {!collapsed && <span>Admin</span>}
+        </a>
+      </div>
 
       {/* Collapse Toggle */}
       <div className="border-t border-border p-2">
