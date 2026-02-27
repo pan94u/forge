@@ -151,7 +151,7 @@ class ClaudeAgentServiceTest {
     fun `streamMessage emits content events`() {
         every { mcpProxyService.listTools() } returns emptyList()
         // Mock agenticStream to emit content events via callback and return result
-        coEvery { agenticLoopOrchestrator.agenticStream(any(), any(), any(), any(), any(), any()) } coAnswers {
+        coEvery { agenticLoopOrchestrator.agenticStream(any(), any(), any(), any(), any(), any(), any()) } coAnswers {
             @Suppress("UNCHECKED_CAST")
             val onEvent = args[3] as (Map<String, Any?>) -> Unit
             onEvent(mapOf("type" to "content", "content" to "Hello"))
@@ -196,7 +196,7 @@ class ClaudeAgentServiceTest {
             ))
         )
         // Mock agenticStream to simulate tool calling flow
-        coEvery { agenticLoopOrchestrator.agenticStream(any(), any(), any(), any(), any(), any()) } coAnswers {
+        coEvery { agenticLoopOrchestrator.agenticStream(any(), any(), any(), any(), any(), any(), any()) } coAnswers {
             @Suppress("UNCHECKED_CAST")
             val onEvent = args[3] as (Map<String, Any?>) -> Unit
             onEvent(mapOf("type" to "tool_use_start", "toolCallId" to "toolu_001", "toolName" to "search_knowledge"))
@@ -255,7 +255,7 @@ class ClaudeAgentServiceTest {
             McpTool("search_knowledge", "Search", emptyMap())
         )
         // Mock agenticStream to simulate tool execution error
-        coEvery { agenticLoopOrchestrator.agenticStream(any(), any(), any(), any(), any(), any()) } coAnswers {
+        coEvery { agenticLoopOrchestrator.agenticStream(any(), any(), any(), any(), any(), any(), any()) } coAnswers {
             @Suppress("UNCHECKED_CAST")
             val onEvent = args[3] as (Map<String, Any?>) -> Unit
             onEvent(mapOf("type" to "tool_use_start", "toolCallId" to "toolu_001", "toolName" to "search_knowledge"))

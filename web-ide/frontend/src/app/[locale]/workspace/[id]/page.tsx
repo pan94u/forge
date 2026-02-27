@@ -165,6 +165,7 @@ function CreateWorkspaceForm() {
             const desc = (form.elements.namedItem("description") as HTMLInputElement).value.trim();
             const repo = (form.elements.namedItem("repository") as HTMLInputElement).value.trim();
             const branch = (form.elements.namedItem("branch") as HTMLInputElement).value.trim();
+            const accessToken = (form.elements.namedItem("accessToken") as HTMLInputElement).value.trim();
             if (!name) { setError("Workspace 名称不能为空"); return; }
             if (repo && !/^https?:\/\/.+/.test(repo)) {
               setError("Git URL 格式无效，需以 http:// 或 https:// 开头");
@@ -177,6 +178,7 @@ function CreateWorkspaceForm() {
                 description: desc,
                 repository: repo || undefined,
                 branch: branch || undefined,
+                accessToken: accessToken || undefined,
               });
 
               if (ws.status === "creating") {
@@ -247,6 +249,22 @@ function CreateWorkspaceForm() {
                 className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm disabled:opacity-50"
                 placeholder="main"
               />
+            </div>
+            <div>
+              <label className="block text-sm font-medium" htmlFor="accessToken">
+                Access Token（私有仓库）
+              </label>
+              <input
+                id="accessToken"
+                name="accessToken"
+                type="password"
+                disabled={creating}
+                className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm disabled:opacity-50"
+                placeholder="glpat-xxxxxx（GitLab）或 ghp_xxxxxx（GitHub）"
+              />
+              <p className="mt-1 text-xs text-muted-foreground">
+                GitLab：Settings → Access Tokens → read_repository + write_repository 权限
+              </p>
             </div>
           </div>
           <button

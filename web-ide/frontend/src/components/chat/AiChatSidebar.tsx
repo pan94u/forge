@@ -15,6 +15,7 @@ import {
   ChevronDown,
   ChevronRight,
   Activity,
+  GitCommit,
 } from "lucide-react";
 import { ChatMessage, type Message, type ContentSegment } from "@/components/chat/ChatMessage";
 import {
@@ -98,6 +99,7 @@ export function AiChatSidebar({
   const [contextUsage, setContextUsage] = useState<{ tokensUsed: number; tokenBudget: number; compressionPhase: number; turn: number } | null>(null);
   const [oodaDetail, setOodaDetail] = useState<string>("");
   const [baselineResult, setBaselineResult] = useState<BaselineResult | null>(null);
+  const [gitConfirm, setGitConfirm] = useState<{ tool: string; preview: string } | null>(null);
   const [hitlPending, setHitlPending] = useState(false);
   const [hitlData, setHitlData] = useState<{
     profile: string;
@@ -315,6 +317,12 @@ export function AiChatSidebar({
                 setHitlData(null);
               }
               break;
+            case "git_confirm":
+              setGitConfirm({
+                tool: event.gitConfirmTool ?? "",
+                preview: event.gitConfirmPreview ?? "",
+              });
+              break;
             case "skills_activated":
               setActivatedSkills(event.skills ?? []);
               break;
@@ -471,6 +479,7 @@ export function AiChatSidebar({
       // contextUsage intentionally NOT cleared — keep showing after stream ends
       setHitlPending(false);
       setHitlData(null);
+      setGitConfirm(null);
       abortRef.current = null;
     }
   };
@@ -486,6 +495,7 @@ export function AiChatSidebar({
     setContextUsage(null);
     setHitlPending(false);
     setHitlData(null);
+    setGitConfirm(null);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -929,6 +939,39 @@ export function AiChatSidebar({
             onSelect={handleContextSelect}
             onClose={() => setShowContextPicker(false)}
           />
+        </div>
+      )}
+
+      {/* Git Confirmation Card (chat tab only) */}
+      {activeTab === "chat" && gitConfirm && (
+        <div className="border-t border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/20 px-3 py-2">
+          <div className="flex items-center gap-2 text-sm font-medium text-amber-800 dark:text-amber-200">
+            <GitCommit className="h-4 w-4 flex-shrink-0" />
+            <span>确认执行 {gitConfirm.tool}？</span>
+          </div>
+          <pre className="mt-2 text-xs font-mono bg-muted p-2 rounded whitespace-pre-wrap break-all max-h-32 overflow-auto">
+            {gitConfirm.preview}
+          </pre>
+          <div className="mt-2 flex gap-2">
+            <button
+              onClick={() => {
+                claudeClient.sendGitConfirmResponse(true);
+                setGitConfirm(null);
+              }}
+              className="px-3 py-1 text-xs rounded bg-primary text-primary-foreground hover:bg-primary/90"
+            >
+              ✅ 确认
+            </button>
+            <button
+              onClick={() => {
+                claudeClient.sendGitConfirmResponse(false);
+                setGitConfirm(null);
+              }}
+              className="px-3 py-1 text-xs rounded bg-muted hover:bg-muted/80 border border-border"
+            >
+              ❌ 取消
+            </button>
+          </div>
         </div>
       )}
 

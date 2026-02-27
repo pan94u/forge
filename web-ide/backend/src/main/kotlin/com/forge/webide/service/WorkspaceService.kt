@@ -7,6 +7,7 @@ import jakarta.annotation.PostConstruct
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
+import java.net.URI
 import java.nio.file.*
 import java.nio.file.attribute.BasicFileAttributes
 import java.time.Instant
@@ -61,7 +62,8 @@ class WorkspaceService(
             status = if (needsClone) WorkspaceStatus.CREATING else WorkspaceStatus.ACTIVE,
             owner = userId,
             repository = request.repository,
-            branch = request.branch ?: if (needsClone) "main" else null
+            branch = request.branch ?: if (needsClone) "main" else null,
+            accessToken = request.accessToken?.takeIf { it.isNotBlank() }
         )
 
         val wsDir = basePath.resolve(entity.id)
@@ -72,7 +74,7 @@ class WorkspaceService(
             // Save with CREATING status, start async clone, return immediately
             workspaceRepository.save(entity)
             logger.info("Created workspace '{}' ({}) — starting async git clone", entity.name, entity.id)
-            cloneAsync(entity.id, request.repository!!, entity.branch, wsDir)
+            cloneAsync(entity.id, request.repository!!, entity.branch, wsDir, request.accessToken)
         } else {
             // Empty workspace — create default files synchronously
             initializeDefaultFiles(wsDir)
@@ -85,12 +87,15 @@ class WorkspaceService(
 
     /**
      * Async git clone: runs in background thread, updates workspace status on completion.
+     * Uses accessToken (if provided) to construct an authenticated URL for private repos.
+     * The clean repository URL (without token) is stored in DB; only the auth URL is passed to git.
      */
-    private fun cloneAsync(workspaceId: String, repository: String, branch: String?, wsDir: Path) {
+    private fun cloneAsync(workspaceId: String, repository: String, branch: String?, wsDir: Path, accessToken: String? = null) {
         cloneExecutor.submit {
             try {
+                val cloneUrl = buildAuthUrl(repository, accessToken)
                 logger.info("Async clone started: workspace={}, repo={}", workspaceId, repository)
-                gitService.cloneRepository(repository, branch, wsDir)
+                gitService.cloneRepository(cloneUrl, branch, wsDir)
 
                 // Clone succeeded → ACTIVE
                 workspaceRepository.findById(workspaceId).ifPresent { entity ->
@@ -233,11 +238,42 @@ class WorkspaceService(
     // =========================================================================
 
     fun pullWorkspace(workspaceId: String): String {
+        val entity = workspaceRepository.findById(workspaceId).orElse(null)
         val wsDir = getWorkspaceDir(workspaceId)
-        val result = gitService.pull(wsDir)
+        val authUrl = if (entity?.accessToken != null && entity.repository != null) {
+            buildAuthUrl(entity.repository, entity.accessToken)
+        } else null
+        val result = gitService.pull(wsDir, rebase = false, remoteUrl = authUrl)
         fileTreeCache.remove(workspaceId)
         touchWorkspace(workspaceId)
         return result
+    }
+
+    /**
+     * Returns the authenticated URL for a workspace's git repository, or null if no token is configured.
+     * Used by WorkspaceToolHandler for push/pull operations.
+     */
+    fun getWorkspaceAuthUrl(workspaceId: String): String? {
+        val entity = workspaceRepository.findById(workspaceId).orElse(null) ?: return null
+        val repo = entity.repository ?: return null
+        val token = entity.accessToken?.takeIf { it.isNotBlank() } ?: return null
+        return buildAuthUrl(repo, token)
+    }
+
+    /**
+     * Injects oauth2:<token>@ into a repository URL for authenticated git operations.
+     * The clean URL (without token) should always be stored in DB.
+     * Example: https://gitlab.com/org/repo.git → https://oauth2:token@gitlab.com/org/repo.git
+     */
+    fun buildAuthUrl(repository: String, accessToken: String?): String {
+        if (accessToken.isNullOrBlank()) return repository
+        return try {
+            val uri = URI(repository)
+            URI(uri.scheme, "oauth2:$accessToken", uri.host, uri.port, uri.path, uri.query, uri.fragment).toString()
+        } catch (e: Exception) {
+            logger.warn("Failed to parse repository URL for auth injection: {}", e.message)
+            repository
+        }
     }
 
     fun getGitStatus(workspaceId: String): GitStatus {

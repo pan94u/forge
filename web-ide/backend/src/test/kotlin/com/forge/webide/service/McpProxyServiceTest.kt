@@ -80,7 +80,8 @@ class McpProxyServiceTest {
         // Build handler beans
         val builtinToolHandler = BuiltinToolHandler(baselineService, dataSource, knowledgeIndexService, knowledgeExtractionService)
         val runtimeService = mockk<WorkspaceRuntimeService>(relaxed = true)
-        val workspaceToolHandler = WorkspaceToolHandler(workspaceService, runtimeService, gitService)
+        val gitConfirmService = mockk<GitConfirmService>(relaxed = true)
+        val workspaceToolHandler = WorkspaceToolHandler(workspaceService, runtimeService, gitService, gitConfirmService)
         val skillToolHandler = SkillToolHandler(skillLoader, skillUsageRepository, skillQualityHookService)
         val memoryToolHandler = MemoryToolHandler(workspaceMemoryService, sessionSummaryService, workspaceService)
 

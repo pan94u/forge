@@ -13,6 +13,7 @@ tags: [git, commit, push, pull, branch, gitignore, version-control]
 
 ## 1. 操作原则
 
+- **用户确认机制**：在执行 `workspace_git_commit` / `workspace_git_push` / `workspace_git_pull` 前，系统会自动向用户弹出确认卡。如用户点击"取消"，工具返回"用户已取消"，应立即停止该 git 操作并告知用户，不要重试。
 - **提交前读 diff**：使用 `workspace_git_diff` 查看改动，确认无误再提交
 - **Commit message 规范**：格式为 `type: 描述`，type 可选：
   - `feat`: 新功能

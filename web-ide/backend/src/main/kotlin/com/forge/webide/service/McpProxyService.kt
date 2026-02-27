@@ -88,13 +88,20 @@ class McpProxyService(
     /**
      * Call an MCP tool by name with the given arguments, with workspace context.
      * Workspace tools (workspace_*) require a workspaceId to operate on.
+     * sessionId and onEvent are forwarded to WorkspaceToolHandler for git confirmation flow.
      */
-    fun callTool(toolName: String, arguments: Map<String, Any?>, workspaceId: String?): McpToolCallResponse {
+    fun callTool(
+        toolName: String,
+        arguments: Map<String, Any?>,
+        workspaceId: String?,
+        sessionId: String = "",
+        onEvent: ((Map<String, Any?>) -> Unit)? = null
+    ): McpToolCallResponse {
         val resolvedWsId = workspaceId ?: arguments["workspaceId"] as? String
 
         // Route workspace tools
         if (toolName.startsWith("workspace_") && resolvedWsId != null) {
-            return workspaceToolHandler.handle(toolName, arguments, resolvedWsId)
+            return workspaceToolHandler.handle(toolName, arguments, resolvedWsId, sessionId, onEvent)
         }
 
         // Route memory tools that have workspace context

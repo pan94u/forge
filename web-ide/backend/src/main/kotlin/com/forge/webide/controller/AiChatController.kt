@@ -132,6 +132,7 @@ class AiChatController(
             message = request.content,
             contexts = request.contexts ?: emptyList(),
             workspaceId = session.workspaceId,
+            modelId = request.modelId,
             onEvent = { event ->
                 try {
                     emitter.send(

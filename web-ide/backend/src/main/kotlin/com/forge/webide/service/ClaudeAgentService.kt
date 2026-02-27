@@ -319,6 +319,7 @@ class ClaudeAgentService(
                         tools = tools,
                         onEvent = onEvent,
                         workspaceId = workspaceId,
+                        sessionId = sessionId,
                         adapter = adapter
                     )
                 }

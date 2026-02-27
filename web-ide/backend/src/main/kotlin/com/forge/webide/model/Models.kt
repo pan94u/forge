@@ -32,7 +32,8 @@ data class CreateWorkspaceRequest(
     val description: String? = null,
     val repository: String? = null,
     val branch: String? = null,
-    val template: String? = null
+    val template: String? = null,
+    val accessToken: String? = null
 )
 
 data class FileNode(
@@ -109,7 +110,8 @@ data class ToolCallRecord(
 data class ChatStreamMessage(
     val type: String,
     val content: String,
-    val contexts: List<ContextReference>? = null
+    val contexts: List<ContextReference>? = null,
+    val modelId: String? = null
 )
 
 // --- Knowledge Models ---

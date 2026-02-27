@@ -23,7 +23,8 @@ export interface StreamEvent {
     | "hitl_checkpoint"
     | "context_usage"
     | "intent_confirmation"
-    | "skills_activated";
+    | "skills_activated"
+    | "git_confirm";
   content?: string;
   skills?: string[];
   toolCallId?: string;
@@ -63,6 +64,9 @@ export interface StreamEvent {
   currentProfile?: string;
   reason?: string;
   options?: IntentOption[];
+  // git_confirm fields
+  gitConfirmTool?: string;
+  gitConfirmPreview?: string;
 }
 
 export type HitlAction = "approve" | "reject" | "modify";
@@ -79,6 +83,21 @@ class ClaudeClient {
 
   constructor(baseUrl: string = "") {
     this.baseUrl = baseUrl;
+  }
+
+  /**
+   * Send a git operation confirmation response via the active WebSocket.
+   * Called when user clicks approve/cancel on the git confirmation card.
+   */
+  sendGitConfirmResponse(approved: boolean): void {
+    if (!this.activeWs || this.activeWs.readyState !== WebSocket.OPEN) {
+      console.error("Cannot send git confirm response: WebSocket not connected");
+      return;
+    }
+    this.activeWs.send(JSON.stringify({
+      type: "git_confirm_response",
+      approved,
+    }));
   }
 
   /**
@@ -124,8 +143,11 @@ class ClaudeClient {
     workspaceId?: string,
     modelId?: string
   ): Promise<void> {
+    // In local dev, Next.js rewrites cannot upgrade ws:// protocol.
+    // Connect directly to the backend WS port to avoid the proxy gap.
+    const isDev = process.env.NODE_ENV === "development";
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const host = this.baseUrl || window.location.host;
+    const host = isDev ? "localhost:8080" : (this.baseUrl || window.location.host);
     const wsUrl = `${protocol}//${host}/ws/chat/${sessionId}`;
 
     return new Promise<void>((resolve, reject) => {
@@ -135,6 +157,8 @@ class ClaudeClient {
       }
 
       let ws: WebSocket;
+      // Flag to prevent onclose from resolving after HTTP fallback takes over
+      let httpFallbackStarted = false;
 
       try {
         ws = new WebSocket(wsUrl);
@@ -200,6 +224,7 @@ class ClaudeClient {
 
       ws.onerror = () => {
         // Try HTTP fallback on WebSocket error
+        httpFallbackStarted = true;
         cleanup();
         this.streamMessageHttp(sessionId, message, contexts, onEvent, signal)
           .then(resolve)
@@ -208,6 +233,8 @@ class ClaudeClient {
 
       ws.onclose = (event) => {
         this.activeWs = null;
+        // Don't resolve if HTTP fallback has taken over — it owns resolve/reject
+        if (httpFallbackStarted) return;
         if (!event.wasClean) {
           // Connection closed unexpectedly
           onEvent({ type: "done" });

@@ -33,6 +33,7 @@ export interface CreateWorkspaceRequest {
   repository?: string;
   branch?: string;
   template?: string;
+  accessToken?: string;
 }
 
 function getAuthHeader(): Record<string, string> {

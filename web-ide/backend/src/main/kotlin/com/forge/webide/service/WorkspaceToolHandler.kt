@@ -17,12 +17,19 @@ import org.springframework.stereotype.Service
 class WorkspaceToolHandler(
     private val workspaceService: WorkspaceService,
     private val runtimeService: WorkspaceRuntimeService,
-    private val gitService: GitService
+    private val gitService: GitService,
+    private val gitConfirmService: GitConfirmService
 ) {
 
     private val logger = LoggerFactory.getLogger(WorkspaceToolHandler::class.java)
 
-    fun handle(toolName: String, args: Map<String, Any?>, workspaceId: String?): McpToolCallResponse {
+    fun handle(
+        toolName: String,
+        args: Map<String, Any?>,
+        workspaceId: String?,
+        sessionId: String = "",
+        onEvent: ((Map<String, Any?>) -> Unit)? = null
+    ): McpToolCallResponse {
         if (workspaceId.isNullOrBlank()) {
             return McpProxyService.errorResponse("Workspace tool '$toolName' requires a workspaceId")
         }
@@ -90,9 +97,27 @@ class WorkspaceToolHandler(
                 "workspace_git_status" -> handleGitStatus(workspaceId)
                 "workspace_git_diff" -> handleGitDiff(workspaceId)
                 "workspace_git_add" -> handleGitAdd(workspaceId, args)
-                "workspace_git_commit" -> handleGitCommit(workspaceId, args)
-                "workspace_git_push" -> handleGitPush(workspaceId, args)
-                "workspace_git_pull" -> handleGitPull(workspaceId, args)
+                "workspace_git_commit" -> {
+                    val preview = buildCommitPreview(workspaceId, args)
+                    if (!confirmGitOp(sessionId, "workspace_git_commit", preview, onEvent)) {
+                        return McpProxyService.errorResponse("用户已取消 workspace_git_commit 操作")
+                    }
+                    handleGitCommit(workspaceId, args)
+                }
+                "workspace_git_push" -> {
+                    val preview = buildPushPreview(workspaceId, args)
+                    if (!confirmGitOp(sessionId, "workspace_git_push", preview, onEvent)) {
+                        return McpProxyService.errorResponse("用户已取消 workspace_git_push 操作")
+                    }
+                    handleGitPush(workspaceId, args)
+                }
+                "workspace_git_pull" -> {
+                    val preview = buildPullPreview(workspaceId, args)
+                    if (!confirmGitOp(sessionId, "workspace_git_pull", preview, onEvent)) {
+                        return McpProxyService.errorResponse("用户已取消 workspace_git_pull 操作")
+                    }
+                    handleGitPull(workspaceId, args)
+                }
                 "workspace_git_branch" -> handleGitBranch(workspaceId, args)
                 else -> McpProxyService.errorResponse("Unknown workspace tool: $toolName")
             }
@@ -394,6 +419,55 @@ class WorkspaceToolHandler(
         return pattern.findAll(content).count()
     }
 
+    // ---- Git confirmation helpers ----
+
+    /**
+     * Request user confirmation before executing a git write operation.
+     * Non-blocking passthrough if sessionId is blank or onEvent is null (non-WebSocket calls).
+     */
+    private fun confirmGitOp(
+        sessionId: String,
+        tool: String,
+        preview: String,
+        onEvent: ((Map<String, Any?>) -> Unit)?
+    ): Boolean {
+        if (sessionId.isBlank() || onEvent == null) return true
+        return gitConfirmService.requestConfirmation(sessionId, tool, preview, onEvent)
+    }
+
+    private fun buildCommitPreview(workspaceId: String, args: Map<String, Any?>): String {
+        val message = args["message"] as? String ?: "(no message)"
+        return buildString {
+            appendLine("git commit -m \"$message\"")
+            try {
+                val workspaceDir = workspaceService.getWorkspaceDir(workspaceId)
+                val status = gitService.status(workspaceDir)
+                appendLine()
+                appendLine("Branch: ${status.branch}")
+                if (status.modifiedFiles.isNotEmpty()) {
+                    appendLine("Changes to commit:")
+                    status.modifiedFiles.take(10).forEach { appendLine("  $it") }
+                    if (status.modifiedFiles.size > 10) appendLine("  ... and ${status.modifiedFiles.size - 10} more")
+                }
+            } catch (_: Exception) { /* ignore if status fails */ }
+        }.trim()
+    }
+
+    private fun buildPushPreview(workspaceId: String, args: Map<String, Any?>): String {
+        val remote = args["remote"] as? String ?: "origin"
+        val branch = args["branch"] as? String
+        val currentBranch = branch ?: try {
+            gitService.status(workspaceService.getWorkspaceDir(workspaceId)).branch
+        } catch (_: Exception) { "current-branch" }
+        return "git push $remote $currentBranch"
+    }
+
+    private fun buildPullPreview(workspaceId: String, args: Map<String, Any?>): String {
+        val remote = args["remote"] as? String ?: "origin"
+        val rebase = args["rebase"] as? Boolean ?: true
+        return "git pull $remote${if (rebase) " (--rebase)" else ""}"
+    }
+
     // ---- Git tool implementations ----
 
     private fun handleGitStatus(workspaceId: String): McpToolCallResponse {
@@ -459,7 +533,9 @@ class WorkspaceToolHandler(
             val workspaceDir = workspaceService.getWorkspaceDir(workspaceId)
             val remote = args["remote"] as? String ?: "origin"
             val branch = args["branch"] as? String
-            val result = gitService.push(workspaceDir, remote, branch)
+            // Use authenticated URL if workspace has an access token (private repos)
+            val authUrl = workspaceService.getWorkspaceAuthUrl(workspaceId)
+            val result = gitService.push(workspaceDir, remote, branch, remoteUrl = authUrl)
             McpToolCallResponse(content = listOf(McpContent(type = "text", text = result)), isError = false)
         } catch (e: Exception) {
             McpProxyService.errorResponse("git push failed: ${e.message}")
@@ -471,7 +547,9 @@ class WorkspaceToolHandler(
             val workspaceDir = workspaceService.getWorkspaceDir(workspaceId)
             val remote = args["remote"] as? String ?: "origin"
             val rebase = args["rebase"] as? Boolean ?: true
-            val result = gitService.pull(workspaceDir, remote, rebase)
+            // Use authenticated URL if workspace has an access token (private repos)
+            val authUrl = workspaceService.getWorkspaceAuthUrl(workspaceId)
+            val result = gitService.pull(workspaceDir, remote, rebase, remoteUrl = authUrl)
             McpToolCallResponse(content = listOf(McpContent(type = "text", text = result)), isError = false)
         } catch (e: Exception) {
             McpProxyService.errorResponse("git pull failed: ${e.message}")

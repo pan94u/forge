@@ -50,6 +50,7 @@ class AgenticLoopOrchestrator(
         tools: List<ToolDefinition>,
         onEvent: (Map<String, Any?>) -> Unit,
         workspaceId: String = "",
+        sessionId: String = "",
         adapter: ModelAdapter? = null
     ): AgenticResult {
         val activeAdapter = adapter ?: claudeAdapter
@@ -180,7 +181,7 @@ class AgenticLoopOrchestrator(
                     emitSubStep(onEvent, "Turn $turn — 调用 ${toolUse.name} (${toolIdx + 1}/${currentToolUses.size})")
                     val startMs = System.currentTimeMillis()
                     val result = try {
-                        val mcpResult = mcpProxyService.callTool(toolUse.name, toolUse.input, workspaceId.ifBlank { null })
+                        val mcpResult = mcpProxyService.callTool(toolUse.name, toolUse.input, workspaceId.ifBlank { null }, sessionId, onEvent)
                         val output = McpProxyService.formatResult(mcpResult)
                         val status = if (mcpResult.isError) "error" else "complete"
                         val durationMs = System.currentTimeMillis() - startMs

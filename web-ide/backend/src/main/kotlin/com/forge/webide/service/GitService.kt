@@ -81,7 +81,7 @@ class GitService {
         return result.stdout.trim()
     }
 
-    fun push(workspaceDir: Path, remote: String = "origin", branch: String? = null): String {
+    fun push(workspaceDir: Path, remote: String = "origin", branch: String? = null, remoteUrl: String? = null): String {
         val currentBranch = branch ?: runGitCommand(
             listOf("git", "rev-parse", "--abbrev-ref", "HEAD"), workspaceDir
         ).stdout.trim()
@@ -93,7 +93,9 @@ class GitService {
                 "如确需推送，请手动执行 git push $remote $currentBranch。"
         }
 
-        val cmd = listOf("git", "push", remote, currentBranch)
+        // Use authenticated remoteUrl if provided (for private repos), otherwise use remote alias
+        val remoteSrc = remoteUrl ?: remote
+        val cmd = listOf("git", "push", remoteSrc, currentBranch)
         val result = runGitCommand(cmd, workspaceDir)
         if (result.exitCode != 0) {
             throw GitOperationException("git push failed: ${result.stderr}")
@@ -101,11 +103,13 @@ class GitService {
         return result.stdout.ifBlank { "Pushed $currentBranch to $remote" }
     }
 
-    fun pull(workspaceDir: Path, remote: String = "origin", rebase: Boolean = true): String {
+    fun pull(workspaceDir: Path, remote: String = "origin", rebase: Boolean = true, remoteUrl: String? = null): String {
+        // Use authenticated remoteUrl if provided (for private repos), otherwise use remote alias
+        val remoteSrc = remoteUrl ?: remote
         val cmd = if (rebase) {
-            listOf("git", "pull", "--rebase", remote)
+            listOf("git", "pull", "--rebase", remoteSrc)
         } else {
-            listOf("git", "pull", remote)
+            listOf("git", "pull", remoteSrc)
         }
         val result = runGitCommand(cmd, workspaceDir)
         if (result.exitCode != 0) {

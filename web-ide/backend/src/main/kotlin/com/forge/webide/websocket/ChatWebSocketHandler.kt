@@ -5,6 +5,7 @@ import com.forge.webide.entity.ChatSessionEntity
 import com.forge.webide.model.*
 import com.forge.webide.repository.ChatSessionRepository
 import com.forge.webide.service.ClaudeAgentService
+import com.forge.webide.service.GitConfirmService
 import com.forge.webide.service.skill.HitlAction
 import com.forge.webide.service.skill.HitlDecision
 import org.slf4j.LoggerFactory
@@ -28,7 +29,8 @@ import java.util.concurrent.ConcurrentHashMap
 class ChatWebSocketHandler(
     private val claudeAgentService: ClaudeAgentService,
     private val objectMapper: ObjectMapper,
-    private val chatSessionRepository: ChatSessionRepository
+    private val chatSessionRepository: ChatSessionRepository,
+    private val gitConfirmService: GitConfirmService
 ) : TextWebSocketHandler() {
 
     private val logger = LoggerFactory.getLogger(ChatWebSocketHandler::class.java)
@@ -78,6 +80,10 @@ class ChatWebSocketHandler(
                 "message" -> handleChatMessage(session, chatSessionId, payload)
                 "hitl_response" -> handleHitlResponse(chatSessionId, payload)
                 "intent_response" -> handleIntentResponse(chatSessionId, payload)
+                "git_confirm_response" -> {
+                    val approved = payload["approved"] as? Boolean ?: false
+                    gitConfirmService.respond(chatSessionId, approved)
+                }
                 "ping" -> sendMessage(session, mapOf("type" to "pong"))
                 else -> {
                     logger.warn("Unknown message type: $type")

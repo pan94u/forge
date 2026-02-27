@@ -27,8 +27,10 @@ class WorkspaceGitToolsTest {
         gitService = mockk(relaxed = true)
 
         every { workspaceService.getWorkspaceDir(workspaceId) } returns workspaceDir
+        every { workspaceService.getWorkspaceAuthUrl(any()) } returns null
 
-        handler = WorkspaceToolHandler(workspaceService, runtimeService, gitService)
+        val gitConfirmService = mockk<GitConfirmService>(relaxed = true)
+        handler = WorkspaceToolHandler(workspaceService, runtimeService, gitService, gitConfirmService)
     }
 
     @Nested
@@ -168,7 +170,7 @@ class WorkspaceGitToolsTest {
 
         @Test
         fun `returns warning instead of pushing to main`() {
-            every { gitService.push(workspaceDir, "origin", null) } returns
+            every { gitService.push(workspaceDir, "origin", null, null) } returns
                 "⚠️ 安全警告：当前在 main 分支上。直接推送到 main 存在风险。"
 
             val result = handler.handle(
@@ -183,7 +185,7 @@ class WorkspaceGitToolsTest {
 
         @Test
         fun `pushes feature branch successfully`() {
-            every { gitService.push(workspaceDir, "origin", null) } returns "Pushed feature/login to origin"
+            every { gitService.push(workspaceDir, "origin", null, null) } returns "Pushed feature/login to origin"
 
             val result = handler.handle(
                 "workspace_git_push",
@@ -200,7 +202,7 @@ class WorkspaceGitToolsTest {
 
         @Test
         fun `pulls with rebase by default`() {
-            every { gitService.pull(workspaceDir, "origin", true) } returns "Already up to date."
+            every { gitService.pull(workspaceDir, "origin", true, null) } returns "Already up to date."
 
             val result = handler.handle(
                 "workspace_git_pull",
@@ -209,12 +211,12 @@ class WorkspaceGitToolsTest {
             )
 
             assertThat(result.isError).isFalse()
-            verify { gitService.pull(workspaceDir, "origin", true) }
+            verify { gitService.pull(workspaceDir, "origin", true, null) }
         }
 
         @Test
         fun `pulls with merge when rebase=false`() {
-            every { gitService.pull(workspaceDir, "origin", false) } returns "1 file changed"
+            every { gitService.pull(workspaceDir, "origin", false, null) } returns "1 file changed"
 
             val result = handler.handle(
                 "workspace_git_pull",
@@ -223,7 +225,7 @@ class WorkspaceGitToolsTest {
             )
 
             assertThat(result.isError).isFalse()
-            verify { gitService.pull(workspaceDir, "origin", false) }
+            verify { gitService.pull(workspaceDir, "origin", false, null) }
         }
     }
 

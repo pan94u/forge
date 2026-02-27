@@ -41,5 +41,8 @@ class WorkspaceEntity(
     var updatedAt: Instant = Instant.now(),
 
     @Column(name = "org_id", length = 36)
-    var orgId: String? = null
+    var orgId: String? = null,
+
+    @Column(name = "access_token", length = 500)
+    var accessToken: String? = null
 )
