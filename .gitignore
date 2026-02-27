@@ -35,6 +35,9 @@ web-ide/frontend/out/
 # Docker
 docker-compose.override.yml
 
+# PostgreSQL data (local development)
+infrastructure/docker/pgdata/
+
 # Logs
 **/logs/
 
