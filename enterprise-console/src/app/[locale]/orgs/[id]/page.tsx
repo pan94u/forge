@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useTranslations } from "next-intl";
 import {
   ArrowLeft,
   Users,
@@ -15,7 +16,7 @@ import {
   X,
   Link as LinkIcon,
 } from "lucide-react";
-import Link from "next/link";
+import { Link, useRouter } from "@/navigation";
 import { api } from "@/lib/api";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -27,6 +28,7 @@ type Tab = "overview" | "members" | "workspaces";
 export default function OrgDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
+  const t = useTranslations("orgDetail");
   const qc = useQueryClient();
   const [tab, setTab] = useState<Tab>("overview");
 
@@ -115,9 +117,9 @@ export default function OrgDetailPage() {
   if (!org) {
     return (
       <div className="text-center py-20">
-        <p className="text-muted-foreground">Organization not found</p>
+        <p className="text-muted-foreground">{t("notFound")}</p>
         <Link href="/orgs" className="mt-4 inline-block">
-          <Button variant="secondary">Back to Organizations</Button>
+          <Button variant="secondary">{t("backToOrgs")}</Button>
         </Link>
       </div>
     );
@@ -128,9 +130,9 @@ export default function OrgDetailPage() {
   );
 
   const tabs = [
-    { key: "overview" as Tab, label: "Overview", icon: Settings },
-    { key: "members" as Tab, label: "Members", icon: Users },
-    { key: "workspaces" as Tab, label: "Workspaces", icon: HardDrive },
+    { key: "overview" as Tab, label: t("tabOverview"), icon: Settings },
+    { key: "members" as Tab, label: t("tabMembers"), icon: Users },
+    { key: "workspaces" as Tab, label: t("tabWorkspaces"), icon: HardDrive },
   ];
 
   return (
@@ -159,21 +161,21 @@ export default function OrgDetailPage() {
             className="flex items-center gap-1.5 hover:text-primary transition-colors"
           >
             <Key size={14} />
-            Model Config
+            {t("navModelConfig")}
           </Link>
           <Link
             href={`/orgs/${id}/db-connections`}
             className="flex items-center gap-1.5 hover:text-primary transition-colors"
           >
             <Database size={14} />
-            DB Connections
+            {t("navDbConnections")}
           </Link>
           <Link
             href={`/orgs/${id}/build-env`}
             className="flex items-center gap-1.5 hover:text-primary transition-colors"
           >
             <Settings size={14} />
-            Build Env
+            {t("navBuildEnv")}
           </Link>
         </div>
 
@@ -200,16 +202,16 @@ export default function OrgDetailPage() {
       {tab === "overview" && (
         <div className="space-y-4 max-w-lg">
           {editing ? (
-            <Card title="Edit Organization">
+            <Card title={t("editTitle")}>
               <div className="space-y-3">
                 <Input
-                  label="Name"
+                  label={t("fieldName")}
                   value={editName}
                   onChange={(e) => setEditName(e.target.value)}
                 />
                 <div className="flex flex-col gap-1">
                   <label className="text-xs font-medium text-muted-foreground">
-                    Description
+                    {t("fieldDesc")}
                   </label>
                   <textarea
                     className="rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-ring focus:outline-none focus:ring-1 focus:ring-ring resize-none"
@@ -228,37 +230,37 @@ export default function OrgDetailPage() {
                       })
                     }
                   >
-                    Save Changes
+                    {t("saveBtn")}
                   </Button>
                   <Button variant="secondary" onClick={() => setEditing(false)}>
-                    Cancel
+                    {t("cancel")}
                   </Button>
                 </div>
               </div>
             </Card>
           ) : (
-            <Card title="Organization Details">
+            <Card title={t("detailsTitle")}>
               <dl className="space-y-3">
                 <div>
-                  <dt className="text-xs text-muted-foreground">Name</dt>
+                  <dt className="text-xs text-muted-foreground">{t("fieldName")}</dt>
                   <dd className="mt-0.5 text-sm text-foreground">{org.name}</dd>
                 </div>
                 <div>
-                  <dt className="text-xs text-muted-foreground">Slug</dt>
+                  <dt className="text-xs text-muted-foreground">{t("fieldSlug")}</dt>
                   <dd className="mt-0.5 text-sm font-mono text-foreground">
                     {org.slug}
                   </dd>
                 </div>
                 <div>
-                  <dt className="text-xs text-muted-foreground">Description</dt>
+                  <dt className="text-xs text-muted-foreground">{t("fieldDesc")}</dt>
                   <dd className="mt-0.5 text-sm text-foreground">
                     {org.description || (
-                      <span className="text-muted-foreground">—</span>
+                      <span className="text-muted-foreground">{t("noDesc")}</span>
                     )}
                   </dd>
                 </div>
                 <div>
-                  <dt className="text-xs text-muted-foreground">Status</dt>
+                  <dt className="text-xs text-muted-foreground">{t("fieldStatus")}</dt>
                   <dd className="mt-0.5">
                     <Badge color={org.status === "ACTIVE" ? "green" : "gray"}>
                       {org.status.toLowerCase()}
@@ -266,7 +268,7 @@ export default function OrgDetailPage() {
                   </dd>
                 </div>
                 <div>
-                  <dt className="text-xs text-muted-foreground">Created</dt>
+                  <dt className="text-xs text-muted-foreground">{t("fieldCreated")}</dt>
                   <dd className="mt-0.5 text-sm text-foreground">
                     {new Date(org.createdAt).toLocaleString()}
                   </dd>
@@ -282,24 +284,20 @@ export default function OrgDetailPage() {
                     setEditing(true);
                   }}
                 >
-                  Edit
+                  {t("editBtn")}
                 </Button>
                 <Button
                   variant="danger"
                   size="sm"
                   onClick={() => {
-                    if (
-                      confirm(
-                        `Delete "${org.name}"? This will delete all associated data.`
-                      )
-                    ) {
+                    if (confirm(t("deleteConfirm", { name: org.name }))) {
                       deleteMutation.mutate();
                     }
                   }}
                   loading={deleteMutation.isPending}
                 >
                   <Trash2 size={13} />
-                  Delete Org
+                  {t("deleteBtn")}
                 </Button>
               </div>
             </Card>
@@ -310,7 +308,7 @@ export default function OrgDetailPage() {
       {/* Members tab */}
       {tab === "members" && (
         <div className="space-y-4">
-          <Card title="Add Member">
+          <Card title={t("addMemberTitle")}>
             {mutationError && (
               <div className="mb-3 rounded-md border border-destructive/40 bg-destructive/20 px-3 py-2 text-sm text-destructive-foreground">
                 {mutationError}
@@ -318,7 +316,7 @@ export default function OrgDetailPage() {
             )}
             <div className="flex gap-2">
               <Input
-                placeholder="User ID"
+                placeholder={t("userIdPlaceholder")}
                 value={newUserId}
                 onChange={(e) => setNewUserId(e.target.value)}
                 className="flex-1"
@@ -328,9 +326,9 @@ export default function OrgDetailPage() {
                 value={newRole}
                 onChange={(e) => setNewRole(e.target.value)}
               >
-                <option value="MEMBER">Member</option>
-                <option value="ADMIN">Admin</option>
-                <option value="OWNER">Owner</option>
+                <option value="MEMBER">{t("roleMember")}</option>
+                <option value="ADMIN">{t("roleAdmin")}</option>
+                <option value="OWNER">{t("roleOwner")}</option>
               </select>
               <Button
                 onClick={() => addMemberMutation.mutate()}
@@ -338,7 +336,7 @@ export default function OrgDetailPage() {
                 loading={addMemberMutation.isPending}
               >
                 <Plus size={14} />
-                Add
+                {t("addBtn")}
               </Button>
             </div>
           </Card>
@@ -347,17 +345,17 @@ export default function OrgDetailPage() {
             <table className="w-full text-sm">
               <thead className="border-b border-border bg-muted/50">
                 <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium uppercase text-muted-foreground">User ID</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium uppercase text-muted-foreground">Role</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium uppercase text-muted-foreground">Joined</th>
-                  <th className="px-4 py-3 text-right text-xs font-medium uppercase text-muted-foreground">Actions</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium uppercase text-muted-foreground">{t("colUserId")}</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium uppercase text-muted-foreground">{t("colRole")}</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium uppercase text-muted-foreground">{t("colJoined")}</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium uppercase text-muted-foreground">{t("colActions")}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/50">
                 {members.length === 0 ? (
                   <tr>
                     <td colSpan={4} className="px-4 py-8 text-center text-muted-foreground">
-                      No members yet
+                      {t("noMembers")}
                     </td>
                   </tr>
                 ) : (
@@ -394,14 +392,14 @@ export default function OrgDetailPage() {
       {/* Workspaces tab */}
       {tab === "workspaces" && (
         <div className="space-y-4">
-          <Card title="Bind Workspace">
+          <Card title={t("bindTitle")}>
             <div className="flex gap-2">
               <select
                 className="flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground"
                 value={selectedWsId}
                 onChange={(e) => setSelectedWsId(e.target.value)}
               >
-                <option value="">Select workspace to bind...</option>
+                <option value="">{t("selectWs")}</option>
                 {unboundWorkspaces.map((ws) => (
                   <option key={ws.id} value={ws.id}>
                     {ws.name}
@@ -414,7 +412,7 @@ export default function OrgDetailPage() {
                 onClick={() => selectedWsId && bindMutation.mutate(selectedWsId)}
               >
                 <LinkIcon size={14} />
-                Bind
+                {t("bindBtn")}
               </Button>
             </div>
           </Card>
@@ -423,17 +421,17 @@ export default function OrgDetailPage() {
             <table className="w-full text-sm">
               <thead className="border-b border-border bg-muted/50">
                 <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium uppercase text-muted-foreground">Workspace</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium uppercase text-muted-foreground">Owner</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium uppercase text-muted-foreground">Status</th>
-                  <th className="px-4 py-3 text-right text-xs font-medium uppercase text-muted-foreground">Actions</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium uppercase text-muted-foreground">{t("colWorkspace")}</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium uppercase text-muted-foreground">{t("colOwner")}</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium uppercase text-muted-foreground">{t("colStatus")}</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium uppercase text-muted-foreground">{t("colActions")}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/50">
                 {boundWorkspaces.length === 0 ? (
                   <tr>
                     <td colSpan={4} className="px-4 py-8 text-center text-muted-foreground">
-                      No workspaces bound to this organization
+                      {t("noWorkspaces")}
                     </td>
                   </tr>
                 ) : (
@@ -454,7 +452,7 @@ export default function OrgDetailPage() {
                           onClick={() => unbindMutation.mutate(ws.id)}
                         >
                           <X size={13} />
-                          Unbind
+                          {t("unbindBtn")}
                         </Button>
                       </td>
                     </tr>

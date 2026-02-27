@@ -4,7 +4,8 @@ import { useState } from "react";
 import { useParams } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Key, Save, Eye, EyeOff } from "lucide-react";
-import Link from "next/link";
+import { useTranslations } from "next-intl";
+import { Link } from "@/navigation";
 import { api } from "@/lib/api";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -27,6 +28,7 @@ interface ProviderCardProps {
 }
 
 function ProviderCard({ orgId, provider, existing }: ProviderCardProps) {
+  const t = useTranslations("modelConfig");
   const qc = useQueryClient();
   const [enabled, setEnabled] = useState(existing?.enabled ?? true);
   const [apiKey, setApiKey] = useState("");
@@ -57,7 +59,7 @@ function ProviderCard({ orgId, provider, existing }: ProviderCardProps) {
           <h3 className="text-sm font-semibold text-foreground">{provider.label}</h3>
         </div>
         <label className="flex cursor-pointer items-center gap-2">
-          <span className="text-xs text-muted-foreground">Enabled</span>
+          <span className="text-xs text-muted-foreground">{t("enabledLabel")}</span>
           <div
             onClick={() => setEnabled(!enabled)}
             className={`relative h-5 w-9 rounded-full transition-colors cursor-pointer ${
@@ -76,7 +78,7 @@ function ProviderCard({ orgId, provider, existing }: ProviderCardProps) {
       <div className="space-y-3">
         {existing?.apiKeyMasked && (
           <p className="text-xs text-muted-foreground">
-            Current key:{" "}
+            {t("currentKey")}
             <span className="font-mono text-foreground">
               {existing.apiKeyMasked}
             </span>
@@ -85,9 +87,9 @@ function ProviderCard({ orgId, provider, existing }: ProviderCardProps) {
 
         <div className="relative">
           <Input
-            label="API Key"
+            label={t("apiKeyLabel")}
             type={showKey ? "text" : "password"}
-            placeholder={existing?.apiKeyMasked ? "Update key (leave blank to keep)" : "Enter API key"}
+            placeholder={existing?.apiKeyMasked ? t("apiKeyPlaceholderUpdate") : t("apiKeyPlaceholder")}
             value={apiKey}
             onChange={(e) => setApiKey(e.target.value)}
           />
@@ -101,8 +103,8 @@ function ProviderCard({ orgId, provider, existing }: ProviderCardProps) {
         </div>
 
         <Input
-          label="Base URL (optional)"
-          placeholder="https://api.provider.com/v1"
+          label={t("baseUrlLabel")}
+          placeholder={t("baseUrlPlaceholder")}
           value={baseUrl}
           onChange={(e) => setBaseUrl(e.target.value)}
         />
@@ -114,11 +116,11 @@ function ProviderCard({ orgId, provider, existing }: ProviderCardProps) {
           className="w-full"
         >
           {saved ? (
-            "Saved!"
+            t("saved")
           ) : (
             <>
               <Save size={13} />
-              Save Config
+              {t("saveBtn")}
             </>
           )}
         </Button>
@@ -129,6 +131,7 @@ function ProviderCard({ orgId, provider, existing }: ProviderCardProps) {
 
 export default function ModelConfigPage() {
   const { id } = useParams<{ id: string }>();
+  const t = useTranslations("modelConfig");
   const { data: configs = [], isLoading } = useQuery({
     queryKey: ["orgs", id, "model-configs"],
     queryFn: () => api.modelConfigs.list(id),
@@ -143,10 +146,8 @@ export default function ModelConfigPage() {
           </Button>
         </Link>
         <div>
-          <h1 className="text-xl font-bold text-foreground">Model Configuration</h1>
-          <p className="text-sm text-muted-foreground">
-            Configure AI provider API keys for this organization
-          </p>
+          <h1 className="text-xl font-bold text-foreground">{t("title")}</h1>
+          <p className="text-sm text-muted-foreground">{t("subtitle")}</p>
         </div>
       </div>
 

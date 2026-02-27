@@ -1,16 +1,17 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft } from "lucide-react";
-import Link from "next/link";
+import { useTranslations } from "next-intl";
+import { Link, useRouter } from "@/navigation";
 import { api } from "@/lib/api";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Card } from "@/components/ui/Card";
 
 export default function NewOrgPage() {
+  const t = useTranslations("newOrg");
   const router = useRouter();
   const qc = useQueryClient();
   const [name, setName] = useState("");
@@ -64,40 +65,38 @@ export default function NewOrgPage() {
           </Button>
         </Link>
         <div>
-          <h1 className="text-2xl font-bold text-foreground">New Organization</h1>
-          <p className="text-sm text-muted-foreground">
-            Create a new enterprise organization
-          </p>
+          <h1 className="text-2xl font-bold text-foreground">{t("title")}</h1>
+          <p className="text-sm text-muted-foreground">{t("subtitle")}</p>
         </div>
       </div>
 
       <Card>
         <form onSubmit={handleSubmit} className="space-y-4">
           <Input
-            label="Organization Name"
-            placeholder="Acme Corp"
+            label={t("nameLabel")}
+            placeholder={t("namePlaceholder")}
             value={name}
             onChange={(e) => handleNameChange(e.target.value)}
             required
             autoFocus
           />
           <Input
-            label="Slug"
-            placeholder="acme-corp"
+            label={t("slugLabel")}
+            placeholder={t("slugPlaceholder")}
             value={slug}
             onChange={(e) => setSlug(e.target.value)}
             required
             pattern="[a-z0-9\-]+"
-            title="Lowercase letters, numbers and hyphens only"
+            title={t("slugTitle")}
           />
           <div className="flex flex-col gap-1">
             <label className="text-xs font-medium text-muted-foreground">
-              Description (optional)
+              {t("descLabel")}
             </label>
             <textarea
               className="rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-ring focus:outline-none focus:ring-1 focus:ring-ring resize-none"
               rows={3}
-              placeholder="Brief description of this organization..."
+              placeholder={t("descPlaceholder")}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
             />
@@ -115,11 +114,11 @@ export default function NewOrgPage() {
               loading={createMutation.isPending}
               disabled={!name.trim()}
             >
-              Create Organization
+              {t("createBtn")}
             </Button>
             <Link href="/orgs">
               <Button variant="secondary" type="button">
-                Cancel
+                {t("cancel")}
               </Button>
             </Link>
           </div>

@@ -2,12 +2,14 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Plus, Building2, Trash2, Edit } from "lucide-react";
-import Link from "next/link";
+import { useTranslations } from "next-intl";
+import { Link } from "@/navigation";
 import { api } from "@/lib/api";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 
 export default function OrgsPage() {
+  const t = useTranslations("orgs");
   const qc = useQueryClient();
   const { data: orgs = [], isLoading } = useQuery({
     queryKey: ["orgs"],
@@ -29,15 +31,13 @@ export default function OrgsPage() {
     <div>
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Organizations</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Manage enterprise organizations and their configurations
-          </p>
+          <h1 className="text-2xl font-bold text-foreground">{t("title")}</h1>
+          <p className="mt-1 text-sm text-muted-foreground">{t("subtitle")}</p>
         </div>
         <Link href="/orgs/new">
           <Button>
             <Plus size={14} />
-            New Organization
+            {t("newOrg")}
           </Button>
         </Link>
       </div>
@@ -49,14 +49,12 @@ export default function OrgsPage() {
       ) : orgs.length === 0 ? (
         <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-border py-20 text-center">
           <Building2 size={40} className="mb-3 text-muted-foreground" />
-          <p className="text-muted-foreground">No organizations yet</p>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Create your first organization to get started
-          </p>
+          <p className="text-muted-foreground">{t("noOrgs")}</p>
+          <p className="mt-1 text-sm text-muted-foreground">{t("noOrgsDesc")}</p>
           <Link href="/orgs/new" className="mt-4">
             <Button size="sm">
               <Plus size={13} />
-              New Organization
+              {t("newOrg")}
             </Button>
           </Link>
         </div>
@@ -66,19 +64,19 @@ export default function OrgsPage() {
             <thead className="border-b border-border bg-muted/50">
               <tr>
                 <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                  Name
+                  {t("colName")}
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                  Slug
+                  {t("colSlug")}
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                  Status
+                  {t("colStatus")}
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                  Created
+                  {t("colCreated")}
                 </th>
                 <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                  Actions
+                  {t("colActions")}
                 </th>
               </tr>
             </thead>
@@ -121,11 +119,7 @@ export default function OrgsPage() {
                         size="sm"
                         className="text-destructive hover:text-destructive hover:bg-destructive/10"
                         onClick={() => {
-                          if (
-                            confirm(
-                              `Delete organization "${org.name}"? This action cannot be undone.`
-                            )
-                          ) {
+                          if (confirm(t("deleteConfirm", { name: org.name }))) {
                             deleteMutation.mutate(org.id);
                           }
                         }}

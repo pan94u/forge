@@ -4,7 +4,8 @@ import { useState } from "react";
 import { useParams } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Plus, Trash2, TestTube } from "lucide-react";
-import Link from "next/link";
+import { useTranslations } from "next-intl";
+import { Link } from "@/navigation";
 import { api } from "@/lib/api";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -18,6 +19,7 @@ interface TestResult {
 
 export default function DbConnectionsPage() {
   const { id } = useParams<{ id: string }>();
+  const t = useTranslations("dbConnections");
   const qc = useQueryClient();
 
   const { data: connections = [], isLoading } = useQuery({
@@ -75,42 +77,40 @@ export default function DbConnectionsPage() {
             </Button>
           </Link>
           <div>
-            <h1 className="text-xl font-bold text-foreground">Database Connections</h1>
-            <p className="text-sm text-muted-foreground">
-              Manage database connections for this organization
-            </p>
+            <h1 className="text-xl font-bold text-foreground">{t("title")}</h1>
+            <p className="text-sm text-muted-foreground">{t("subtitle")}</p>
           </div>
         </div>
         <Button onClick={() => setShowForm(true)} size="sm">
           <Plus size={14} />
-          Add Connection
+          {t("addBtn")}
         </Button>
       </div>
 
       {showForm && (
-        <Card title="New Database Connection" className="mb-4 max-w-lg">
+        <Card title={t("newTitle")} className="mb-4 max-w-lg">
           <div className="space-y-3">
-            <Input label="Name" placeholder="Production PostgreSQL" value={name} onChange={(e) => setName(e.target.value)} required />
-            <Input label="JDBC URL" placeholder="jdbc:postgresql://host:5432/dbname" value={jdbcUrl} onChange={(e) => setJdbcUrl(e.target.value)} required />
-            <Input label="Username" placeholder="db_user" value={username} onChange={(e) => setUsername(e.target.value)} />
-            <Input label="Password" type="password" placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} />
+            <Input label={t("nameLabel")} placeholder={t("namePlaceholder")} value={name} onChange={(e) => setName(e.target.value)} required />
+            <Input label={t("jdbcUrlLabel")} placeholder={t("jdbcUrlPlaceholder")} value={jdbcUrl} onChange={(e) => setJdbcUrl(e.target.value)} required />
+            <Input label={t("usernameLabel")} placeholder={t("usernamePlaceholder")} value={username} onChange={(e) => setUsername(e.target.value)} />
+            <Input label={t("passwordLabel")} type="password" placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} />
             <div className="flex flex-col gap-1">
-              <label className="text-xs font-medium text-muted-foreground">Access Level</label>
+              <label className="text-xs font-medium text-muted-foreground">{t("accessLevelLabel")}</label>
               <select
                 className="rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground"
                 value={accessLevel}
                 onChange={(e) => setAccessLevel(e.target.value)}
               >
-                <option value="FULL_READ">Full Read</option>
-                <option value="READ_ONLY">Read Only</option>
-                <option value="SCHEMA_ONLY">Schema Only</option>
+                <option value="FULL_READ">{t("accessFull")}</option>
+                <option value="READ_ONLY">{t("accessRead")}</option>
+                <option value="SCHEMA_ONLY">{t("accessSchema")}</option>
               </select>
             </div>
             <div className="flex gap-2 pt-2">
               <Button loading={createMutation.isPending} disabled={!name || !jdbcUrl} onClick={() => createMutation.mutate()}>
-                Create Connection
+                {t("createBtn")}
               </Button>
-              <Button variant="secondary" onClick={() => setShowForm(false)}>Cancel</Button>
+              <Button variant="secondary" onClick={() => setShowForm(false)}>{t("cancel")}</Button>
             </div>
           </div>
         </Card>
@@ -122,10 +122,10 @@ export default function DbConnectionsPage() {
         </div>
       ) : connections.length === 0 ? (
         <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-border py-16 text-center">
-          <p className="text-muted-foreground">No database connections configured</p>
+          <p className="text-muted-foreground">{t("noConnections")}</p>
           <Button size="sm" className="mt-3" onClick={() => setShowForm(true)}>
             <Plus size={13} />
-            Add First Connection
+            {t("addFirst")}
           </Button>
         </div>
       ) : (
@@ -144,7 +144,7 @@ export default function DbConnectionsPage() {
                     </div>
                     <p className="mt-1 font-mono text-xs text-muted-foreground truncate">{conn.jdbcUrl}</p>
                     {conn.username && (
-                      <p className="mt-0.5 text-xs text-muted-foreground">User: {conn.username}</p>
+                      <p className="mt-0.5 text-xs text-muted-foreground">{t("userLabel")}{conn.username}</p>
                     )}
                     {testResult && (
                       <div className={`mt-2 flex items-center gap-1.5 rounded px-2 py-1 text-xs ${testResult.success ? "bg-green-900/30 text-green-300" : "bg-destructive/20 text-destructive-foreground"}`}>
@@ -155,12 +155,12 @@ export default function DbConnectionsPage() {
                   <div className="flex gap-2 shrink-0">
                     <Button variant="secondary" size="sm" loading={testing === conn.id} onClick={() => handleTest(conn.id)}>
                       <TestTube size={13} />
-                      Test
+                      {t("testBtn")}
                     </Button>
                     <Button
                       variant="ghost" size="sm"
                       className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                      onClick={() => { if (confirm(`Delete connection "${conn.name}"?`)) deleteMutation.mutate(conn.id); }}
+                      onClick={() => { if (confirm(t("deleteConfirm", { name: conn.name }))) deleteMutation.mutate(conn.id); }}
                     >
                       <Trash2 size={13} />
                     </Button>
