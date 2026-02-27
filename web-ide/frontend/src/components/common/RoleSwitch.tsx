@@ -2,6 +2,7 @@
 
 import React from "react";
 import { Code, Briefcase } from "lucide-react";
+import { useTranslations } from "next-intl";
 
 interface RoleSwitchProps {
   role: "developer" | "product";
@@ -9,6 +10,7 @@ interface RoleSwitchProps {
 }
 
 export function RoleSwitch({ role, onRoleChange }: RoleSwitchProps) {
+  const t = useTranslations("roleSwitch");
   return (
     <div className="flex items-center rounded-full border border-border bg-muted p-0.5">
       <button
@@ -18,10 +20,10 @@ export function RoleSwitch({ role, onRoleChange }: RoleSwitchProps) {
             ? "bg-primary text-primary-foreground shadow-sm"
             : "text-muted-foreground hover:text-foreground"
         }`}
-        title="Developer mode: Full IDE with terminal and workflow editor"
+        title={t("developerTitle")}
       >
         <Code className="h-3 w-3" />
-        <span className="hidden sm:inline">Developer</span>
+        <span className="hidden sm:inline">{t("developer")}</span>
       </button>
       <button
         onClick={() => onRoleChange("product")}
@@ -30,10 +32,10 @@ export function RoleSwitch({ role, onRoleChange }: RoleSwitchProps) {
             ? "bg-primary text-primary-foreground shadow-sm"
             : "text-muted-foreground hover:text-foreground"
         }`}
-        title="Product mode: Simplified view focused on knowledge and AI chat"
+        title={t("productTitle")}
       >
         <Briefcase className="h-3 w-3" />
-        <span className="hidden sm:inline">Product</span>
+        <span className="hidden sm:inline">{t("product")}</span>
       </button>
     </div>
   );

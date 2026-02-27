@@ -1,18 +1,15 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { Link, usePathname } from "@/navigation";
+import { useTranslations } from "next-intl";
 import {
   LayoutDashboard,
   FolderOpen,
   BookOpen,
   GitBranch,
-  MessageSquare,
-  Blocks,
   PanelLeftClose,
   PanelLeftOpen,
-  Server,
   Sparkles,
   BarChart3,
   ChevronRight,
@@ -29,71 +26,23 @@ interface SidebarProps {
 interface NavItem {
   href: string;
   icon: React.ElementType;
-  label: string;
+  labelKey: string;
   roles: Array<"developer" | "product">;
   expandable?: boolean;
 }
 
 const navItems: NavItem[] = [
-  {
-    href: "/",
-    icon: LayoutDashboard,
-    label: "Dashboard",
-    roles: ["developer", "product"],
-  },
-  {
-    href: "/workspaces",
-    icon: FolderOpen,
-    label: "Workspaces",
-    roles: ["developer", "product"],
-  },
-  {
-    href: "/knowledge",
-    icon: BookOpen,
-    label: "Knowledge",
-    roles: ["developer", "product"],
-    expandable: true,
-  },
-  {
-    href: "/workflows",
-    icon: GitBranch,
-    label: "Workflows",
-    roles: ["developer"],
-  },
-  {
-    href: "/chat",
-    icon: MessageSquare,
-    label: "AI Chat",
-    roles: ["developer", "product"],
-  },
-  {
-    href: "/skills",
-    icon: Sparkles,
-    label: "Skills",
-    roles: ["developer"],
-  },
-  {
-    href: "/evaluations",
-    icon: BarChart3,
-    label: "Evaluations",
-    roles: ["developer"],
-  },
-  {
-    href: "/integrations",
-    icon: Blocks,
-    label: "Integrations",
-    roles: ["developer"],
-  },
-  {
-    href: "/infrastructure",
-    icon: Server,
-    label: "Infrastructure",
-    roles: ["developer"],
-  },
+  { href: "/", icon: LayoutDashboard, labelKey: "dashboard", roles: ["developer", "product"] },
+  { href: "/workspaces", icon: FolderOpen, labelKey: "workspaces", roles: ["developer", "product"] },
+  { href: "/knowledge", icon: BookOpen, labelKey: "knowledge", roles: ["developer", "product"], expandable: true },
+  { href: "/workflows", icon: GitBranch, labelKey: "workflows", roles: ["developer"] },
+  { href: "/skills", icon: Sparkles, labelKey: "skills", roles: ["developer"] },
+  { href: "/evaluations", icon: BarChart3, labelKey: "evaluations", roles: ["developer"] },
 ];
 
 export function Sidebar({ collapsed, onToggleCollapse, role }: SidebarProps) {
   const pathname = usePathname();
+  const t = useTranslations("sidebar");
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [knowledgeExpanded, setKnowledgeExpanded] = useState(false);
 
@@ -106,16 +55,19 @@ export function Sidebar({ collapsed, onToggleCollapse, role }: SidebarProps) {
 
   // Auto-expand knowledge section when on knowledge page
   useEffect(() => {
-    if (pathname.startsWith("/knowledge")) {
+    const stripped = pathname.replace(/^\/(zh|en)/, '') || '/';
+    if (stripped.startsWith("/knowledge")) {
       setKnowledgeExpanded(true);
     }
   }, [pathname]);
 
   const filteredItems = navItems.filter((item) => item.roles.includes(role));
 
+  // Strip locale prefix for comparison
+  const strippedPathname = pathname.replace(/^\/(zh|en)/, '') || '/';
   const isActive = (href: string) => {
-    if (href === "/") return pathname === "/";
-    return pathname.startsWith(href);
+    if (href === "/") return strippedPathname === "/";
+    return strippedPathname.startsWith(href);
   };
 
   return (
@@ -140,7 +92,7 @@ export function Sidebar({ collapsed, onToggleCollapse, role }: SidebarProps) {
                     }`}
                   >
                     <item.icon className="h-4 w-4 flex-shrink-0" />
-                    <span className="flex-1">{item.label}</span>
+                    <span className="flex-1">{t(item.labelKey as "dashboard")}</span>
                   </Link>
                   <button
                     onClick={() => setKnowledgeExpanded(!knowledgeExpanded)}
@@ -185,10 +137,10 @@ export function Sidebar({ collapsed, onToggleCollapse, role }: SidebarProps) {
                     ? "bg-accent text-foreground"
                     : "text-muted-foreground hover:bg-accent hover:text-foreground"
                 }`}
-                title={collapsed ? item.label : undefined}
+                title={collapsed ? t(item.labelKey as "dashboard") : undefined}
               >
                 <item.icon className="h-4 w-4 flex-shrink-0" />
-                {!collapsed && <span>{item.label}</span>}
+                {!collapsed && <span>{t(item.labelKey as "dashboard")}</span>}
               </Link>
             )}
           </div>
@@ -205,7 +157,7 @@ export function Sidebar({ collapsed, onToggleCollapse, role }: SidebarProps) {
           title="Enterprise Console"
         >
           <Building2 className="h-4 w-4 flex-shrink-0" />
-          {!collapsed && <span>Admin</span>}
+          {!collapsed && <span>{t("admin")}</span>}
         </a>
       </div>
 
@@ -214,14 +166,14 @@ export function Sidebar({ collapsed, onToggleCollapse, role }: SidebarProps) {
         <button
           onClick={onToggleCollapse}
           className="flex w-full items-center justify-center gap-2 rounded-md px-2.5 py-2 text-sm text-muted-foreground hover:bg-accent hover:text-foreground"
-          title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          title={collapsed ? t("expand") : t("collapse")}
         >
           {collapsed ? (
             <PanelLeftOpen className="h-4 w-4" />
           ) : (
             <>
               <PanelLeftClose className="h-4 w-4" />
-              <span>Collapse</span>
+              <span>{t("collapse")}</span>
             </>
           )}
         </button>

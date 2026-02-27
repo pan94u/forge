@@ -32,6 +32,10 @@ web-ide/frontend/node_modules/
 web-ide/frontend/.next/
 web-ide/frontend/out/
 
+# Node (Enterprise Console)
+enterprise-console/node_modules/
+enterprise-console/.next/
+
 # Docker
 docker-compose.override.yml
 

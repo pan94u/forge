@@ -10,9 +10,12 @@ import {
   LogOut,
   ChevronDown,
   Search,
+  Languages,
 } from "lucide-react";
 import { RoleSwitch } from "./RoleSwitch";
 import { logout, isAuthenticated } from "@/lib/auth";
+import { useLocale } from "next-intl";
+import { useRouter, usePathname } from "@/navigation";
 
 interface HeaderProps {
   role: "developer" | "product";
@@ -22,6 +25,14 @@ interface HeaderProps {
 export function Header({ role, onRoleChange }: HeaderProps) {
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  const locale = useLocale();
+  const router = useRouter();
+  const pathname = usePathname();
+
+  const switchLocale = () => {
+    const next = locale === "zh" ? "en" : "zh";
+    router.replace(pathname, { locale: next });
+  };
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -65,6 +76,16 @@ export function Header({ role, onRoleChange }: HeaderProps) {
       <div className="flex items-center gap-3">
         {/* Role Switch */}
         <RoleSwitch role={role} onRoleChange={onRoleChange} />
+
+        {/* Language Switch */}
+        <button
+          onClick={switchLocale}
+          className="flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground"
+          title={locale === "zh" ? "Switch to English" : "切换为中文"}
+        >
+          <Languages className="h-3.5 w-3.5" />
+          <span>{locale === "zh" ? "EN" : "中"}</span>
+        </button>
 
         {/* Notifications */}
         <button className="relative rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground">

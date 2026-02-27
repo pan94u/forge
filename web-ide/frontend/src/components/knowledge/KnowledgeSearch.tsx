@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useTranslations } from "next-intl";
 import {
   Search,
   FileText,
@@ -94,6 +95,7 @@ export function KnowledgeSearch({
   selectedDocId,
   workspaceId,
 }: KnowledgeSearchProps) {
+  const t = useTranslations("knowledge");
   const [query, setQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [scopeFilter, setScopeFilter] = useState<string>("all");
@@ -130,7 +132,7 @@ export function KnowledgeSearch({
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
-              placeholder="Search knowledge base..."
+              placeholder={t("searchPlaceholder")}
             />
           </div>
           <button
