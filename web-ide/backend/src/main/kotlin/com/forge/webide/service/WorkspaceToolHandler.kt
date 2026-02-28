@@ -95,7 +95,7 @@ class WorkspaceToolHandler(
                 "workspace_start_service" -> handleStartService(workspaceId, args)
                 "workspace_stop_service" -> handleStopService(workspaceId, args)
                 "workspace_git_status" -> handleGitStatus(workspaceId)
-                "workspace_git_diff" -> handleGitDiff(workspaceId)
+                "workspace_git_diff" -> handleGitDiff(workspaceId, args)
                 "workspace_git_add" -> handleGitAdd(workspaceId, args)
                 "workspace_git_commit" -> {
                     val preview = buildCommitPreview(workspaceId, args)
@@ -522,11 +522,55 @@ class WorkspaceToolHandler(
         }
     }
 
-    private fun handleGitDiff(workspaceId: String): McpToolCallResponse {
+    private fun handleGitDiff(workspaceId: String, args: Map<String, Any?>): McpToolCallResponse {
         return try {
             val workspaceDir = workspaceService.getWorkspaceDir(workspaceId)
-            val diff = gitService.diff(workspaceDir)
-            McpToolCallResponse(content = listOf(McpContent(type = "text", text = diff)), isError = false)
+            val remote = args["remote"] as? String
+
+            if (remote != null) {
+                // Compare local branch with remote — fetch first, then log/diff
+                val sb = StringBuilder()
+                val fetchOk = try { gitService.fetch(workspaceDir, remote) } catch (_: Exception) { false }
+                if (!fetchOk) {
+                    sb.appendLine("⚠️ 无法连接远程仓库 $remote，结果可能不是最新状态")
+                }
+
+                val branch = try { gitService.status(workspaceDir).branch } catch (_: Exception) { "main" }
+                val remoteRef = "$remote/$branch"
+
+                val behindLog = try { gitService.logRange(workspaceDir, "HEAD", remoteRef) } catch (_: Exception) { "" }
+                val aheadLog  = try { gitService.logRange(workspaceDir, remoteRef, "HEAD") } catch (_: Exception) { "" }
+                val statDiff  = try { gitService.diffStat(workspaceDir, "HEAD", remoteRef) } catch (_: Exception) { "" }
+
+                if (behindLog.isBlank() && aheadLog.isBlank()) {
+                    sb.appendLine("本地与远程 $remoteRef 完全同步，无差异。")
+                } else {
+                    if (aheadLog.isNotBlank()) {
+                        val lines = aheadLog.lines().filter { it.isNotBlank() }
+                        sb.appendLine("本地领先远程 ${lines.size} 个提交（尚未推送）：")
+                        lines.take(20).forEach { sb.appendLine("  $it") }
+                        sb.appendLine()
+                    }
+                    if (behindLog.isNotBlank()) {
+                        val lines = behindLog.lines().filter { it.isNotBlank() }
+                        sb.appendLine("远程领先本地 ${lines.size} 个提交（可拉取）：")
+                        lines.take(20).forEach { sb.appendLine("  $it") }
+                        sb.appendLine()
+                    }
+                    if (statDiff.isNotBlank()) {
+                        sb.appendLine("文件变更统计（本地 vs $remoteRef）：")
+                        statDiff.lines().take(20).forEach { sb.appendLine("  $it") }
+                    }
+                }
+                McpToolCallResponse(
+                    content = listOf(McpContent(type = "text", text = sb.toString().trim())),
+                    isError = false
+                )
+            } else {
+                // No remote — show local uncommitted working-tree changes
+                val diff = gitService.diff(workspaceDir)
+                McpToolCallResponse(content = listOf(McpContent(type = "text", text = diff)), isError = false)
+            }
         } catch (e: Exception) {
             McpProxyService.errorResponse("git diff failed: ${e.message}")
         }
