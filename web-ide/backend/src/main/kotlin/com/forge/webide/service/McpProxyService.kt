@@ -581,7 +581,7 @@ class McpProxyService(
          */
         fun errorResponse(message: String): McpToolCallResponse {
             return McpToolCallResponse(
-                content = listOf(McpContent(type = "text", text = "Error: $message")),
+                content = listOf(McpContent(type = "text", text = message)),
                 isError = true
             )
         }

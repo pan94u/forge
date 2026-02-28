@@ -170,6 +170,14 @@ class GitService {
         val process = ProcessBuilder(cmd)
             .directory(workDir.toFile())
             .redirectErrorStream(false)
+            .also { pb ->
+                // Disable credential prompts so git fails fast instead of hanging
+                pb.environment()["GIT_TERMINAL_PROMPT"] = "0"
+                pb.environment()["GIT_ASKPASS"] = "echo"
+                // SSH: disable interactive prompts, short connect timeout
+                pb.environment()["GIT_SSH_COMMAND"] =
+                    "ssh -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=no"
+            }
             .start()
 
         val finished = process.waitFor(120, TimeUnit.SECONDS)

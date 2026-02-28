@@ -471,8 +471,17 @@ class WorkspaceToolHandler(
                 val workspaceDir = workspaceService.getWorkspaceDir(workspaceId)
                 val status = gitService.status(workspaceDir)
                 appendLine("当前分支：${status.branch}")
+
                 // Fetch to inspect incoming commits (read-only, doesn't change working tree)
-                val fetched = gitService.fetch(workspaceDir, remote)
+                val fetched = try {
+                    gitService.fetch(workspaceDir, remote)
+                } catch (e: Exception) {
+                    appendLine()
+                    appendLine("⚠️ 无法连接远程仓库 $remote：${e.message?.take(120)}")
+                    appendLine("（如继续确认，pull 操作可能因认证或网络问题失败）")
+                    false
+                }
+
                 if (fetched) {
                     val incoming = gitService.logRange(workspaceDir, "HEAD", "FETCH_HEAD")
                     if (incoming.isNotBlank()) {
@@ -486,7 +495,9 @@ class WorkspaceToolHandler(
                         appendLine("（已是最新，无待拉取提交）")
                     }
                 }
-            } catch (_: Exception) { /* ignore — proceed without preview */ }
+            } catch (e: Exception) {
+                appendLine("⚠️ 无法获取预览：${e.message?.take(120)}")
+            }
         }.trim()
     }
 
@@ -560,14 +571,24 @@ class WorkspaceToolHandler(
             val result = gitService.push(workspaceDir, remote, branch, remoteUrl = authUrl)
             McpToolCallResponse(content = listOf(McpContent(type = "text", text = result)), isError = false)
         } catch (e: Exception) {
-            McpProxyService.errorResponse("git push failed: ${e.message}")
+            val raw = e.message ?: "未知错误"
+            val structured = when {
+                raw.contains("timed out", ignoreCase = true) ->
+                    "git push 超时：无法在 120s 内连接到远程仓库。\n" +
+                    "可能原因：需要认证（请配置 Access Token）或网络不通。\n原始错误：$raw"
+                raw.contains("Authentication", ignoreCase = true) || raw.contains("denied", ignoreCase = true) ->
+                    "git push 认证失败：${raw}\n建议：在工作区设置中配置有效的 Access Token。"
+                else ->
+                    "git push 失败：$raw"
+            }
+            McpProxyService.errorResponse(structured)
         }
     }
 
     private fun handleGitPull(workspaceId: String, args: Map<String, Any?>): McpToolCallResponse {
+        val remote = args["remote"] as? String ?: "origin"
         return try {
             val workspaceDir = workspaceService.getWorkspaceDir(workspaceId)
-            val remote = args["remote"] as? String ?: "origin"
             val rebase = args["rebase"] as? Boolean ?: true
             // Use authenticated URL if workspace has an access token (private repos)
             val authUrl = workspaceService.getWorkspaceAuthUrl(workspaceId)
@@ -608,7 +629,20 @@ class WorkspaceToolHandler(
 
             McpToolCallResponse(content = listOf(McpContent(type = "text", text = text)), isError = false)
         } catch (e: Exception) {
-            McpProxyService.errorResponse("git pull failed: ${e.message}")
+            val raw = e.message ?: "未知错误"
+            val structured = when {
+                raw.contains("timed out", ignoreCase = true) ->
+                    "git pull 超时（remote=$remote）：无法在 120s 内连接到远程仓库。\n" +
+                    "可能原因：需要认证（请在工作区配置中添加 Access Token）或网络不通。\n原始错误：$raw"
+                raw.contains("Authentication", ignoreCase = true) ||
+                raw.contains("denied", ignoreCase = true) ||
+                raw.contains("could not read Username", ignoreCase = true) ->
+                    "git pull 认证失败（remote=$remote）：${raw}\n" +
+                    "建议：在工作区设置中配置有效的 Access Token（GitLab: glpat-xxx / GitHub: ghp-xxx）。"
+                else ->
+                    "git pull 失败（remote=$remote）：$raw"
+            }
+            McpProxyService.errorResponse(structured)
         }
     }
 
