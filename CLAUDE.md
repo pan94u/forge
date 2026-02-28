@@ -29,7 +29,7 @@ docker compose -f docker-compose.trial.yml up --build -d
 
 # 访问 http://localhost:9000
 
-# 运行全量单元测试（当前 156 个）
+# 运行全量单元测试（当前 335 个）
 ./gradlew :web-ide:backend:test :adapters:model-adapter:test
 ./gradlew :agent-eval:test
 ```
@@ -194,7 +194,7 @@ Forge is a Gradle monorepo (Kotlin DSL) with the following modules:
 
 ### 纪律 3：验收测试驱动（连接代码与产品）
 
-**当前验收测试**: `docs/phase1.6-e2e-acceptance-test.md`（21 场景 / 87 用例，80 通过 = 92.0%）
+**当前验收测试**: `docs/acceptance-tests/current-at.md`（41 用例，39 通过 = 95.1%）
 
 **验收测试生命周期**:
 

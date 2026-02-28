@@ -242,7 +242,7 @@ class KnowledgeExtractionServiceTest {
         val blockLatch = CountDownLatch(1)
         every { knowledgeTagService.listTags("ws-dup") } returns sampleTags
         coEvery {
-            agenticLoopOrchestrator.agenticStream(any(), any(), any(), any(), workspaceId = "ws-dup", any())
+            agenticLoopOrchestrator.agenticStream(any(), any(), any(), any(), workspaceId = "ws-dup", any(), any())
         } coAnswers {
             blockLatch.await(3, TimeUnit.SECONDS)
             AgenticResult(content = "[]", toolCalls = emptyList())
