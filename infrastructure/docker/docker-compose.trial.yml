@@ -142,6 +142,7 @@ services:
       KEYCLOAK_CLIENT_ID: forge-enterprise
       KEYCLOAK_CLIENT_SECRET: enterprise-secret
       KEYCLOAK_ISSUER: ${KEYCLOAK_ISSUER:-http://localhost:8180/realms/forge}
+      KEYCLOAK_INTERNAL_URL: ${KEYCLOAK_INTERNAL_URL:-http://host.docker.internal:8180/realms/forge}
       NEXTAUTH_URL: http://localhost:19001
       NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:-forge-enterprise-nextauth-secret-32c}
     depends_on:
