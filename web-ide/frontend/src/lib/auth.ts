@@ -1,6 +1,11 @@
 /**
  * OIDC authentication helper for Keycloak SSO.
  * Uses Authorization Code flow with PKCE for public clients.
+ *
+ * Token lifecycle:
+ * - After login, scheduleTokenRefresh() sets a timer to refresh 60s before expiry.
+ * - initTokenRefresh() restores the schedule on page reload.
+ * - On 401 from backend, callers should call refreshToken() before redirecting to login.
  */
 
 const KEYCLOAK_URL =
@@ -82,14 +87,7 @@ export async function handleCallback(code: string): Promise<boolean> {
     }
 
     const data = await response.json();
-    localStorage.setItem(TOKEN_KEY, data.access_token);
-    if (data.refresh_token) {
-      localStorage.setItem(REFRESH_TOKEN_KEY, data.refresh_token);
-    }
-    // Store expiry as timestamp
-    const expiresAt = Date.now() + data.expires_in * 1000;
-    localStorage.setItem(TOKEN_EXPIRY_KEY, expiresAt.toString());
-
+    storeTokens(data);
     sessionStorage.removeItem(CODE_VERIFIER_KEY);
     return true;
   } catch (err) {
@@ -97,6 +95,121 @@ export async function handleCallback(code: string): Promise<boolean> {
     return false;
   }
 }
+
+// ---------------------------------------------------------------------------
+// Token storage helpers
+// ---------------------------------------------------------------------------
+
+function storeTokens(data: {
+  access_token: string;
+  refresh_token?: string;
+  expires_in: number;
+}): void {
+  localStorage.setItem(TOKEN_KEY, data.access_token);
+  if (data.refresh_token) {
+    localStorage.setItem(REFRESH_TOKEN_KEY, data.refresh_token);
+  }
+  const expiresAt = Date.now() + data.expires_in * 1000;
+  localStorage.setItem(TOKEN_EXPIRY_KEY, expiresAt.toString());
+  scheduleTokenRefresh(data.expires_in);
+}
+
+// ---------------------------------------------------------------------------
+// Proactive token refresh — runs before the access token expires
+// ---------------------------------------------------------------------------
+
+let _refreshTimer: ReturnType<typeof setTimeout> | null = null;
+let _refreshInFlight: Promise<boolean> | null = null;
+
+function scheduleTokenRefresh(expiresIn: number): void {
+  if (_refreshTimer) clearTimeout(_refreshTimer);
+  // Refresh 60 seconds before expiry; minimum 5 seconds
+  const delay = Math.max((expiresIn - 60) * 1000, 5_000);
+  _refreshTimer = setTimeout(async () => {
+    const ok = await refreshToken();
+    if (!ok && typeof window !== "undefined") {
+      console.warn("[auth] Token refresh failed — redirecting to login");
+      clearTokens();
+      window.location.href = "/login";
+    }
+  }, delay);
+}
+
+/**
+ * Exchange the stored refresh_token for a new access_token.
+ * Returns true on success, false if the refresh token is invalid/expired.
+ * Concurrent calls are deduplicated — only one request is in-flight at a time.
+ */
+export async function refreshToken(): Promise<boolean> {
+  // Deduplicate concurrent refresh attempts
+  if (_refreshInFlight) return _refreshInFlight;
+
+  const refreshTokenStr = localStorage.getItem(REFRESH_TOKEN_KEY);
+  if (!refreshTokenStr) return false;
+
+  _refreshInFlight = (async () => {
+    try {
+      const response = await fetch(`${getBaseUrl()}/token`, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          grant_type: "refresh_token",
+          client_id: KEYCLOAK_CLIENT_ID,
+          refresh_token: refreshTokenStr,
+        }),
+      });
+
+      if (!response.ok) {
+        console.error("[auth] Refresh token rejected:", response.status);
+        return false;
+      }
+
+      const data = await response.json();
+      storeTokens(data);
+      return true;
+    } catch (err) {
+      console.error("[auth] Refresh token error:", err);
+      return false;
+    } finally {
+      _refreshInFlight = null;
+    }
+  })();
+
+  return _refreshInFlight;
+}
+
+/**
+ * Call once on app startup (e.g. in the root layout useEffect) to restore
+ * the refresh schedule after a page reload.
+ * If the token is already expired, attempts an immediate refresh.
+ */
+export function initTokenRefresh(): void {
+  if (typeof window === "undefined") return;
+  const expiry = localStorage.getItem(TOKEN_EXPIRY_KEY);
+  const stored = localStorage.getItem(REFRESH_TOKEN_KEY);
+  if (!expiry || !stored) return;
+
+  const now = Date.now();
+  const expiresAt = parseInt(expiry, 10);
+
+  if (now >= expiresAt) {
+    // Already expired — refresh immediately
+    refreshToken().then((ok) => {
+      if (!ok) {
+        clearTokens();
+        window.location.href = "/login";
+      }
+    });
+  } else {
+    // Still valid — schedule refresh before expiry
+    const expiresIn = Math.floor((expiresAt - now) / 1000);
+    scheduleTokenRefresh(expiresIn);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Public API
+// ---------------------------------------------------------------------------
 
 export function getToken(): string | null {
   return localStorage.getItem(TOKEN_KEY);
@@ -108,8 +221,8 @@ export function isAuthenticated(): boolean {
 
   const expiry = localStorage.getItem(TOKEN_EXPIRY_KEY);
   if (expiry && Date.now() > parseInt(expiry, 10)) {
-    // Token expired
-    clearTokens();
+    // Token expired — do NOT clear tokens here; initTokenRefresh() handles
+    // proactive renewal. Callers should use refreshToken() if needed.
     return false;
   }
 
@@ -117,6 +230,10 @@ export function isAuthenticated(): boolean {
 }
 
 export function clearTokens(): void {
+  if (_refreshTimer) {
+    clearTimeout(_refreshTimer);
+    _refreshTimer = null;
+  }
   localStorage.removeItem(TOKEN_KEY);
   localStorage.removeItem(REFRESH_TOKEN_KEY);
   localStorage.removeItem(TOKEN_EXPIRY_KEY);

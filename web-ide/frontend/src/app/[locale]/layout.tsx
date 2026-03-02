@@ -5,7 +5,7 @@ import { NextIntlClientProvider } from "next-intl";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Header } from "@/components/common/Header";
 import { Sidebar } from "@/components/common/Sidebar";
-import { getToken } from "@/lib/auth";
+import { getToken, refreshToken, initTokenRefresh, clearTokens } from "@/lib/auth";
 
 function makeQueryClient(): QueryClient {
   return new QueryClient({
@@ -67,32 +67,46 @@ export default function LocaleLayout({
     setIsPublic(pub);
 
     if (!pub) {
-      const token = getToken();
-      fetch("/api/auth/me", {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      })
-        .then(async (res) => {
-          if (res.status === 401) {
-            // Clear any stale token to prevent login→main redirect loop
-            localStorage.removeItem("forge_access_token");
-            localStorage.removeItem("forge_refresh_token");
-            localStorage.removeItem("forge_token_expiry");
+      // Restore the proactive refresh schedule after page reload
+      initTokenRefresh();
+
+      const checkAuth = async (retried = false): Promise<void> => {
+        const token = getToken();
+        try {
+          const res = await fetch("/api/auth/me", {
+            headers: token ? { Authorization: `Bearer ${token}` } : {},
+          });
+
+          if (res.status === 401 && !retried) {
+            // Token may be expired — try to refresh once before giving up
+            const refreshed = await refreshToken();
+            if (refreshed) {
+              return checkAuth(true);
+            }
+            clearTokens();
             window.location.href = "/login";
             return;
           }
+
+          if (res.status === 401 || !res.ok) {
+            clearTokens();
+            window.location.href = "/login";
+            return;
+          }
+
           const data = await res.json();
           if (!data.authenticated) {
-            localStorage.removeItem("forge_access_token");
-            localStorage.removeItem("forge_refresh_token");
-            localStorage.removeItem("forge_token_expiry");
+            clearTokens();
             window.location.href = "/login";
           } else {
             setAuthChecked(true);
           }
-        })
-        .catch(() => {
+        } catch {
           window.location.href = "/login";
-        });
+        }
+      };
+
+      checkAuth();
     } else {
       setAuthChecked(true);
     }
