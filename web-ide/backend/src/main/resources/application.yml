@@ -39,7 +39,6 @@ spring:
       resourceserver:
         jwt:
           issuer-uri: ${OAUTH2_ISSUER_URI:http://localhost:8180/realms/forge}
-          audiences: forge-web-ide
       client:
         registration:
           forge:

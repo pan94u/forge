@@ -1,16 +1,26 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 
-type Params = { path: string[] };
-
-async function proxy(req: NextRequest, params: Params): Promise<NextResponse> {
+// Use auth(handler) wrapper instead of standalone await auth().
+//
+// In Next.js 15, cookies() from next/headers is ASYNC. Auth.js v5 beta's
+// standalone auth() relies on it synchronously → gets a Promise → session is
+// null → no Authorization header is forwarded → backend returns 401.
+//
+// The auth(handler) wrapper reads cookies directly from req.cookies (the
+// NextRequest sync API), bypassing the next/headers cookies() issue entirely.
+// This is the same pattern used in middleware.ts.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const handler = auth(async (req: NextRequest & { auth: any }) => {
   const backendUrl = process.env.BACKEND_URL ?? "http://localhost:19000";
-  const path = params.path.join("/");
+
+  // Extract path from URL: /api/admin/orgs → admin/orgs
+  // (params not available via ctx in the auth wrapper; derive from URL instead)
+  const segments = req.nextUrl.pathname.split("/").filter(Boolean);
+  // segments[0] = "api", rest = actual backend path
+  const path = segments.slice(1).join("/");
   const search = req.nextUrl.search;
   const target = `${backendUrl}/api/${path}${search}`;
-
-  // Get session for Authorization header
-  const session = await auth();
 
   const headers: Record<string, string> = {};
   req.headers.forEach((value, key) => {
@@ -20,9 +30,10 @@ async function proxy(req: NextRequest, params: Params): Promise<NextResponse> {
     headers[key] = value;
   });
 
-  // Forward access token to backend
-  if (session?.accessToken) {
-    headers["Authorization"] = `Bearer ${session.accessToken}`;
+  // Forward access token to backend — req.auth is set by the auth() wrapper
+  const accessToken = req.auth?.accessToken as string | undefined;
+  if (accessToken) {
+    headers["Authorization"] = `Bearer ${accessToken}`;
   }
 
   const body =
@@ -56,39 +67,15 @@ async function proxy(req: NextRequest, params: Params): Promise<NextResponse> {
       { status: 502 }
     );
   }
-}
+});
 
-export async function GET(
-  req: NextRequest,
-  { params }: { params: Promise<Params> }
-) {
-  return proxy(req, await params);
-}
-
-export async function POST(
-  req: NextRequest,
-  { params }: { params: Promise<Params> }
-) {
-  return proxy(req, await params);
-}
-
-export async function PUT(
-  req: NextRequest,
-  { params }: { params: Promise<Params> }
-) {
-  return proxy(req, await params);
-}
-
-export async function DELETE(
-  req: NextRequest,
-  { params }: { params: Promise<Params> }
-) {
-  return proxy(req, await params);
-}
-
-export async function PATCH(
-  req: NextRequest,
-  { params }: { params: Promise<Params> }
-) {
-  return proxy(req, await params);
-}
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export const GET = handler as any;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export const POST = handler as any;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export const PUT = handler as any;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export const DELETE = handler as any;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export const PATCH = handler as any;
