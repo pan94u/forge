@@ -16,7 +16,7 @@ enum class SkillCategory { SYSTEM, FOUNDATION, DELIVERY, KNOWLEDGE, CUSTOM }
  * - WORKSPACE: workspace-level, editable (workspace/.skills/)
  * - CUSTOM: user-created, full CRUD
  */
-enum class SkillScope { PLATFORM, WORKSPACE, CUSTOM }
+enum class SkillScope { PLATFORM, WORKSPACE, CUSTOM, MARKETPLACE }
 
 /**
  * Script type determines the script's role in the dual-loop architecture:
