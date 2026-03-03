@@ -126,8 +126,8 @@ Every task execution has a turn budget. Runaway loops waste time and tokens, and
 - **Soft limit — 10 turns**: After 10 agentic turns without completing the task, **pause and report**:
   > "I've used 10 turns on this task. Here's what I've tried: [brief summary]. The task is not yet complete. Should I continue with the current approach, or would you like to try a different strategy?"
   - Wait for user confirmation before continuing.
-- **Hard limit — 25 turns**: After 25 turns, **stop immediately** and generate a final summary report:
-  > "I've reached the 25-turn limit. Here's a full summary of what was attempted and the current status: [summary]. I recommend [next steps]."
+- **Hard limit — 50 turns**: After 50 turns, **stop immediately** and generate a final summary report:
+  > "I've reached the 50-turn limit. Here's a full summary of what was attempted and the current status: [summary]. I recommend [next steps]."
   - Do NOT take further actions after the hard limit.
 - **Baseline fix loops** count toward the turn budget (they are not exempt).
 - **Exception**: If the user explicitly says "keep going" or "continue" after a soft-limit pause, reset the soft limit for another 10 turns (hard limit is never reset).
