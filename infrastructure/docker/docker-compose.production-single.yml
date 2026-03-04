@@ -86,11 +86,15 @@ services:
     restart: unless-stopped
     cpus: 0.5
     mem_limit: 768m
-    command: start-dev --import-realm
+    command: start --import-realm
     environment:
       KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:-admin}
       KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
       KC_HTTP_PORT: "8080"
+      KC_HTTP_ENABLED: "true"
+      KC_HOSTNAME_STRICT: "false"
+      KC_HOSTNAME_STRICT_BACKCHANNEL: "false"
+      KC_PROXY: "edge"
       KC_HEALTH_ENABLED: "true"
       # Keycloak 使用独立的 keycloak 数据库（同一 PG 实例）
       KC_DB: postgres
