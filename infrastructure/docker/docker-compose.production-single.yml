@@ -296,6 +296,7 @@ services:
       - "9001:9001"
     environment:
       PORT: "9001"
+      NEXT_PUBLIC_BASE_PATH: "/console"
       BACKEND_URL: http://backend:8080
       KEYCLOAK_CLIENT_ID: forge-enterprise
       KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_ENTERPRISE_SECRET:-enterprise-secret}
