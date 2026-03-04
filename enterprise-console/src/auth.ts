@@ -98,6 +98,7 @@ async function refreshAccessToken(token: JWT): Promise<JWT> {
 }
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
+  basePath: process.env.NEXTAUTH_BASE_PATH || "/api/auth",
   providers: [KeycloakProvider],
   session: {
     // Explicit 30-day session lifetime so the cookie never expires during normal use.

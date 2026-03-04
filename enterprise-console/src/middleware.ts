@@ -12,10 +12,14 @@ import { auth } from "@/auth";
 const locales = ["zh", "en"];
 const defaultLocale = "zh";
 
+// Auth basePath: /console/api/auth in production, /api/auth in trial (empty basePath)
+const authBasePath = process.env.NEXTAUTH_BASE_PATH || "/api/auth";
+
 export default auth((req: NextRequest & { auth: unknown }) => {
   const { pathname } = req.nextUrl;
 
   // API routes: skip auth check (handled server-side)
+  // Also skip auth API routes (they handle auth themselves)
   if (pathname.startsWith("/api/")) {
     return NextResponse.next();
   }
@@ -26,7 +30,7 @@ export default auth((req: NextRequest & { auth: unknown }) => {
   // renewed, so the user needs to log in again.
   const session = req.auth as { error?: string } | null;
   if (!session || session.error === "RefreshAccessTokenError") {
-    return NextResponse.redirect(new URL("/api/auth/signin", req.url));
+    return NextResponse.redirect(new URL(`${authBasePath}/signin`, req.url));
   }
 
   // Add locale prefix via redirect (NOT rewrite — avoids Next.js internal proxy loop)
