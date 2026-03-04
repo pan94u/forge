@@ -305,7 +305,7 @@ services:
       KEYCLOAK_ISSUER: "${KEYCLOAK_PUBLIC_URL}/realms/forge"
       # 容器内部 Keycloak 地址（用于 token 交换，避免走公网）
       KEYCLOAK_INTERNAL_URL: "http://keycloak:8080/auth/realms/forge"
-      NEXTAUTH_URL: ${CONSOLE_PUBLIC_URL}
+      NEXTAUTH_URL: "https://forge.delivery"
       NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
       AUTH_TRUST_HOST: "true"
     depends_on:
