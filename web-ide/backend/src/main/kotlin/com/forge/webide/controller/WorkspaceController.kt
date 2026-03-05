@@ -2,6 +2,8 @@ package com.forge.webide.controller
 
 import com.forge.webide.model.*
 import com.forge.webide.service.GitStatus
+import com.forge.webide.service.PlanConfirmService
+import com.forge.webide.service.PlanDecision
 import com.forge.webide.service.WorkspaceRuntimeService
 import com.forge.webide.service.WorkspaceService
 import jakarta.servlet.http.HttpServletRequest
@@ -15,7 +17,8 @@ import java.security.Principal
 @RequestMapping("/api/workspaces")
 class WorkspaceController(
     private val workspaceService: WorkspaceService,
-    private val runtimeService: WorkspaceRuntimeService
+    private val runtimeService: WorkspaceRuntimeService,
+    private val planConfirmService: PlanConfirmService
 ) {
 
     @PostMapping
@@ -212,5 +215,47 @@ class WorkspaceController(
     ): ResponseEntity<GitStatus> {
         val status = workspaceService.getGitStatus(id)
         return ResponseEntity.ok(status)
+    }
+
+    // =========================================================================
+    // Planning Mode — user confirmation endpoints
+    // =========================================================================
+
+    /**
+     * Resolve a plan approval request from the frontend plan card.
+     *
+     * POST /api/workspaces/plan-approve/{sessionId}/{planId}
+     * Body: { "action": "APPROVED"|"CANCELLED"|"MODIFIED", "modifiedTasks": [...] }
+     */
+    @PostMapping("/plan-approve/{sessionId}/{planId}")
+    fun approvePlan(
+        @PathVariable sessionId: String,
+        @PathVariable planId: String,
+        @RequestBody body: Map<String, Any?>
+    ): ResponseEntity<Map<String, String>> {
+        val action = body["action"] as? String ?: "CANCELLED"
+        @Suppress("UNCHECKED_CAST")
+        val modifiedTasks = body["modifiedTasks"] as? List<Map<String, Any>>
+        val decision = PlanDecision(action = action, modifiedTasks = modifiedTasks)
+        planConfirmService.resolvePlanApproval(sessionId, planId, decision)
+        return ResponseEntity.ok(mapOf("status" to "ok", "action" to action))
+    }
+
+    /**
+     * Resolve a plan user-ask request from the frontend question card.
+     *
+     * POST /api/workspaces/plan-answer/{sessionId}/{askId}
+     * Body: { "answers": { "q0": "选项A", "q1": "用户输入文字" } }
+     */
+    @PostMapping("/plan-answer/{sessionId}/{askId}")
+    fun submitPlanAnswers(
+        @PathVariable sessionId: String,
+        @PathVariable askId: String,
+        @RequestBody body: Map<String, Any?>
+    ): ResponseEntity<Map<String, String>> {
+        @Suppress("UNCHECKED_CAST")
+        val answers = (body["answers"] as? Map<String, String>) ?: emptyMap()
+        planConfirmService.resolveUserAnswers(sessionId, askId, answers)
+        return ResponseEntity.ok(mapOf("status" to "ok", "answerCount" to answers.size.toString()))
     }
 }

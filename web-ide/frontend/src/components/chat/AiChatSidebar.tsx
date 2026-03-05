@@ -28,6 +28,8 @@ import {
   claudeClient,
   type StreamEvent,
   type OodaPhase,
+  type PlanTask,
+  type PlanQuestion,
 } from "@/lib/claude-client";
 import { getAuthHeaders } from "@/lib/auth";
 import { HitlApprovalPanel } from "@/components/chat/HitlApprovalPanel";
@@ -58,6 +60,17 @@ interface BaselineResult {
   attempt?: number;
   summary?: string;
   baselines?: string[];
+}
+
+interface PlanState {
+  planId: string;
+  tasks: PlanTask[];
+  approved: boolean;
+}
+
+interface PlanAsk {
+  askId: string;
+  questions: PlanQuestion[];
 }
 
 interface AiChatSidebarProps {
@@ -101,6 +114,9 @@ export function AiChatSidebar({
   const [oodaDetail, setOodaDetail] = useState<string>("");
   const [baselineResult, setBaselineResult] = useState<BaselineResult | null>(null);
   const [gitConfirm, setGitConfirm] = useState<{ tool: string; preview: string } | null>(null);
+  const [planState, setPlanState] = useState<PlanState | null>(null);
+  const [planAsk, setPlanAsk] = useState<PlanAsk | null>(null);
+  const [askAnswers, setAskAnswers] = useState<Record<string, string>>({});
   const [hitlPending, setHitlPending] = useState(false);
   const [hitlData, setHitlData] = useState<{
     profile: string;
@@ -259,6 +275,9 @@ export function AiChatSidebar({
     setOodaPhase(null);
     setCurrentTurn(null);
     setGitConfirm(null);
+    setPlanState(null);
+    setPlanAsk(null);
+    setAskAnswers({});
 
     const assistantId = `assistant-${Date.now()}`;
     let fullContent = "";
@@ -329,6 +348,55 @@ export function AiChatSidebar({
                 preview: event.gitConfirmPreview ?? "",
               });
               break;
+            case "plan_ready":
+              setPlanState({
+                planId: event.planId ?? "",
+                tasks: (event.tasks ?? []).map((t) => ({ ...t, status: t.status ?? "pending" })),
+                approved: false,
+              });
+              break;
+            case "plan_task_update":
+              setPlanState((prev) => {
+                if (!prev) return prev;
+                return {
+                  ...prev,
+                  tasks: prev.tasks.map((t) =>
+                    t.id === event.taskId ? { ...t, status: event.status as PlanTask["status"] } : t
+                  ),
+                };
+              });
+              break;
+            case "plan_ask":
+              setPlanAsk({
+                askId: event.askId ?? "",
+                questions: event.questions ?? [],
+              });
+              setAskAnswers({});
+              break;
+            case "plan_summary": {
+              const summaryMsg: Message = {
+                id: `plan-summary-${Date.now()}`,
+                role: "assistant",
+                content: `**执行总结**\n\n${event.content ?? ""}${
+                  event.suggestions && event.suggestions.length > 0
+                    ? `\n\n**建议下一步**\n${event.suggestions.map((s, i) => `${i + 1}. ${s}`).join("\n")}`
+                    : ""
+                }`,
+                timestamp: new Date().toISOString(),
+              };
+              setMessages((prev) => [...prev, summaryMsg]);
+              break;
+            }
+            case "context_warning": {
+              const warningMsg: Message = {
+                id: `ctx-warning-${Date.now()}`,
+                role: "assistant",
+                content: `⚠️ **Context 警告**\n\n${event.recommendation ?? "上下文已超限，建议拆分到新 Session。"}`,
+                timestamp: new Date().toISOString(),
+              };
+              setMessages((prev) => [...prev, warningMsg]);
+              break;
+            }
             case "skills_activated":
               setActivatedSkills(event.skills ?? []);
               break;
@@ -486,6 +554,8 @@ export function AiChatSidebar({
       setHitlPending(false);
       setHitlData(null);
       setGitConfirm(null);
+      setPlanAsk(null);
+      setAskAnswers({});
       abortRef.current = null;
     }
   };
@@ -502,6 +572,8 @@ export function AiChatSidebar({
     setHitlPending(false);
     setHitlData(null);
     setGitConfirm(null);
+    setPlanAsk(null);
+    setAskAnswers({});
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -558,6 +630,51 @@ export function AiChatSidebar({
 
   const handleRemoveContext = (id: string) => {
     setSelectedContexts((prev) => prev.filter((c) => c.id !== id));
+  };
+
+  // ---- Planning Mode handlers ----
+
+  const handlePlanApprove = async () => {
+    if (!planState || !sessionId) return;
+    try {
+      await fetch(`/api/workspaces/plan-approve/${sessionId}/${planState.planId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "APPROVED" }),
+      });
+      setPlanState((p) => (p ? { ...p, approved: true } : null));
+    } catch (err) {
+      console.error("Plan approve failed:", err);
+    }
+  };
+
+  const handlePlanCancel = async () => {
+    if (!planState || !sessionId) return;
+    try {
+      await fetch(`/api/workspaces/plan-approve/${sessionId}/${planState.planId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "CANCELLED" }),
+      });
+      setPlanState(null);
+    } catch (err) {
+      console.error("Plan cancel failed:", err);
+    }
+  };
+
+  const handleAskSubmit = async () => {
+    if (!planAsk || !sessionId) return;
+    try {
+      await fetch(`/api/workspaces/plan-answer/${sessionId}/${planAsk.askId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ answers: askAnswers }),
+      });
+      setPlanAsk(null);
+      setAskAnswers({});
+    } catch (err) {
+      console.error("Plan ask submit failed:", err);
+    }
   };
 
   return (
@@ -896,6 +1013,62 @@ export function AiChatSidebar({
             }}
           />
         )}
+        {/* Planning Mode — Plan Card (inline in message stream) */}
+        {planState && (
+          <div className="rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/20 p-3 my-2 mx-1">
+            <div className="font-medium text-sm mb-2 text-blue-800 dark:text-blue-200">
+              📋 执行计划（{planState.tasks.length} 项任务）
+            </div>
+            <div className="space-y-1">
+              {planState.tasks.map((t) => {
+                const statusIcon: Record<string, string> = {
+                  pending: "⏳",
+                  in_progress: "🔄",
+                  done: "✅",
+                  failed: "❌",
+                  blocked: "🚫",
+                };
+                return (
+                  <div key={t.id} className="flex items-start gap-2 text-xs">
+                    <span className="flex-shrink-0 mt-0.5">{statusIcon[t.status] ?? "⏳"}</span>
+                    <span className={t.status === "done" ? "line-through text-muted-foreground" : "text-foreground"}>
+                      {t.title}
+                    </span>
+                    {t.files && t.files.length > 0 && (
+                      <span className="text-muted-foreground truncate max-w-[180px]">
+                        ({t.files.slice(0, 2).join(", ")}{t.files.length > 2 ? ` +${t.files.length - 2}` : ""})
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+            {!planState.approved && isStreaming && (
+              <div className="flex gap-2 mt-3">
+                <button
+                  onClick={handlePlanApprove}
+                  className="px-3 py-1 text-xs rounded bg-primary text-primary-foreground hover:bg-primary/90"
+                >
+                  ▶ 开始执行
+                </button>
+                <button
+                  onClick={handlePlanCancel}
+                  className="px-3 py-1 text-xs rounded bg-muted hover:bg-muted/80 border border-border"
+                >
+                  ✕ 取消
+                </button>
+              </div>
+            )}
+            {planState.approved && (
+              <div className="mt-2 text-xs text-blue-600 dark:text-blue-400">
+                进度: {planState.tasks.filter((t) => t.status === "done").length}/{planState.tasks.length} 已完成
+                {planState.tasks.some((t) => t.status === "blocked") && (
+                  <span className="ml-2 text-amber-500">（有任务被阻塞）</span>
+                )}
+              </div>
+            )}
+          </div>
+        )}
         {thinkingText && (
           <div className="flex items-start gap-2 text-sm text-muted-foreground">
             <div className="flex space-x-1 pt-1">
@@ -978,6 +1151,48 @@ export function AiChatSidebar({
               ❌ 取消
             </button>
           </div>
+        </div>
+      )}
+
+      {/* Planning Mode — Ask Card (chat tab only, shown above input) */}
+      {activeTab === "chat" && planAsk && (
+        <div className="border-t border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/20 px-3 py-2">
+          <div className="font-medium text-sm mb-2 text-amber-800 dark:text-amber-200">❓ 需要确认</div>
+          {planAsk.questions.map((q, i) => (
+            <div key={i} className="mb-3">
+              <div className="text-xs font-medium mb-1 text-foreground">{q.question}</div>
+              {q.type === "choice" && q.options ? (
+                <div className="space-y-1">
+                  {q.options.map((opt) => (
+                    <label key={opt} className="flex items-center gap-1.5 text-xs cursor-pointer">
+                      <input
+                        type="radio"
+                        name={`q${i}`}
+                        value={opt}
+                        checked={askAnswers[`q${i}`] === opt}
+                        onChange={() => setAskAnswers((p) => ({ ...p, [`q${i}`]: opt }))}
+                        className="accent-primary"
+                      />
+                      <span>{opt}</span>
+                    </label>
+                  ))}
+                </div>
+              ) : (
+                <input
+                  className="w-full text-xs border border-input rounded px-2 py-1 bg-background outline-none focus:ring-1 focus:ring-ring"
+                  value={askAnswers[`q${i}`] ?? ""}
+                  onChange={(e) => setAskAnswers((p) => ({ ...p, [`q${i}`]: e.target.value }))}
+                  placeholder="请输入..."
+                />
+              )}
+            </div>
+          ))}
+          <button
+            onClick={handleAskSubmit}
+            className="mt-1 px-3 py-1 text-xs rounded bg-primary text-primary-foreground hover:bg-primary/90"
+          >
+            提交
+          </button>
         </div>
       )}
 

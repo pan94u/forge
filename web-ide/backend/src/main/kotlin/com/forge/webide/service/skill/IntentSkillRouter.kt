@@ -44,7 +44,7 @@ class IntentSkillRouter {
                 profileHint = "testing-profile"
             ),
             "@规划" to TagRoute(
-                skills = listOf("requirement-engineering", "document-generation", "delivery-methodology"),
+                skills = listOf("planning-mode", "requirement-engineering", "document-generation", "delivery-methodology"),
                 baselines = emptyList(),
                 mode = "default",
                 profileHint = "planning-profile"
@@ -116,6 +116,16 @@ class IntentSkillRouter {
             KeywordRoute(
                 keywords = listOf("bug", "修复", "fix", "报错", "异常", "exception", "error", "crash", "问题"),
                 skills = listOf("bug-fix-workflow"),
+                confidence = 0.85,
+                profileHint = "development-profile"
+            ),
+            KeywordRoute(
+                keywords = listOf(
+                    "帮我实现", "帮我做", "帮我完成", "帮我重构", "帮我开发", "帮我加", "帮我增加", "帮我升级",
+                    "重构整个", "实现整个", "完整实现", "全面改造", "整体迁移", "整个模块", "所有文件",
+                    "planning mode", "任务拆解", "分步骤执行"
+                ),
+                skills = listOf("planning-mode", "delivery-methodology", "code-generation"),
                 confidence = 0.85,
                 profileHint = "development-profile"
             ),

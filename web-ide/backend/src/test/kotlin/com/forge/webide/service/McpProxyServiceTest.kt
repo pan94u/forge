@@ -46,6 +46,7 @@ class McpProxyServiceTest {
     private val knowledgeIndexService = mockk<KnowledgeIndexService>(relaxed = true)
     private val skillQualityHookService = mockk<SkillQualityHookService>(relaxed = true)
     private val knowledgeExtractionService = mockk<KnowledgeExtractionService>(relaxed = true)
+    private val planConfirmService = mockk<PlanConfirmService>(relaxed = true)
 
     private lateinit var workspaceService: WorkspaceService
     private lateinit var service: McpProxyService
@@ -84,8 +85,9 @@ class McpProxyServiceTest {
         val workspaceToolHandler = WorkspaceToolHandler(workspaceService, runtimeService, gitService, gitConfirmService)
         val skillToolHandler = SkillToolHandler(skillLoader, skillUsageRepository, skillQualityHookService)
         val memoryToolHandler = MemoryToolHandler(workspaceMemoryService, sessionSummaryService, workspaceService)
+        val planToolHandler = PlanToolHandler(planConfirmService, com.fasterxml.jackson.databind.ObjectMapper())
 
-        service = McpProxyService(builtinToolHandler, workspaceToolHandler, skillToolHandler, memoryToolHandler)
+        service = McpProxyService(builtinToolHandler, workspaceToolHandler, skillToolHandler, memoryToolHandler, planToolHandler)
     }
 
     // --- Default Tool Tests ---
@@ -94,7 +96,7 @@ class McpProxyServiceTest {
     fun `listTools returns default tools when no servers configured`() {
         val tools = service.listTools()
 
-        assertThat(tools).hasSizeGreaterThanOrEqualTo(14) // 9 original + 3 skill tools + 2 memory tools
+        assertThat(tools).hasSizeGreaterThanOrEqualTo(18) // original + skill tools + memory tools + 4 plan tools
         assertThat(tools.map { it.name }).contains(
             "search_knowledge",
             "read_file",
@@ -654,5 +656,119 @@ class McpProxyServiceTest {
 
         val formatted = McpProxyService.formatResult(response)
         assertThat(formatted).contains("[Resource:")
+    }
+
+    // --- Plan Tool Tests ---
+
+    @Test
+    fun `listTools includes all 4 plan tools`() {
+        val tools = service.listTools()
+        val toolNames = tools.map { it.name }
+
+        assertThat(toolNames).contains(
+            "plan_create",
+            "plan_update_task",
+            "plan_ask_user",
+            "plan_complete"
+        )
+    }
+
+    @Test
+    fun `plan_create tool has correct schema`() {
+        val tools = service.listTools()
+        val planCreate = tools.first { it.name == "plan_create" }
+
+        assertThat(planCreate.description).containsIgnoringCase("plan")
+        @Suppress("UNCHECKED_CAST")
+        val properties = planCreate.inputSchema["properties"] as Map<String, Any?>
+        assertThat(properties).containsKey("tasks")
+        val required = planCreate.inputSchema["required"]
+        assertThat(required.toString()).contains("tasks")
+    }
+
+    @Test
+    fun `plan_update_task tool has taskId and status in schema`() {
+        val tools = service.listTools()
+        val planUpdate = tools.first { it.name == "plan_update_task" }
+
+        @Suppress("UNCHECKED_CAST")
+        val properties = planUpdate.inputSchema["properties"] as Map<String, Any?>
+        assertThat(properties).containsKey("taskId")
+        assertThat(properties).containsKey("status")
+        assertThat(properties).containsKey("detail")
+    }
+
+    @Test
+    fun `plan_ask_user tool has questions in schema`() {
+        val tools = service.listTools()
+        val planAsk = tools.first { it.name == "plan_ask_user" }
+
+        @Suppress("UNCHECKED_CAST")
+        val properties = planAsk.inputSchema["properties"] as Map<String, Any?>
+        assertThat(properties).containsKey("questions")
+    }
+
+    @Test
+    fun `plan_complete tool has summary and suggestions in schema`() {
+        val tools = service.listTools()
+        val planComplete = tools.first { it.name == "plan_complete" }
+
+        @Suppress("UNCHECKED_CAST")
+        val properties = planComplete.inputSchema["properties"] as Map<String, Any?>
+        assertThat(properties).containsKey("summary")
+        assertThat(properties).containsKey("suggestions")
+    }
+
+    @Test
+    fun `callTool routes plan_update_task to PlanToolHandler`() {
+        // plan_update_task is fire-and-forget — no mock setup needed for planConfirmService
+        val capturedEvents = mutableListOf<Map<String, Any?>>()
+
+        val result = service.callTool(
+            "plan_update_task",
+            mapOf("taskId" to "task-001", "status" to "done"),
+            workspaceId = null,
+            sessionId = "sess-test",
+            onEvent = { capturedEvents.add(it) }
+        )
+
+        assertThat(result.isError).isFalse()
+        assertThat(capturedEvents).hasSize(1)
+        assertThat(capturedEvents[0]["type"]).isEqualTo("plan_task_update")
+        assertThat(capturedEvents[0]["taskId"]).isEqualTo("task-001")
+        assertThat(capturedEvents[0]["status"]).isEqualTo("done")
+    }
+
+    @Test
+    fun `callTool routes plan_complete to PlanToolHandler`() {
+        val capturedEvents = mutableListOf<Map<String, Any?>>()
+
+        val result = service.callTool(
+            "plan_complete",
+            mapOf("summary" to "All tasks done.", "suggestions" to listOf("Add tests")),
+            workspaceId = null,
+            sessionId = "sess-test",
+            onEvent = { capturedEvents.add(it) }
+        )
+
+        assertThat(result.isError).isFalse()
+        assertThat(capturedEvents).hasSize(1)
+        assertThat(capturedEvents[0]["type"]).isEqualTo("plan_summary")
+        assertThat(capturedEvents[0]["content"]).isEqualTo("All tasks done.")
+    }
+
+    @Test
+    fun `callTool plan_create without sessionId still routes to PlanToolHandler`() {
+        // plan_create with missing tasks param → returns error from PlanToolHandler
+        val result = service.callTool(
+            "plan_create",
+            emptyMap(),
+            workspaceId = null,
+            sessionId = "",
+            onEvent = null
+        )
+
+        assertThat(result.isError).isTrue()
+        assertThat(result.content[0].text).contains("tasks")
     }
 }

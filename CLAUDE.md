@@ -98,6 +98,10 @@ Forge is a Gradle monorepo (Kotlin DSL) with the following modules:
 | update_workspace_memory | memory | Agent 主动更新 workspace 记忆 |
 | get_session_history | memory | 读取历史 session 摘要 |
 | analyze_codebase | memory | 对 workspace 执行结构分析，返回 JSON |
+| plan_create | planning | 提交任务计划，等待用户确认后开始执行 |
+| plan_update_task | planning | 更新单个任务状态（in_progress/done/failed/blocked）|
+| plan_ask_user | planning | 向用户提选择题+问答题，阻塞等待回答 |
+| plan_complete | planning | 提交执行总结并写入记忆 |
 
 **注意**: workspace 工具通过 `callTool(name, args, workspaceId)` 三参数版调用，workspaceId 从 arguments 中提取。
 

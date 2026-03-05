@@ -175,6 +175,18 @@ Concrete implementation decisions ready for execution.
 
 Generate the code:
 
+### ⚠️ STOP: Planning Mode Gate
+
+**在执行任何代码生成之前，必须先判断是否触发 Planning Mode。**
+
+- 需求中含"实现/重构/完成/做/开发/加入/升级"等大范围词汇 → **必须**先调用 `plan_create`
+- 涉及 3+ 文件或预计 100+ 行改动 → **必须**先调用 `plan_create`
+- 需求模糊 → **必须**先调用 `plan_ask_user`
+
+> **🚫 禁止在 `plan_create` 返回 "Plan approved" 之前调用 `workspace_write_file`**
+
+如已确认是小任务（单文件 / <50 行），可跳过此检查，直接执行以下步骤。
+
 ### Step 1: Data Layer
 1. Create/modify entity classes matching the database schema design
 2. Create/modify repository interfaces

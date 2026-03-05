@@ -20,6 +20,7 @@ class OrgConfigServiceTest {
     private lateinit var dbConnectionRepository: OrgDbConnectionRepository
     private lateinit var envConfigRepository: OrgEnvConfigRepository
     private lateinit var encryptionService: EncryptionService
+    private lateinit var networkConfigService: NetworkConfigService
     private lateinit var service: OrgConfigService
 
     @BeforeEach
@@ -28,7 +29,8 @@ class OrgConfigServiceTest {
         dbConnectionRepository = mockk(relaxed = true)
         envConfigRepository = mockk(relaxed = true)
         encryptionService = mockk(relaxed = true)
-        service = OrgConfigService(modelConfigRepository, dbConnectionRepository, envConfigRepository, encryptionService)
+        networkConfigService = mockk(relaxed = true)
+        service = OrgConfigService(modelConfigRepository, dbConnectionRepository, envConfigRepository, encryptionService, networkConfigService)
     }
 
     // =========================================================================

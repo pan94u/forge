@@ -49,6 +49,62 @@ If routing is ambiguous, default to the **Development Profile** — it is the mo
 
 ---
 
+## ⚠️ Planning Mode Gate（大任务强制检查 — 优先于 OODA）
+
+**在开始任何 OODA 循环之前，必须先完成本节检查。**
+
+### 强制触发条件（满足任一 → 必须进入 Planning Mode）
+
+| 条件 | 示例 |
+|------|------|
+| 需求描述包含"帮我实现/做/完成/重构/开发/加入/增加/升级"等大范围词汇 | "帮我重构整个认证模块" |
+| 涉及 3 个以上文件或模块 | "修改 Service + Controller + 前端" |
+| 预计改动超过 100 行代码 | 新功能、架构变更 |
+| 任务分多个阶段或存在依赖关系 | "先做X，然后Y，最后Z" |
+| 需求描述模糊，需澄清范围 | "优化一下性能" |
+
+### 强制执行规则（MANDATORY）
+
+> **✅ MUST**: 满足上述任一条件时，**第一个工具调用必须是 `plan_ask_user` 或 `plan_create`**。
+>
+> **🚫 FORBIDDEN**: 在 `plan_create` 返回 `"Plan approved"` 之前，**禁止调用以下工具**：
+> - `workspace_write_file`
+> - `workspace_compile`
+> - `workspace_test`
+>
+> 违反此规则 = 绕过用户确认 = 错误行为。
+
+### Planning Mode 工作流
+
+**Step 0 — 意图澄清（仅当需求不明确时）**
+调用 `plan_ask_user`，提问内容：
+- 选择题：范围/技术方案/优先级
+- 问答题：约束条件/背景信息
+
+**Step 1 — 拆解任务**
+将需求分解为有序任务列表，每个任务包含：
+- 任务标题（≤20字）、涉及文件、成功标准、预计改动行数
+
+若预计 context 超 300k tokens，先用 `update_workspace_memory` 记录整体计划。
+
+**Step 2 — 提交计划，等待确认**
+调用 `plan_create(tasks)`，等待用户点击「开始执行」。
+**未获确认前不执行任何代码修改工具。**
+
+**Step 3 — 逐任务执行（带验证）**
+每个任务：
+1. `plan_update_task(taskId, "in_progress")`
+2. 执行工具调用
+3. 验证成功标准
+4. 成功 → `plan_update_task(taskId, "done")`
+5. 连续失败 3 次 → `plan_update_task(taskId, "blocked")` + `plan_ask_user` 求助
+
+**Step 4 — 完成总结**
+调用 `plan_complete(summary)`，包含：完成数/失败数/关键决策/建议下一步。
+调用 `update_workspace_memory` 写入长期记忆。
+
+---
+
 ## OODA Loop Instructions
 
 Every task execution follows the OODA cycle. This is non-negotiable.
@@ -105,6 +161,8 @@ Make explicit decisions and communicate them:
 **Output**: A step-by-step execution plan.
 
 ### Act
+
+⚠️ **Planning Mode Gate（执行前必须检查）**: 进入 Act 前，先确认是否已完成 Planning Mode 流程（见文件顶部 "Planning Mode Gate" 章节）。若满足大任务条件但尚未调用 `plan_create`，**立即调用 `plan_create` 而非继续以下步骤**。
 
 Execute the plan with discipline:
 

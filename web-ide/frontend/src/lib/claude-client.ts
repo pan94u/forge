@@ -1,5 +1,20 @@
 export type OodaPhase = "observe" | "orient" | "decide" | "act" | "complete";
 
+export interface PlanTask {
+  id: string;
+  title: string;
+  files: string[];
+  successCriteria?: string;
+  estimatedLines?: number;
+  status: "pending" | "in_progress" | "done" | "failed" | "blocked";
+}
+
+export interface PlanQuestion {
+  type: "choice" | "text";
+  question: string;
+  options?: string[];
+}
+
 export interface IntentOption {
   id: string;
   label: string;
@@ -22,9 +37,14 @@ export interface StreamEvent {
     | "baseline_check"
     | "hitl_checkpoint"
     | "context_usage"
+    | "context_warning"
     | "intent_confirmation"
     | "skills_activated"
-    | "git_confirm";
+    | "git_confirm"
+    | "plan_ready"
+    | "plan_task_update"
+    | "plan_ask"
+    | "plan_summary";
   content?: string;
   skills?: string[];
   toolCallId?: string;
@@ -67,6 +87,19 @@ export interface StreamEvent {
   // git_confirm fields
   gitConfirmTool?: string;
   gitConfirmPreview?: string;
+  // context_warning fields
+  totalTokens?: number;
+  recommendation?: string;
+  // plan_ready fields
+  planId?: string;
+  tasks?: PlanTask[];
+  // plan_task_update fields
+  taskId?: string;
+  // plan_ask fields
+  askId?: string;
+  questions?: PlanQuestion[];
+  // plan_summary fields
+  suggestions?: string[];
 }
 
 export type HitlAction = "approve" | "reject" | "modify";

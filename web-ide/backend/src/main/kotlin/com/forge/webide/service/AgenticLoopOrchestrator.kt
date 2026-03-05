@@ -82,6 +82,15 @@ class AgenticLoopOrchestrator(
                 "turn" to turn
             ))
 
+            // Warn when context exceeds 300k tokens — suggest splitting into a new session
+            if (currentTokens > 300_000) {
+                onEvent(mapOf(
+                    "type" to "context_warning",
+                    "totalTokens" to currentTokens,
+                    "recommendation" to "当前任务上下文已超 300k tokens，建议将后续任务拆分到新 Session 完成，关键进度已记录至 workspace memory。"
+                ))
+            }
+
             // Accumulate events from this turn
             var turnText = StringBuilder()
             var currentToolUses = mutableListOf<PendingToolUse>()

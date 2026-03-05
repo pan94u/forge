@@ -24,7 +24,8 @@ class McpProxyService(
     private val builtinToolHandler: BuiltinToolHandler,
     private val workspaceToolHandler: WorkspaceToolHandler,
     private val skillToolHandler: SkillToolHandler,
-    private val memoryToolHandler: MemoryToolHandler
+    private val memoryToolHandler: MemoryToolHandler,
+    private val planToolHandler: PlanToolHandler
 ) {
 
     private val logger = LoggerFactory.getLogger(McpProxyService::class.java)
@@ -107,6 +108,11 @@ class McpProxyService(
         // Route memory tools that have workspace context
         if (toolName in MEMORY_TOOLS && resolvedWsId != null) {
             return memoryToolHandler.handle(toolName, arguments, resolvedWsId)
+        }
+
+        // Route plan tools (need sessionId and onEvent for blocking confirmation flows)
+        if (toolName.startsWith("plan_")) {
+            return planToolHandler.handle(toolName, arguments, sessionId, onEvent)
         }
 
         return callTool(toolName, arguments)
@@ -205,6 +211,7 @@ class McpProxyService(
                 toolName in SKILL_TOOLS -> skillToolHandler.handle(toolName, arguments, null)
                 toolName in MEMORY_TOOLS -> memoryToolHandler.handle(toolName, arguments, null)
                 toolName.startsWith("workspace_") -> workspaceToolHandler.handle(toolName, arguments, null)
+                toolName.startsWith("plan_") -> planToolHandler.handle(toolName, arguments, "", null)
                 else -> McpToolCallResponse(
                     content = listOf(McpContent(
                         type = "text",
@@ -527,6 +534,84 @@ class McpProxyService(
                         "list" to mapOf("type" to "boolean", "description" to "If true, list all branches instead of creating")
                     )
                 )
+            ),
+            McpTool(
+                name = "plan_create",
+                description = "Submit an ordered task list for the current large task and wait for user confirmation before executing. Use this when the task involves >100 lines of changes or 3+ files. The user will see a plan card and click '开始执行' to approve. Do NOT call any code-writing tools until plan_create returns 'Plan approved'.",
+                inputSchema = mapOf(
+                    "type" to "object",
+                    "properties" to mapOf(
+                        "tasks" to mapOf(
+                            "type" to "array",
+                            "description" to "Ordered list of tasks to execute",
+                            "items" to mapOf(
+                                "type" to "object",
+                                "properties" to mapOf(
+                                    "id" to mapOf("type" to "string", "description" to "Unique task ID (e.g. 'task-001')"),
+                                    "title" to mapOf("type" to "string", "description" to "Task title (≤20 characters)"),
+                                    "files" to mapOf("type" to "array", "items" to mapOf("type" to "string"), "description" to "Main files to be modified"),
+                                    "successCriteria" to mapOf("type" to "string", "description" to "Verifiable success criteria (e.g. 'workspace_compile returns zero errors')"),
+                                    "estimatedLines" to mapOf("type" to "integer", "description" to "Estimated lines of code to add/modify"),
+                                    "dependsOn" to mapOf("type" to "array", "items" to mapOf("type" to "string"), "description" to "Task IDs this task depends on (optional)")
+                                ),
+                                "required" to listOf("id", "title", "files", "successCriteria", "estimatedLines")
+                            )
+                        )
+                    ),
+                    "required" to listOf("tasks")
+                )
+            ),
+            McpTool(
+                name = "plan_update_task",
+                description = "Update the status of a single task in the current plan. Call this before and after executing each task to keep the plan card in sync.",
+                inputSchema = mapOf(
+                    "type" to "object",
+                    "properties" to mapOf(
+                        "taskId" to mapOf("type" to "string", "description" to "Task ID from the plan (e.g. 'task-001')"),
+                        "status" to mapOf(
+                            "type" to "string",
+                            "enum" to listOf("pending", "in_progress", "done", "failed", "blocked"),
+                            "description" to "New task status"
+                        ),
+                        "detail" to mapOf("type" to "string", "description" to "Optional detail message (e.g. retry count, error summary)")
+                    ),
+                    "required" to listOf("taskId", "status")
+                )
+            ),
+            McpTool(
+                name = "plan_ask_user",
+                description = "Ask the user clarifying questions (choice or free-text) and wait for their answers before proceeding. Use this at the start when intent is unclear, or when a blocked task needs user guidance.",
+                inputSchema = mapOf(
+                    "type" to "object",
+                    "properties" to mapOf(
+                        "questions" to mapOf(
+                            "type" to "array",
+                            "description" to "List of questions (max 3)",
+                            "items" to mapOf(
+                                "type" to "object",
+                                "properties" to mapOf(
+                                    "type" to mapOf("type" to "string", "enum" to listOf("choice", "text"), "description" to "Question type"),
+                                    "question" to mapOf("type" to "string", "description" to "The question text"),
+                                    "options" to mapOf("type" to "array", "items" to mapOf("type" to "string"), "description" to "Answer options (required when type=choice)")
+                                ),
+                                "required" to listOf("type", "question")
+                            )
+                        )
+                    ),
+                    "required" to listOf("questions")
+                )
+            ),
+            McpTool(
+                name = "plan_complete",
+                description = "Submit the final execution summary after all plan tasks are done. Renders a summary card in the UI. Always call this at the end of a Planning Mode execution.",
+                inputSchema = mapOf(
+                    "type" to "object",
+                    "properties" to mapOf(
+                        "summary" to mapOf("type" to "string", "description" to "Markdown summary with three sections: 做了什么 (What), 遇到什么 (Issues), 建议什么 (Next Steps)"),
+                        "suggestions" to mapOf("type" to "array", "items" to mapOf("type" to "string"), "description" to "List of next-step suggestions (at least 2)")
+                    ),
+                    "required" to listOf("summary")
+                )
             )
         )
     }
@@ -566,7 +651,11 @@ class McpProxyService(
             "update_workspace_memory", "get_session_history", "analyze_codebase"
         )
 
-        private val ALL_TOOLS = BUILTIN_TOOLS + SKILL_TOOLS + MEMORY_TOOLS + setOf(
+        private val PLAN_TOOLS = setOf(
+            "plan_create", "plan_update_task", "plan_ask_user", "plan_complete"
+        )
+
+        private val ALL_TOOLS = BUILTIN_TOOLS + SKILL_TOOLS + MEMORY_TOOLS + PLAN_TOOLS + setOf(
             "workspace_write_file", "workspace_read_file", "workspace_list_files",
             "workspace_compile", "workspace_test",
             "workspace_start_service", "workspace_stop_service",
