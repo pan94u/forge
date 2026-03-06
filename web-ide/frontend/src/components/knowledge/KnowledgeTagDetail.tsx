@@ -36,11 +36,23 @@ function extractToc(markdown: string): TocEntry[] {
   return entries;
 }
 
+/** 修复 AI 生成 mermaid 常见语法问题 */
+function sanitizeMermaid(code: string): string {
+  return code
+    .replace(/：/g, ":")   // 全角冒号 → 半角
+    .replace(/（/g, "(")   // 全角左括号
+    .replace(/）/g, ")")   // 全角右括号
+    .replace(/，/g, ",")   // 全角逗号
+    .replace(/。/g, ".")   // 全角句号
+    .replace(/\r\n/g, "\n"); // 统一换行符
+}
+
 function MermaidBlock({ code, id }: { code: string; id: string }) {
   const containerRef = React.useRef<HTMLDivElement>(null);
   const viewportRef = React.useRef<HTMLDivElement>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(true);
+  const [showSource, setShowSource] = React.useState(false);
   const [zoom, setZoom] = React.useState(1);
   const [fitZoom, setFitZoom] = React.useState(1);
   const [pan, setPan] = React.useState({ x: 0, y: 0 });
@@ -50,18 +62,19 @@ function MermaidBlock({ code, id }: { code: string; id: string }) {
 
   React.useEffect(() => {
     let cancelled = false;
-    // 切换图表时重置所有状态
     setLoading(true);
     setError(null);
+    setShowSource(false);
     setZoom(1);
     setFitZoom(1);
     setPan({ x: 0, y: 0 });
 
     const safeId = `mermaid-kd-${id.replace(/[^a-zA-Z0-9]/g, "-")}`;
+    const sanitized = sanitizeMermaid(code);
     import("mermaid").then(({ default: mermaid }) => {
       mermaid.initialize({ startOnLoad: false, theme: "dark", securityLevel: "loose" });
       mermaid
-        .render(safeId, code)
+        .render(safeId, sanitized)
         .then(({ svg }: { svg: string }) => {
           if (!cancelled && containerRef.current && viewportRef.current) {
             containerRef.current.innerHTML = svg;
@@ -157,11 +170,27 @@ function MermaidBlock({ code, id }: { code: string; id: string }) {
             <div className="h-5 w-5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
           </div>
         ) : error ? (
-          <pre className="overflow-auto h-full p-4 text-xs text-destructive whitespace-pre-wrap">
-            {error}
-            {"\n\n--- source ---\n"}
-            {code}
-          </pre>
+          <div className="p-4 space-y-3">
+            <div className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-3">
+              <span className="mt-0.5 text-destructive text-xs">⚠</span>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-medium text-destructive">Mermaid 语法错误</p>
+                <p className="mt-1 text-xs text-muted-foreground break-words">{error}</p>
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground">可点击上方「Re-extract」重新生成，或「Edit」手动修正。</p>
+            <button
+              onClick={() => setShowSource((v) => !v)}
+              className="text-xs text-muted-foreground hover:text-foreground underline"
+            >
+              {showSource ? "收起源码" : "查看源码"}
+            </button>
+            {showSource && (
+              <pre className="overflow-auto max-h-60 rounded bg-[#111] p-3 text-xs text-muted-foreground whitespace-pre-wrap">
+                {code}
+              </pre>
+            )}
+          </div>
         ) : (
           <div
             ref={containerRef}
