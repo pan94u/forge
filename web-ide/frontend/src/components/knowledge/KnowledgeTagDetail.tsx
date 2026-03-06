@@ -38,24 +38,55 @@ function extractToc(markdown: string): TocEntry[] {
 
 function MermaidBlock({ code, id }: { code: string; id: string }) {
   const containerRef = React.useRef<HTMLDivElement>(null);
+  const viewportRef = React.useRef<HTMLDivElement>(null);
   const [error, setError] = React.useState<string | null>(null);
+  const [loading, setLoading] = React.useState(true);
   const [zoom, setZoom] = React.useState(1);
+  const [fitZoom, setFitZoom] = React.useState(1);
   const [pan, setPan] = React.useState({ x: 0, y: 0 });
   const [dragging, setDragging] = React.useState(false);
   const [dragStart, setDragStart] = React.useState({ x: 0, y: 0 });
+  const [containerHeight, setContainerHeight] = React.useState(320);
 
   React.useEffect(() => {
     let cancelled = false;
+    // 切换图表时重置所有状态
+    setLoading(true);
+    setError(null);
+    setZoom(1);
+    setFitZoom(1);
+    setPan({ x: 0, y: 0 });
+
     const safeId = `mermaid-kd-${id.replace(/[^a-zA-Z0-9]/g, "-")}`;
     import("mermaid").then(({ default: mermaid }) => {
       mermaid.initialize({ startOnLoad: false, theme: "dark", securityLevel: "loose" });
       mermaid
         .render(safeId, code)
         .then(({ svg }: { svg: string }) => {
-          if (!cancelled && containerRef.current) containerRef.current.innerHTML = svg;
+          if (!cancelled && containerRef.current && viewportRef.current) {
+            containerRef.current.innerHTML = svg;
+
+            // 从 viewBox 计算自适应缩放和容器高度
+            const svgEl = containerRef.current.querySelector("svg");
+            if (svgEl) {
+              const vb = svgEl.viewBox?.baseVal;
+              if (vb && vb.width > 0 && vb.height > 0) {
+                const vpWidth = viewportRef.current.clientWidth || 700;
+                const fit = Math.min(1, (vpWidth - 32) / vb.width);
+                const h = Math.min(560, Math.max(200, vb.height * fit + 32));
+                setContainerHeight(h);
+                setZoom(fit);
+                setFitZoom(fit);
+              }
+            }
+            setLoading(false);
+          }
         })
         .catch((err: Error) => {
-          if (!cancelled) setError(err.message);
+          if (!cancelled) {
+            setError(err.message);
+            setLoading(false);
+          }
         });
     });
     return () => { cancelled = true; };
@@ -86,8 +117,9 @@ function MermaidBlock({ code, id }: { code: string; id: string }) {
             −
           </button>
           <button
-            onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }); }}
+            onClick={() => { setZoom(fitZoom); setPan({ x: 0, y: 0 }); }}
             className="rounded px-1.5 py-0.5 text-xs text-muted-foreground hover:bg-accent"
+            title="Reset to fit"
           >
             {Math.round(zoom * 100)}%
           </button>
@@ -106,9 +138,11 @@ function MermaidBlock({ code, id }: { code: string; id: string }) {
         </div>
       </div>
       <div
-        className="overflow-hidden bg-[#1e1e1e] cursor-grab active:cursor-grabbing"
-        style={{ height: 320 }}
+        ref={viewportRef}
+        className="overflow-hidden bg-[#1e1e1e]"
+        style={{ height: loading ? 120 : containerHeight }}
         onMouseDown={(e) => {
+          if (error) return;
           setDragging(true);
           setDragStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
         }}
@@ -118,10 +152,14 @@ function MermaidBlock({ code, id }: { code: string; id: string }) {
         onMouseUp={() => setDragging(false)}
         onMouseLeave={() => setDragging(false)}
       >
-        {error ? (
-          <pre className="p-4 text-xs text-destructive">
+        {loading ? (
+          <div className="flex h-full items-center justify-center">
+            <div className="h-5 w-5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+          </div>
+        ) : error ? (
+          <pre className="overflow-auto h-full p-4 text-xs text-destructive whitespace-pre-wrap">
             {error}
-            {"\n\n"}
+            {"\n\n--- source ---\n"}
             {code}
           </pre>
         ) : (
@@ -131,6 +169,7 @@ function MermaidBlock({ code, id }: { code: string; id: string }) {
             style={{
               transform: `translate(${pan.x}px,${pan.y}px) scale(${zoom})`,
               transformOrigin: "center center",
+              cursor: dragging ? "grabbing" : "grab",
             }}
           />
         )}
