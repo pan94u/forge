@@ -34,7 +34,8 @@ class KnowledgeTagService(
         ChapterDef(3, "arch-decision", "架构决策基线", "四、架构决策基线"),
         ChapterDef(4, "verification", "验证状态", "五、验证状态"),
         ChapterDef(5, "frontend-spec", "前端设计规范", "六、前端设计规范（开发参考）"),
-        ChapterDef(6, "change-rules", "变更规则", "七、变更规则")
+        ChapterDef(6, "change-rules", "变更规则", "七、变更规则"),
+        ChapterDef(7, "flow-diagrams", "业务流程图", "八、业务流程图")
     )
 
     init {
@@ -49,8 +50,8 @@ class KnowledgeTagService(
         if (workspaceId.isNullOrBlank()) {
             return knowledgeTagRepository.findByWorkspaceIdIsNullOrderBySortOrderAsc().map { it.toModel() }
         }
-        // Auto-initialize workspace tags on first access
-        if (knowledgeTagRepository.countByWorkspaceId(workspaceId) == 0L) {
+        // Auto-initialize workspace tags on first access, or backfill when new tags are added
+        if (knowledgeTagRepository.countByWorkspaceId(workspaceId) < chapterDefs.size) {
             // BUG-051: Guard against orphan tag rebuild after workspace deletion
             if (!workspaceRepository.existsById(workspaceId)) return emptyList()
             initializeWorkspaceTags(workspaceId)
@@ -213,7 +214,7 @@ class KnowledgeTagService(
     // =========================================================================
 
     private fun splitChapters(content: String): List<Pair<ChapterDef, String>> {
-        val chapterPattern = Regex("^## [一二三四五六七]、", RegexOption.MULTILINE)
+        val chapterPattern = Regex("^## [一二三四五六七八]、", RegexOption.MULTILINE)
         val matches = chapterPattern.findAll(content).toList()
 
         if (matches.isEmpty()) return emptyList()

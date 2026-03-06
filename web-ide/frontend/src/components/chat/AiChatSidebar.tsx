@@ -639,7 +639,7 @@ export function AiChatSidebar({
     try {
       await fetch(`/api/workspaces/plan-approve/${sessionId}/${planState.planId}`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...getAuthHeaders() },
         body: JSON.stringify({ action: "APPROVED" }),
       });
       setPlanState((p) => (p ? { ...p, approved: true } : null));
@@ -653,7 +653,7 @@ export function AiChatSidebar({
     try {
       await fetch(`/api/workspaces/plan-approve/${sessionId}/${planState.planId}`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...getAuthHeaders() },
         body: JSON.stringify({ action: "CANCELLED" }),
       });
       setPlanState(null);
@@ -667,7 +667,7 @@ export function AiChatSidebar({
     try {
       await fetch(`/api/workspaces/plan-answer/${sessionId}/${planAsk.askId}`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...getAuthHeaders() },
         body: JSON.stringify({ answers: askAnswers }),
       });
       setPlanAsk(null);

@@ -36,6 +36,109 @@ function extractToc(markdown: string): TocEntry[] {
   return entries;
 }
 
+function MermaidBlock({ code, id }: { code: string; id: string }) {
+  const containerRef = React.useRef<HTMLDivElement>(null);
+  const [error, setError] = React.useState<string | null>(null);
+  const [zoom, setZoom] = React.useState(1);
+  const [pan, setPan] = React.useState({ x: 0, y: 0 });
+  const [dragging, setDragging] = React.useState(false);
+  const [dragStart, setDragStart] = React.useState({ x: 0, y: 0 });
+
+  React.useEffect(() => {
+    let cancelled = false;
+    const safeId = `mermaid-kd-${id.replace(/[^a-zA-Z0-9]/g, "-")}`;
+    import("mermaid").then(({ default: mermaid }) => {
+      mermaid.initialize({ startOnLoad: false, theme: "dark", securityLevel: "loose" });
+      mermaid
+        .render(safeId, code)
+        .then(({ svg }: { svg: string }) => {
+          if (!cancelled && containerRef.current) containerRef.current.innerHTML = svg;
+        })
+        .catch((err: Error) => {
+          if (!cancelled) setError(err.message);
+        });
+    });
+    return () => { cancelled = true; };
+  }, [code, id]);
+
+  const exportSvg = () => {
+    const svgEl = containerRef.current?.querySelector("svg");
+    if (!svgEl) return;
+    const a = Object.assign(document.createElement("a"), {
+      href: URL.createObjectURL(
+        new Blob([new XMLSerializer().serializeToString(svgEl)], { type: "image/svg+xml" })
+      ),
+      download: `flow-diagram-${id}.svg`,
+    });
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
+
+  return (
+    <div className="my-4 rounded-md border border-border overflow-hidden">
+      <div className="flex items-center justify-between border-b border-border px-3 py-1.5 bg-[#1a1a1a]">
+        <span className="text-xs text-muted-foreground">mermaid</span>
+        <div className="flex gap-1">
+          <button
+            onClick={() => setZoom((z) => Math.max(0.25, z - 0.25))}
+            className="rounded px-1.5 py-0.5 text-xs text-muted-foreground hover:bg-accent"
+          >
+            −
+          </button>
+          <button
+            onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }); }}
+            className="rounded px-1.5 py-0.5 text-xs text-muted-foreground hover:bg-accent"
+          >
+            {Math.round(zoom * 100)}%
+          </button>
+          <button
+            onClick={() => setZoom((z) => Math.min(3, z + 0.25))}
+            className="rounded px-1.5 py-0.5 text-xs text-muted-foreground hover:bg-accent"
+          >
+            +
+          </button>
+          <button
+            onClick={exportSvg}
+            className="rounded px-1.5 py-0.5 text-xs text-muted-foreground hover:bg-accent"
+          >
+            SVG
+          </button>
+        </div>
+      </div>
+      <div
+        className="overflow-hidden bg-[#1e1e1e] cursor-grab active:cursor-grabbing"
+        style={{ height: 320 }}
+        onMouseDown={(e) => {
+          setDragging(true);
+          setDragStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
+        }}
+        onMouseMove={(e) => {
+          if (dragging) setPan({ x: e.clientX - dragStart.x, y: e.clientY - dragStart.y });
+        }}
+        onMouseUp={() => setDragging(false)}
+        onMouseLeave={() => setDragging(false)}
+      >
+        {error ? (
+          <pre className="p-4 text-xs text-destructive">
+            {error}
+            {"\n\n"}
+            {code}
+          </pre>
+        ) : (
+          <div
+            ref={containerRef}
+            className="flex h-full items-center justify-center [&_svg]:max-w-none"
+            style={{
+              transform: `translate(${pan.x}px,${pan.y}px) scale(${zoom})`,
+              transformOrigin: "center center",
+            }}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
 function renderDocMarkdown(content: string): React.ReactNode {
   const lines = content.split("\n");
   const elements: React.ReactNode[] = [];
@@ -49,16 +152,23 @@ function renderDocMarkdown(content: string): React.ReactNode {
 
     if (line.startsWith("```")) {
       if (inCodeBlock) {
-        elements.push(
-          <div key={`code-${i}`} className="my-4 rounded-md border border-border bg-[#1e1e1e]">
-            <div className="border-b border-border px-3 py-1 text-xs text-muted-foreground">
-              {codeBlockLang || "code"}
+        const codeContent = codeLines.join("\n");
+        if (codeBlockLang === "mermaid") {
+          elements.push(
+            <MermaidBlock key={`mermaid-${i}`} code={codeContent} id={String(i)} />
+          );
+        } else {
+          elements.push(
+            <div key={`code-${i}`} className="my-4 rounded-md border border-border bg-[#1e1e1e]">
+              <div className="border-b border-border px-3 py-1 text-xs text-muted-foreground">
+                {codeBlockLang || "code"}
+              </div>
+              <pre className="overflow-x-auto p-4 text-sm">
+                <code>{codeContent}</code>
+              </pre>
             </div>
-            <pre className="overflow-x-auto p-4 text-sm">
-              <code>{codeLines.join("\n")}</code>
-            </pre>
-          </div>
-        );
+          );
+        }
         codeLines = [];
         inCodeBlock = false;
         codeBlockLang = "";

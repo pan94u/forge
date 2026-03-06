@@ -68,7 +68,7 @@ class KnowledgeTagServiceTest {
     @Test
     fun `listTags with workspaceId returns workspace tags`() {
         val wsId = "ws-123"
-        every { repository.countByWorkspaceId(wsId) } returns 7
+        every { repository.countByWorkspaceId(wsId) } returns 8
         val entities = listOf(
             makeEntity("${wsId}_ui-ux", "UI/UX 设计基线", 0, wsId, "ui-ux"),
             makeEntity("${wsId}_api-contract", "API 契约基线", 1, wsId, "api-contract")
@@ -83,6 +83,29 @@ class KnowledgeTagServiceTest {
     }
 
     @Test
+    fun `listTags backfills missing tags when count is less than chapterDefs size`() {
+        val wsId = "ws-partial"
+        every { repository.countByWorkspaceId(wsId) } returns 7  // has 7, needs 8
+        // 7 existing tags already present, only flow-diagrams is missing
+        every { repository.existsById("${wsId}_ui-ux") } returns true
+        every { repository.existsById("${wsId}_api-contract") } returns true
+        every { repository.existsById("${wsId}_data-model") } returns true
+        every { repository.existsById("${wsId}_arch-decision") } returns true
+        every { repository.existsById("${wsId}_verification") } returns true
+        every { repository.existsById("${wsId}_frontend-spec") } returns true
+        every { repository.existsById("${wsId}_change-rules") } returns true
+        every { repository.existsById("${wsId}_flow-diagrams") } returns false
+        every { repository.save(any()) } answers { firstArg() }
+        every { repository.findByWorkspaceIdOrderBySortOrderAsc(wsId) } returns emptyList()
+        every { workspaceRepository.existsById(wsId) } returns true
+
+        service.listTags(wsId)
+
+        // Should have saved exactly 1 missing tag (flow-diagrams)
+        verify(exactly = 1) { repository.save(match { it.workspaceId == wsId }) }
+    }
+
+    @Test
     fun `listTags auto-initializes workspace tags when count is 0`() {
         val wsId = "ws-new"
         every { repository.countByWorkspaceId(wsId) } returns 0
@@ -93,8 +116,8 @@ class KnowledgeTagServiceTest {
 
         service.listTags(wsId)
 
-        // Should have saved 7 tags (one per chapterDef)
-        verify(exactly = 7) { repository.save(match { it.workspaceId == wsId }) }
+        // Should have saved 8 tags (one per chapterDef)
+        verify(exactly = 8) { repository.save(match { it.workspaceId == wsId }) }
     }
 
     @Test

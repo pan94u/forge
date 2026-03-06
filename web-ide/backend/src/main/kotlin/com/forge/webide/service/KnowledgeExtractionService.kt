@@ -148,7 +148,8 @@ class KnowledgeExtractionService(
             val startMs = System.currentTimeMillis()
             try {
                 val keyFiles = discovery?.keyFiles ?: emptyList()
-                val content = runTagExtraction(workspaceId, tag, options, adapter, keyFiles)
+                val discoveryReason = if (tag.tagKey == "flow-diagrams") discovery?.reason else null
+                val content = runTagExtraction(workspaceId, tag, options, adapter, keyFiles, discoveryReason)
                 val durationMs = System.currentTimeMillis() - startMs
 
                 // Update tag with generated content
@@ -239,6 +240,15 @@ $tagListText
 - **verification**: *Test.*, *_test.*, *.test.ts, *.spec.ts, .github/workflows/, pytest.ini, jest.config.*
 - **frontend-spec**: package.json, next.config.*, vite.config.*, tailwind.config.*, webpack.config.*
 - **change-rules**: .github/workflows/, CONTRIBUTING.md, Makefile, .gitconfig, .husky/, CHANGELOG.md
+- **flow-diagrams**:
+  扫描所有 *Controller.*、*Service.*（排除 *Test.*、*Config.*、*Mock.*），按"业务域"分组
+  识别三类流程价值：
+    a) 有 status/state 字段且有多个枚举值 → stateDiagram 候选
+    b) Service 方法体 > 20 行，含多步调用链 → flowchart 候选
+    c) Controller 调用 2+ 个 Service → sequenceDiagram 候选
+  keyFiles 格式：每项 "域名/Controller文件路径" 和 "域名/Service文件路径"
+  reason 格式（必须遵守）："发现 N 个业务域｜预期流程: 流程1名称, 流程2名称, ..."（最多 12 个）
+  applicable=false 仅当代码库无 Controller/Service 层（纯脚本项目）
 
 ## 输出格式（必须是纯 JSON 数组，不含其他文字）
 ```json
@@ -336,9 +346,10 @@ $tagListText
         tag: KnowledgeTag,
         baseOptions: CompletionOptions,
         adapter: ModelAdapter? = null,
-        keyFiles: List<String> = emptyList()
+        keyFiles: List<String> = emptyList(),
+        discoveryReason: String? = null
     ): String {
-        val extractionPrompt = getExtractionPrompt(tag.tagKey ?: tag.id, tag.name, keyFiles)
+        val extractionPrompt = getExtractionPrompt(tag.tagKey ?: tag.id, tag.name, keyFiles, discoveryReason)
 
         val messages = listOf(
             Message(role = Message.Role.USER, content = "请分析 workspace 代码库，生成「${tag.name}」标准文档。")
@@ -365,7 +376,7 @@ $tagListText
     // Extraction prompt templates
     // =========================================================================
 
-    private fun getExtractionPrompt(tagId: String, tagName: String, keyFiles: List<String> = emptyList()): String {
+    private fun getExtractionPrompt(tagId: String, tagName: String, keyFiles: List<String> = emptyList(), discoveryReason: String? = null): String {
         val keyFilesHint = if (keyFiles.isNotEmpty()) {
             """
 ## 优先读取的关键文件（Discovery 阶段已定位）
@@ -709,6 +720,55 @@ $keyFilesHint
 - 规范中描述但未实际落地的流程
 - 配置漂移风险
 """.trim()
+
+            "flow-diagrams" -> {
+                val discoveryReasonBlock = if (!discoveryReason.isNullOrBlank()) {
+                    """
+**Discovery 阶段预分析结果**（直接使用，无需重新 analyze_codebase）：
+$discoveryReason
+
+""".trimIndent()
+                } else {
+                    "（Discovery 未提供预分析，请先用 analyze_codebase 获取整体结构，再按业务域选择性读取关键文件）\n\n"
+                }
+                """
+## 专项要求——业务流程图
+
+**核心原则**：
+- 只基于实际读取的代码生成，不猜测、不编造
+- 每个流程图引用真实函数名、状态枚举值、端点路径
+- 最多生成 12 个流程图，按业务重要性排序（核心链路优先）
+- 每个图独立可理解
+
+**利用 Discovery 预分析（无需重新 analyze_codebase）**：
+$discoveryReasonBlock
+直接从上方的"预期流程"列表出发，依次为每个流程读取相关文件并生成图。
+
+**读文件策略（节省 context 的关键）**：
+- Controller 文件：只读 HTTP 方法签名 + 端点路径 + 调用的 Service 方法名（30-50 行）
+- Service 文件：只读 public 方法签名 + when/if 分支和状态转换逻辑（不读私有方法）
+- Entity 文件：只读 status/state 字段及其枚举值
+- **硬约束**：每个流程图的生成不超过 3 次 workspace_read_file 调用
+
+**图类型选择规则**：
+- 有 status 字段 + 多个枚举值 → stateDiagram-v2
+- 有跨层/跨服务调用（Controller→Service→外部）→ sequenceDiagram
+- 单服务内条件分支流程 → flowchart TD
+
+**输出格式（严格遵守）**：
+每个流程图使用如下格式：
+
+## [序号]. [流程名称]（[图类型]）
+
+[1-2 句描述：触发条件 + 关键函数名 + 涉及文件路径]
+
+```mermaid
+[图代码]
+```
+
+**生成前自检**：节点文字均为真实代码名称？图中无"处理业务逻辑"等模糊描述？Mermaid 语法正确？
+""".trim()
+            }
 
             else -> """
 ## 专项要求
