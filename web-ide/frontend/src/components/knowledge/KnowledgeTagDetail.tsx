@@ -47,130 +47,173 @@ function sanitizeMermaid(code: string): string {
     .replace(/\r\n/g, "\n"); // 统一换行符
 }
 
-function MermaidBlock({ code, id }: { code: string; id: string }) {
-  const containerRef = React.useRef<HTMLDivElement>(null);
+function MermaidToolbar({
+  zoom, fitZoom, onZoomOut, onZoomIn, onReset, onExport, onFullscreen, disabled,
+}: {
+  zoom: number; fitZoom: number;
+  onZoomOut: () => void; onZoomIn: () => void; onReset: () => void;
+  onExport: () => void; onFullscreen: () => void; disabled?: boolean;
+}) {
+  const btnCls = "rounded px-1.5 py-0.5 text-xs text-muted-foreground hover:bg-accent disabled:opacity-40";
+  return (
+    <div className="flex gap-1">
+      <button onClick={onZoomOut} disabled={disabled} className={btnCls}>−</button>
+      <button onClick={onReset} disabled={disabled} className={btnCls} title="Reset to fit">
+        {Math.round(zoom * 100)}%
+      </button>
+      <button onClick={onZoomIn} disabled={disabled} className={btnCls}>+</button>
+      <button onClick={onExport} disabled={disabled} className={btnCls}>SVG</button>
+      <button onClick={onFullscreen} disabled={disabled} className={btnCls} title="全屏预览">⛶</button>
+    </div>
+  );
+}
+
+function MermaidViewer({
+  svgHtml, height, fullscreen,
+}: {
+  svgHtml: string; height: number; fullscreen?: boolean;
+}) {
   const viewportRef = React.useRef<HTMLDivElement>(null);
-  const [error, setError] = React.useState<string | null>(null);
-  const [loading, setLoading] = React.useState(true);
-  const [showSource, setShowSource] = React.useState(false);
+  const containerRef = React.useRef<HTMLDivElement>(null);
   const [zoom, setZoom] = React.useState(1);
   const [fitZoom, setFitZoom] = React.useState(1);
   const [pan, setPan] = React.useState({ x: 0, y: 0 });
   const [dragging, setDragging] = React.useState(false);
   const [dragStart, setDragStart] = React.useState({ x: 0, y: 0 });
-  const [containerHeight, setContainerHeight] = React.useState(320);
+  const [viewH, setViewH] = React.useState(height);
 
   React.useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
-    setShowSource(false);
-    setZoom(1);
-    setFitZoom(1);
-    setPan({ x: 0, y: 0 });
+    if (!containerRef.current || !viewportRef.current) return;
+    containerRef.current.innerHTML = svgHtml;
+    setZoom(1); setFitZoom(1); setPan({ x: 0, y: 0 });
 
-    const safeId = `mermaid-kd-${id.replace(/[^a-zA-Z0-9]/g, "-")}`;
-    const sanitized = sanitizeMermaid(code);
-    import("mermaid").then(({ default: mermaid }) => {
-      mermaid.initialize({ startOnLoad: false, theme: "dark", securityLevel: "loose" });
-      mermaid
-        .render(safeId, sanitized)
-        .then(({ svg }: { svg: string }) => {
-          if (!cancelled && containerRef.current && viewportRef.current) {
-            containerRef.current.innerHTML = svg;
-
-            // 从 viewBox 计算自适应缩放和容器高度
-            const svgEl = containerRef.current.querySelector("svg");
-            if (svgEl) {
-              const vb = svgEl.viewBox?.baseVal;
-              if (vb && vb.width > 0 && vb.height > 0) {
-                const vpWidth = viewportRef.current.clientWidth || 700;
-                const fit = Math.min(1, (vpWidth - 32) / vb.width);
-                const h = Math.min(560, Math.max(200, vb.height * fit + 32));
-                setContainerHeight(h);
-                setZoom(fit);
-                setFitZoom(fit);
-              }
-            }
-            setLoading(false);
-          }
-        })
-        .catch((err: Error) => {
-          if (!cancelled) {
-            setError(err.message);
-            setLoading(false);
-          }
-        });
-    });
-    return () => { cancelled = true; };
-  }, [code, id]);
+    const svgEl = containerRef.current.querySelector("svg");
+    if (svgEl) {
+      const vb = svgEl.viewBox?.baseVal;
+      if (vb && vb.width > 0 && vb.height > 0) {
+        const vpWidth = viewportRef.current.clientWidth || (fullscreen ? window.innerWidth * 0.9 : 700);
+        const fit = Math.min(1, (vpWidth - 32) / vb.width);
+        if (!fullscreen) setViewH(Math.min(560, Math.max(200, vb.height * fit + 32)));
+        setZoom(fit); setFitZoom(fit);
+      }
+    }
+  }, [svgHtml, fullscreen]);
 
   const exportSvg = () => {
     const svgEl = containerRef.current?.querySelector("svg");
     if (!svgEl) return;
     const a = Object.assign(document.createElement("a"), {
-      href: URL.createObjectURL(
-        new Blob([new XMLSerializer().serializeToString(svgEl)], { type: "image/svg+xml" })
-      ),
-      download: `flow-diagram-${id}.svg`,
+      href: URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(svgEl)], { type: "image/svg+xml" })),
+      download: `flow-diagram.svg`,
     });
-    a.click();
-    URL.revokeObjectURL(a.href);
+    a.click(); URL.revokeObjectURL(a.href);
   };
 
   return (
-    <div className="my-4 rounded-md border border-border overflow-hidden">
-      <div className="flex items-center justify-between border-b border-border px-3 py-1.5 bg-[#1a1a1a]">
-        <span className="text-xs text-muted-foreground">mermaid</span>
-        <div className="flex gap-1">
-          <button
-            onClick={() => setZoom((z) => Math.max(0.25, z - 0.25))}
-            className="rounded px-1.5 py-0.5 text-xs text-muted-foreground hover:bg-accent"
-          >
-            −
-          </button>
-          <button
-            onClick={() => { setZoom(fitZoom); setPan({ x: 0, y: 0 }); }}
-            className="rounded px-1.5 py-0.5 text-xs text-muted-foreground hover:bg-accent"
-            title="Reset to fit"
-          >
-            {Math.round(zoom * 100)}%
-          </button>
-          <button
-            onClick={() => setZoom((z) => Math.min(3, z + 0.25))}
-            className="rounded px-1.5 py-0.5 text-xs text-muted-foreground hover:bg-accent"
-          >
-            +
-          </button>
-          <button
-            onClick={exportSvg}
-            className="rounded px-1.5 py-0.5 text-xs text-muted-foreground hover:bg-accent"
-          >
-            SVG
-          </button>
+    <div className={fullscreen ? "flex flex-col h-full" : ""}>
+      {fullscreen && (
+        <div className="flex items-center justify-end gap-1 px-3 py-1.5 border-b border-border bg-[#1a1a1a]">
+          <MermaidToolbar
+            zoom={zoom} fitZoom={fitZoom}
+            onZoomOut={() => setZoom(z => Math.max(0.1, z - 0.25))}
+            onZoomIn={() => setZoom(z => Math.min(5, z + 0.25))}
+            onReset={() => { setZoom(fitZoom); setPan({ x: 0, y: 0 }); }}
+            onExport={exportSvg}
+            onFullscreen={() => {}}
+          />
         </div>
-      </div>
+      )}
       <div
         ref={viewportRef}
         className="overflow-hidden bg-[#1e1e1e]"
-        style={{ height: loading ? 120 : containerHeight }}
-        onMouseDown={(e) => {
-          if (error) return;
-          setDragging(true);
-          setDragStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
-        }}
-        onMouseMove={(e) => {
-          if (dragging) setPan({ x: e.clientX - dragStart.x, y: e.clientY - dragStart.y });
-        }}
+        style={fullscreen ? { flex: 1 } : { height: viewH }}
+        onMouseDown={e => { setDragging(true); setDragStart({ x: e.clientX - pan.x, y: e.clientY - pan.y }); }}
+        onMouseMove={e => { if (dragging) setPan({ x: e.clientX - dragStart.x, y: e.clientY - dragStart.y }); }}
         onMouseUp={() => setDragging(false)}
         onMouseLeave={() => setDragging(false)}
       >
+        <div
+          ref={containerRef}
+          className="flex h-full items-center justify-center [&_svg]:max-w-none"
+          style={{
+            transform: `translate(${pan.x}px,${pan.y}px) scale(${zoom})`,
+            transformOrigin: "center center",
+            cursor: dragging ? "grabbing" : "grab",
+          }}
+        />
+      </div>
+    </div>
+  );
+}
+
+function MermaidBlock({ code, id }: { code: string; id: string }) {
+  const [svgHtml, setSvgHtml] = React.useState<string | null>(null);
+  const [error, setError] = React.useState<string | null>(null);
+  const [loading, setLoading] = React.useState(true);
+  const [showSource, setShowSource] = React.useState(false);
+  const [fullscreen, setFullscreen] = React.useState(false);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    setLoading(true); setError(null); setSvgHtml(null); setShowSource(false);
+
+    const safeId = `mermaid-kd-${id.replace(/[^a-zA-Z0-9]/g, "-")}`;
+    import("mermaid").then(({ default: mermaid }) => {
+      mermaid.initialize({ startOnLoad: false, theme: "dark", securityLevel: "loose" });
+      mermaid.render(safeId, sanitizeMermaid(code))
+        .then(({ svg }: { svg: string }) => {
+          if (!cancelled) { setSvgHtml(svg); setLoading(false); }
+        })
+        .catch((err: Error) => {
+          if (!cancelled) { setError(err.message); setLoading(false); }
+        });
+    });
+    return () => { cancelled = true; };
+  }, [code, id]);
+
+  // ESC 关闭全屏
+  React.useEffect(() => {
+    if (!fullscreen) return;
+    const fn = (e: KeyboardEvent) => { if (e.key === "Escape") setFullscreen(false); };
+    window.addEventListener("keydown", fn);
+    return () => window.removeEventListener("keydown", fn);
+  }, [fullscreen]);
+
+  const exportSvg = () => {
+    if (!svgHtml) return;
+    const tmp = document.createElement("div");
+    tmp.innerHTML = svgHtml;
+    const svgEl = tmp.querySelector("svg");
+    if (!svgEl) return;
+    const a = Object.assign(document.createElement("a"), {
+      href: URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(svgEl)], { type: "image/svg+xml" })),
+      download: `flow-diagram-${id}.svg`,
+    });
+    a.click(); URL.revokeObjectURL(a.href);
+  };
+
+  return (
+    <>
+      <div className="my-4 rounded-md border border-border overflow-hidden">
+        <div className="flex items-center justify-between border-b border-border px-3 py-1.5 bg-[#1a1a1a]">
+          <span className="text-xs text-muted-foreground">mermaid</span>
+          {!error && (
+            <MermaidToolbar
+              zoom={1} fitZoom={1}
+              onZoomOut={() => {}} onZoomIn={() => {}} onReset={() => {}}
+              onExport={exportSvg}
+              onFullscreen={() => setFullscreen(true)}
+              disabled={loading || !svgHtml}
+            />
+          )}
+        </div>
+
         {loading ? (
-          <div className="flex h-full items-center justify-center">
+          <div className="flex items-center justify-center bg-[#1e1e1e]" style={{ height: 120 }}>
             <div className="h-5 w-5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
           </div>
         ) : error ? (
-          <div className="p-4 space-y-3">
+          <div className="p-4 space-y-3 bg-[#1e1e1e]">
             <div className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-3">
               <span className="mt-0.5 text-destructive text-xs">⚠</span>
               <div className="flex-1 min-w-0">
@@ -179,31 +222,36 @@ function MermaidBlock({ code, id }: { code: string; id: string }) {
               </div>
             </div>
             <p className="text-xs text-muted-foreground">可点击上方「Re-extract」重新生成，或「Edit」手动修正。</p>
-            <button
-              onClick={() => setShowSource((v) => !v)}
-              className="text-xs text-muted-foreground hover:text-foreground underline"
-            >
+            <button onClick={() => setShowSource(v => !v)} className="text-xs text-muted-foreground hover:text-foreground underline">
               {showSource ? "收起源码" : "查看源码"}
             </button>
             {showSource && (
-              <pre className="overflow-auto max-h-60 rounded bg-[#111] p-3 text-xs text-muted-foreground whitespace-pre-wrap">
-                {code}
-              </pre>
+              <pre className="overflow-auto max-h-60 rounded bg-[#111] p-3 text-xs text-muted-foreground whitespace-pre-wrap">{code}</pre>
             )}
           </div>
-        ) : (
-          <div
-            ref={containerRef}
-            className="flex h-full items-center justify-center [&_svg]:max-w-none"
-            style={{
-              transform: `translate(${pan.x}px,${pan.y}px) scale(${zoom})`,
-              transformOrigin: "center center",
-              cursor: dragging ? "grabbing" : "grab",
-            }}
-          />
-        )}
+        ) : svgHtml ? (
+          <MermaidViewer svgHtml={svgHtml} height={320} />
+        ) : null}
       </div>
-    </div>
+
+      {/* 全屏遮罩 */}
+      {fullscreen && svgHtml && (
+        <div className="fixed inset-0 z-50 flex flex-col bg-[#141414]">
+          <div className="flex items-center justify-between border-b border-border px-4 py-2 bg-[#1a1a1a]">
+            <span className="text-xs text-muted-foreground">流程图全屏预览 &nbsp;·&nbsp; ESC 或点击 ✕ 关闭</span>
+            <button
+              onClick={() => setFullscreen(false)}
+              className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+            >
+              ✕
+            </button>
+          </div>
+          <div className="flex-1 overflow-hidden">
+            <MermaidViewer svgHtml={svgHtml} height={0} fullscreen />
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 
