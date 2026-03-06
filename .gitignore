@@ -38,6 +38,7 @@ enterprise-console/.next/
 
 # Docker
 docker-compose.override.yml
+infrastructure/docker/pgdata/
 
 # Logs
 **/logs/
