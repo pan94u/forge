@@ -1,8 +1,8 @@
-# Forge — AI-Driven Intelligent Software Delivery Platform
+# Forge — AI-Native IT Delivery & Governance Infrastructure
 
 <div align="center">
 
-**Not an AI coding assistant — an AI-driven software delivery platform with autonomous execution capabilities.**
+**Not an AI coding assistant — an AI-Native infrastructure that deeply embeds AI across the entire software delivery lifecycle.**
 
 [![License](https://img.shields.io/badge/license-Source%20Available-lightgrey.svg)](LICENSE)
 [![JDK](https://img.shields.io/badge/JDK-21-orange.svg)](https://adoptium.net/)
@@ -12,50 +12,80 @@
 
 </div>
 
+<div align="center">
+
+![Forge Brand Positioning](assets/images/01-forge-brand-positioning.jpg)
+
+</div>
+
 ---
 
-## 📖 Overview
+## Overview
 
-Forge is an intelligent delivery platform that deeply embeds AI agents into the entire software development lifecycle. It uses a **SuperAgent architecture** — a single agent dynamically switching between 6 Skill Profiles to cover the complete delivery chain from planning → design → development → testing → operations → evaluation.
+Forge is an **AI-Native IT infrastructure** with a dual-layer collaborative architecture:
+
+- **Execution Layer (Web IDE)**: SuperAgent + 35 Skills + 24 MCP tools, three-loop architecture (human control loop + intelligent execution loop + evolutionary learning loop), compressing the delivery capacity of a 5-7 person team down to 1-2 people + AI
+- **Governance Layer (Enterprise Console)**: Governance AI covering IT governance domains (org/member/provider management), with Forge execution data driving governance insights and decisions
+
+<div align="center">
+
+![Forge Dual-Layer Solution](assets/images/06-forge-dual-layer-solution.jpg)
+
+</div>
 
 ### Core Philosophy
 
 | Principle | Description |
 |-----------|-------------|
 | **SuperAgent over Multi-Agent** | One agent dynamically switches roles via Skills, avoiding multi-agent coordination complexity |
-| **Skills over Prompts** | Professional knowledge encoded into 32 reusable, composable Skill assets |
+| **Skills over Prompts** | Professional knowledge encoded into 35 reusable, composable Skill assets |
 | **Baselines guarantee quality floor** | Quality baseline scripts must pass regardless of model capability changes |
 | **Dual-loop drives continuous improvement** | Delivery Loop solves "what to do", Learning Loop solves "getting better" |
 | **Human-In-The-Loop (HITL)** | Critical decisions require human approval, not a fully automated black box |
 
+<div align="center">
+
+![Forge What It Is Not](assets/images/02-forge-what-it-is-not.jpg)
+
+</div>
+
 ---
 
-## ✨ Key Features
+## Key Features
 
-### 🤖 SuperAgent Autonomous Execution Engine
+### SuperAgent Autonomous Execution Engine
 
 Users declare intent; SuperAgent autonomously completes the full cycle of planning → coding → verification → delivery:
 
 - **50-turn autonomous execution**: No step-by-step instructions needed — the agent decides tool calls, file operations, and code generation independently
 - **OODA Loop**: Observe → Orient → Decide → Act, with real-time visualization of each phase
-- **18 MCP tools**: File operations, knowledge search, database queries, code compilation, test execution, and more
+- **24 MCP tools**: File operations, knowledge search, database queries, code compilation, test execution, service management, and more
 - **Self-repair on failure**: When baseline checks fail, automatically analyzes the cause, modifies code, and re-validates (up to 2 rounds)
 - **Self-managed context**: Automatically compresses message history when approaching token limits, without interrupting execution
 
-### 🧠 6 Skill Profiles with Intelligent Routing
+### 6 Skill Profiles with Intelligent Routing
 
 | Profile | Responsibility | Typical Skills |
 |---------|---------------|----------------|
 | **planning** | Requirements analysis, PRD writing | requirement-engineering, delivery-methodology |
-| **design** | Architecture design, ADR writing | api-design, database-patterns |
-| **development** | Code implementation, code generation | kotlin-conventions, spring-boot-patterns |
-| **testing** | Test strategy, test case writing | testing-standards |
-| **ops** | Deployment, operations, troubleshooting | logging-observability, deployment-readiness-check |
+| **design** | Architecture design, ADR writing | architecture-design, api-design, database-patterns |
+| **development** | Code implementation, code generation | code-generation, kotlin-conventions, spring-boot-patterns |
+| **testing** | Test strategy, test case writing | test-case-writing, testing-standards |
+| **ops** | Deployment, operations, troubleshooting | deployment-ops, logging-observability |
 | **evaluation** | Progress evaluation, knowledge distillation, doc generation | progress-evaluation, knowledge-distillation |
 
 Routing supports 4 priority levels: explicit tags (`@development`) → keyword detection → branch name patterns → default fallback.
 
-### 💾 Three-Layer Cross-Session Memory System
+### 35-Skill Asset Library
+
+| Plugin Package | Skills | Description |
+|----------------|--------|-------------|
+| **forge-superagent** | 14 | architecture-design, bug-fix-workflow, code-generation, delivery-methodology, deployment-ops, detailed-design, document-generation, git-workflow, knowledge-distillation, knowledge-generator, planning-mode, progress-evaluation, requirement-engineering, test-case-writing |
+| **forge-foundation** | 16 | api-design, business-rule-extraction, codebase-profiler, convention-miner, database-patterns, deployment-readiness-check, design-baseline-guardian, environment-parity, error-handling, gradle-build, java-conventions, kotlin-conventions, logging-observability, security-practices, spring-boot-patterns, testing-standards |
+| **forge-knowledge** | 3 | domain-model-knowledge, internal-api-knowledge, runbook-knowledge |
+| **forge-deployment** | 2 | ci-cd-patterns, kubernetes-patterns |
+
+### Three-Layer Cross-Session Memory System
 
 Solves the core pain point of AI agents "starting fresh every time":
 
@@ -67,14 +97,14 @@ Solves the core pain point of AI agents "starting fresh every time":
 
 Effect: New sessions immediately have project context, saving 30-40% token consumption.
 
-### 🛡️ Quality Assurance System
+### Quality Assurance System
 
 - **Automatic baseline checks**: After code generation, automatically runs code-style / security / api-contract / architecture baselines
 - **HITL approval checkpoints**: Pauses at key delivery nodes for human approval — supports Approve / Reject / Modify
 - **Four-dimensional evaluation learning loop**: Intent understanding + Completion + Quality + Experience, auto-generates improvement suggestions
 - **Prompt Caching**: System Prompt cached for 5 minutes, 90% cost savings on cache hits
 
-### 🌐 Web IDE
+### Web IDE
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -90,7 +120,16 @@ Effect: New sessions immediately have project context, saving 30-40% token consu
 └──────────┴──────────────────────────────┴───────────────────────┘
 ```
 
-### 🔌 Multi-Model Support
+Frontend routes: `workspaces` (list), `workspace/[id]` (main IDE), `knowledge` (knowledge base), `skills` (skill management), `workflows` (workflow), `evaluations` (evaluation reports), `login`
+
+### Enterprise Console (Governance Dashboard)
+
+An independently deployed enterprise governance interface covering:
+- **Organization Management** (`/orgs`): Multi-org CRUD, member management
+- **Invitation Management** (`/invite`): Invitation link creation and acceptance
+- **Provider Management**: AI model provider configuration and health checks
+
+### Multi-Model Support
 
 | Provider | Supported Models | Context Window |
 |----------|-----------------|----------------|
@@ -103,38 +142,45 @@ Effect: New sessions immediately have project context, saving 30-40% token consu
 
 ---
 
-## 🏗️ Architecture
+## Architecture
 
 ### System Architecture Diagram
 
 ```
-┌─ User Interaction Layer ────────────────────────────────────────┐
-│  Web IDE (Next.js 15)  │  CLI (Kotlin + GraalVM Native)         │
-└────────────────────────────────────────────────────────────────┘
-                         │
-┌─ Application Layer ─────────────────────────────────────────────┐
-│  Spring Boot 3 Backend                                           │
-│  ├─ AgenticLoopOrchestrator (50-turn autonomous execution)       │
-│  ├─ ProfileRouter (6 Profile intelligent routing)               │
-│  ├─ SkillLoader (32 Skills dynamic loading)                     │
-│  ├─ SystemPromptAssembler (dynamic prompt assembly)             │
-│  ├─ McpProxyService (18 tool call proxy)                        │
-│  ├─ MemoryContextLoader (three-layer memory injection)          │
-│  ├─ HitlCheckpointManager (HITL approval management)            │
-│  └─ LearningLoopPipelineService (learning feedback loop)        │
-└────────────────────────────────────────────────────────────────┘
-                         │
-┌─ MCP Tool Layer ────────────────────────────────────────────────┐
-│  forge-knowledge-mcp:8081  │  forge-database-mcp:8082           │
-│  forge-service-graph-mcp   │  forge-artifact-mcp                │
-│  forge-observability-mcp   │  (built-in workspace/baseline tools)│
-└────────────────────────────────────────────────────────────────┘
-                         │
-┌─ Model Adapter Layer ───────────────────────────────────────────┐
-│  ClaudeAdapter  │  GeminiAdapter  │  QwenAdapter                │
-│  BedrockAdapter │  OpenAIAdapter  │  (unified ModelAdapter interface)│
-└────────────────────────────────────────────────────────────────┘
+┌─ User Interaction Layer ─────────────────────────────────────────┐
+│  Web IDE (Next.js 15)  │  Enterprise Console (Next.js 15)        │
+│  CLI (Kotlin + GraalVM Native)                                   │
+└──────────────────────────────────────────────────────────────────┘
+                          │
+┌─ Application Layer ──────────────────────────────────────────────┐
+│  Spring Boot 3 Backend                                            │
+│  ├─ AgenticLoopOrchestrator (50-turn autonomous execution)        │
+│  ├─ ProfileRouter (6 Profile intelligent routing)                 │
+│  ├─ SkillLoader (35 Skills dynamic loading)                       │
+│  ├─ SystemPromptAssembler (dynamic prompt assembly)               │
+│  ├─ McpProxyService (24 tool call proxy)                          │
+│  ├─ MemoryContextLoader (three-layer memory injection)            │
+│  ├─ HitlCheckpointManager (HITL approval management)             │
+│  └─ LearningLoopPipelineService (learning feedback loop)         │
+└──────────────────────────────────────────────────────────────────┘
+                          │
+┌─ MCP Tool Layer ─────────────────────────────────────────────────┐
+│  forge-knowledge-mcp:8081  │  forge-database-mcp:8082            │
+│  forge-service-graph-mcp   │  forge-artifact-mcp                 │
+│  forge-observability-mcp   │  (built-in workspace/baseline tools) │
+└──────────────────────────────────────────────────────────────────┘
+                          │
+┌─ Model Adapter Layer ────────────────────────────────────────────┐
+│  ClaudeAdapter  │  GeminiAdapter  │  QwenAdapter                 │
+│  BedrockAdapter │  OpenAIAdapter  │  (unified ModelAdapter interface) │
+└──────────────────────────────────────────────────────────────────┘
 ```
+
+<div align="center">
+
+![Forge Three-Loop Architecture](assets/images/05-forge-three-loop-architecture.jpg)
+
+</div>
 
 ### Technology Stack
 
@@ -153,15 +199,16 @@ Effect: New sessions immediately have project context, saving 30-40% token consu
 | Diagram Rendering | Mermaid | 11.4+ |
 | Authentication | Keycloak | 24.0 |
 | Monitoring | Prometheus + Micrometer | — |
-| Containerization | Docker Compose | 6 containers |
+| Containerization | Docker Compose | 7 containers |
 
 ### Gradle Module Structure
 
 ```
 forge-platform/
 ├── web-ide/
-│   ├── backend/          # Spring Boot 3 backend (Kotlin)
-│   └── frontend/         # Next.js 15 frontend (TypeScript)
+│   ├── backend/          # Spring Boot 3 backend (Kotlin, 22 Controllers)
+│   └── frontend/         # Next.js 15 frontend (TypeScript, 8 routes)
+├── enterprise-console/   # Enterprise governance console (Next.js 15, standalone)
 ├── mcp-servers/
 │   ├── forge-mcp-common/        # MCP protocol common library
 │   ├── forge-knowledge-mcp/     # Knowledge base MCP server
@@ -173,21 +220,22 @@ forge-platform/
 │   ├── model-adapter/    # Model adapters (Claude/Gemini/Qwen/Bedrock)
 │   └── runtime-adapter/  # Runtime adapter
 ├── plugins/
-│   ├── forge-foundation/  # Foundation Skills (Kotlin/Java/Spring/API conventions)
-│   ├── forge-superagent/  # SuperAgent Skills + 6 Profiles
-│   ├── forge-knowledge/   # Knowledge Skills
-│   └── forge-deployment/  # Deployment Skills (K8s/CI-CD)
+│   ├── forge-foundation/  # Foundation Skills (16: Kotlin/Java/Spring/API conventions)
+│   ├── forge-superagent/  # SuperAgent Skills (14) + 6 Profiles
+│   ├── forge-knowledge/   # Knowledge Skills (3)
+│   ├── forge-deployment/  # Deployment Skills (2: K8s/CI-CD)
+│   └── forge-team-templates/ # Team templates (backend/data/mobile)
 ├── cli/                   # Forge CLI (Kotlin + GraalVM Native)
 ├── agent-eval/            # SuperAgent evaluation framework
 ├── skill-tests/           # Skill validation framework
 ├── knowledge-base/        # Knowledge base documents (13+ docs)
 └── infrastructure/
-    └── docker/            # Docker Compose deployment configuration
+    └── docker/            # Docker Compose deployment configs (4 environments)
 ```
 
 ---
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Prerequisites
 
@@ -225,6 +273,9 @@ ANTHROPIC_API_KEY=sk-ant-api03-your-key
 # Or Alibaba DashScope (Qwen)
 # DASHSCOPE_API_KEY=sk-...
 
+# Or MiniMax
+# MINIMAX_API_KEY=...
+
 # Or OpenAI-compatible (Ollama/vLLM/LocalAI, etc.)
 # LOCAL_MODEL_URL=http://localhost:11434
 # LOCAL_MODEL_NAME=llama3.1:8b
@@ -241,6 +292,9 @@ export JAVA_HOME=/opt/homebrew/opt/openjdk@21
 
 # Build frontend
 cd web-ide/frontend && npm install && npm run build && cd ../..
+
+# Build Enterprise Console (optional)
+cd enterprise-console && npm install && npm run build && cd ..
 ```
 
 ### Step 4: Start with Docker
@@ -253,41 +307,59 @@ docker compose -f docker-compose.trial.yml --env-file .env up --build -d
 ### Step 5: Verify Startup
 
 ```bash
-# Check all 6 containers (all should be healthy or running)
+# Check all 7 containers (all should be healthy or running)
 docker compose -f docker-compose.trial.yml ps
 
 # Test API
-curl -s http://localhost:9000/api/models | python3 -m json.tool
+curl -s http://localhost:19000/api/models | python3 -m json.tool
 ```
 
 ### Step 6: Access the Platform
 
-Open your browser and visit **http://localhost:9000**
+| Service | URL | Description |
+|---------|-----|-------------|
+| **Web IDE** | http://localhost:19000 | Main IDE interface |
+| **Enterprise Console** | http://localhost:19001 | Enterprise governance dashboard |
+| **Knowledge MCP** | http://localhost:19081 | Knowledge base MCP service |
+| **Database MCP** | http://localhost:19082 | Database MCP service |
 
 ---
 
-## 📊 Technical Specifications
+## Technical Specifications
 
 | Dimension | Value |
 |-----------|-------|
-| REST API Endpoints | 68 (11 Controllers) |
+| REST API Controllers | 22 |
+| REST API Endpoints | 70+ |
 | SSE Event Types | 14 |
-| MCP Tools | 18 built-in + external auto-discovery |
+| MCP Tools | 24 (5 categories: builtin/knowledge/workspace/memory/planning) |
 | JPA Entities | 12 |
 | Flyway Migrations | 8 versions (V1-V8) |
-| Total Skills | 32 (6 Profiles) |
+| Total Skills | 35 (4 plugin packages, 6 Profiles) |
 | Unit Tests | 156 (all passing) |
-| Docker Containers | 6 |
+| Docker Containers | 7 (postgres + knowledge-mcp + database-mcp + backend + frontend + enterprise-console + nginx) |
 | Knowledge Base Docs | 13+ |
 | Code Volume | ~50K+ lines (Kotlin + TypeScript) |
-| Frontend Routes | 7 |
+| Frontend Routes | 8 (Web IDE) + 2 (Enterprise Console) |
 | Supported Models | 6 Providers (13+ models) |
 | Context Window | Up to 200K tokens (Claude Opus) |
 | Autonomous Execution Turns | Up to 50 |
 
+<div align="center">
+
+![Forge Current Status Phase 18](assets/images/08-forge-current-status-phase18.jpg)
+
+</div>
+
 ---
 
-## 🗺️ Roadmap
+## Roadmap
+
+<div align="center">
+
+![Forge 8 Core Goals](assets/images/03-forge-8-core-goals.jpg)
+
+</div>
 
 | Phase | Keyword | Status | Key Capabilities |
 |-------|---------|--------|-----------------|
@@ -301,11 +373,34 @@ Open your browser and visit **http://localhost:9000**
 | Phase 5 | Product Usability | ✅ | Workspace persistence + Git Clone + User API Keys |
 | Phase 6 | Knowledge Write + Multi-model | ✅ | MiniMax + Local knowledge write + 50-turn Agentic Loop |
 | Phase 7 | Async + Knowledge Scope | ✅ | Async Git Clone + Three-tier knowledge scope + CRUD |
-| Phase 8+ | Learning Loop Closure | 🔄 | ForgeNativeRuntime + Methodology platformization |
+| Phase 8 | Enterprise Console | ✅ | Governance dashboard + Org management + Provider management |
+| Phase 9+ | Learning Loop Closure | 🔄 | ForgeNativeRuntime + Methodology platformization |
+
+<div align="center">
+
+![Forge Implementation Roadmap](assets/images/07-forge-implementation-roadmap.jpg)
+
+</div>
+
+<div align="center">
+
+![Forge Next Steps Enterprise Console](assets/images/09-forge-next-steps-enterprise-console.png)
+
+</div>
 
 ---
 
-## 🔧 Development Guide
+## Competitive Advantages
+
+<div align="center">
+
+![Forge 5 Competitive Advantages](assets/images/04-forge-5-competitive-advantages.jpg)
+
+</div>
+
+---
+
+## Development Guide
 
 ### Run Unit Tests
 
@@ -328,6 +423,11 @@ cd web-ide/backend
 cd web-ide/frontend
 npm run dev
 # Access http://localhost:3000
+
+# Start Enterprise Console (new terminal)
+cd enterprise-console
+npm run dev
+# Access http://localhost:19001
 ```
 
 ### Common Issues
@@ -339,45 +439,18 @@ npm run dev
 | WebSocket CORS | `forge.websocket.allowed-origins` must be a comma-separated string |
 | Enum serialization | All enums must add `@JsonValue` returning lowercase |
 | Empty string vs null | Use `isNullOrBlank()` instead of `?: default` |
+| workspaceId propagation | REST API and WebSocket are two independent paths — both require workspaceId |
 
 ---
 
-## 🆚 Competitive Positioning
-
-### vs. GitHub Copilot / Cursor
-
-| Dimension | Copilot / Cursor | Forge |
-|-----------|-----------------|-------|
-| Positioning | Code completion / editor-level AI | **Autonomous full-delivery SuperAgent** |
-| Execution Mode | User gives line-by-line instructions | **User declares intent, Agent autonomously plans→executes→verifies→delivers** |
-| Coverage | Development phase only | Planning→Design→Dev→Test→Ops→Evaluation |
-| Execution Depth | Single completion / single conversation | **Up to 50 autonomous turns (tool chain orchestration + self-repair)** |
-| Role Switching | None | 6 Profiles with automatic routing |
-| Quality Assurance | None | **Automatic baseline checks + self-repair retry** |
-| Human-in-the-Loop | None | HITL approval checkpoints |
-| Knowledge System | None | 32 Skills + 13+ knowledge docs + knowledge writing |
-| Memory | Single-file context | **3-layer cross-session memory (project + stage + session summary)** |
-| Learning | None | **Four-dimensional evaluation + learning loop pipeline** |
-
-### vs. Traditional DevOps Platforms (Jenkins / GitLab CI)
-
-| Dimension | Traditional DevOps | Forge |
-|-----------|-------------------|-------|
-| Automation Target | CI/CD pipelines | **Full delivery lifecycle (including planning, design, coding, evaluation)** |
-| Execution Mode | Predefined scripts, static pipelines | **AI Agent dynamic decision-making, autonomously selects tools and strategies** |
-| AI Capability | None / limited | **Multi-turn Agentic Loop + 18 tool orchestration + knowledge base** |
-| Learning | Static rules | **Skill evolution + memory accumulation + four-dimensional evaluation feedback** |
-
----
-
-## 📁 Documentation Index
+## Documentation Index
 
 | Document | Path | Description |
 |----------|------|-------------|
 | Product Feature List | `docs/product/feature-list.md` | Complete feature description (user-facing) |
-| Design Baseline | `docs/baselines/design-baseline-v1.md` | Validated UI/API/data model baseline (v12) |
+| Design Baseline | `docs/baselines/design-baseline-v1.md` | Validated UI/API/data model baseline |
 | Planning Baseline | `docs/baselines/planning-baseline-v1.5.md` | Design-driven planning document |
-| Development Logbook | `docs/planning/dev-logbook.md` | Complete development records for 32 sessions |
+| Development Logbook | `docs/planning/dev-logbook.md` | Complete session-by-session development records |
 | Architecture Overview | `docs/architecture/overview.md` | System architecture documentation |
 | Trial Guide | `docs/product/TRIAL-GUIDE.md` | Internal trial operation manual |
 | Acceptance Tests | `docs/acceptance-tests/` | Phase-by-phase acceptance test reports |
@@ -385,7 +458,7 @@ npm run dev
 
 ---
 
-## 🤝 Contributing
+## Contributing
 
 Contributions are welcome! Here's how you can participate:
 
@@ -403,7 +476,7 @@ Before submitting a PR, please ensure:
 
 ---
 
-## 📄 License
+## License
 
 This project is licensed under the [Forge Source Available License v1.0](LICENSE).
 
