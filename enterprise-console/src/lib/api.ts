@@ -16,6 +16,11 @@ import type {
   UpsertModelConfigRequest,
   CreateDbConnectionRequest,
   UpsertEnvConfigRequest,
+  BudgetSummary,
+  TeamActivity,
+  SecurityPosture,
+  KnowledgeHealth,
+  ProcessFlow,
 } from "./types";
 
 async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
@@ -177,5 +182,20 @@ export const api = {
         `/api/admin/orgs/${orgId}/env-configs/${category}/${key}`,
         { method: "DELETE" }
       ),
+  },
+
+  governance: {
+    getBudget: (orgId: string, days = 30) =>
+      fetchJson<BudgetSummary>(`/api/governance/${orgId}/budget?days=${days}`),
+    getTeam: (orgId: string, days = 30) =>
+      fetchJson<TeamActivity>(`/api/governance/${orgId}/team?days=${days}`),
+    getSecurity: (orgId: string, days = 30) =>
+      fetchJson<SecurityPosture>(`/api/governance/${orgId}/security?days=${days}`),
+    getKnowledge: (orgId: string) =>
+      fetchJson<KnowledgeHealth>(`/api/governance/${orgId}/data`),
+    getProcessFlows: (orgId: string) =>
+      fetchJson<ProcessFlow[]>(`/api/governance/${orgId}/process`),
+    createSnapshot: (orgId: string) =>
+      fetchJson<void>(`/api/governance/${orgId}/snapshot`, { method: 'POST' }),
   },
 };

@@ -3,7 +3,7 @@
 import React, { useState, useMemo, useCallback } from "react";
 import { KnowledgeTagView, knowledgeTagApi } from "@/lib/knowledge-tag-api";
 import { MonacoEditor } from "@/components/editor/MonacoEditor";
-import { Pencil, Save, X, Clock, List, CheckCircle, RotateCw, FileQuestion, Loader2 } from "lucide-react";
+import { Pencil, Save, X, Clock, List, CheckCircle, RotateCw, FileQuestion, Loader2, Download } from "lucide-react";
 
 interface KnowledgeTagDetailProps {
   tag: KnowledgeTagView;
@@ -48,30 +48,84 @@ function sanitizeMermaid(code: string): string {
 }
 
 function MermaidToolbar({
-  zoom, fitZoom, onZoomOut, onZoomIn, onReset, onExport, onFullscreen, disabled,
+  zoom, fitZoom, onZoomOut, onZoomIn, onReset, onExport, onDownloadCode, onDownloadPng, onFullscreen, disabled,
 }: {
   zoom: number; fitZoom: number;
   onZoomOut: () => void; onZoomIn: () => void; onReset: () => void;
-  onExport: () => void; onFullscreen: () => void; disabled?: boolean;
+  onExport: () => void; onDownloadCode: () => void; onDownloadPng: () => void;
+  onFullscreen: () => void; disabled?: boolean;
 }) {
+  const [open, setOpen] = React.useState(false);
+  const wrapRef = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
   const btnCls = "rounded px-1.5 py-0.5 text-xs text-muted-foreground hover:bg-accent disabled:opacity-40";
   return (
-    <div className="flex gap-1">
+    <div className="flex items-center gap-1">
       <button onClick={onZoomOut} disabled={disabled} className={btnCls}>−</button>
-      <button onClick={onReset} disabled={disabled} className={btnCls} title="Reset to fit">
+      <button onClick={onReset} disabled={disabled} className={btnCls} title="重置缩放">
         {Math.round(zoom * 100)}%
       </button>
       <button onClick={onZoomIn} disabled={disabled} className={btnCls}>+</button>
-      <button onClick={onExport} disabled={disabled} className={btnCls}>SVG</button>
+      <span className="mx-0.5 text-border">|</span>
+
+      {/* 下载下拉菜单 */}
+      <div ref={wrapRef} className="relative">
+        <button
+          disabled={disabled}
+          className={`${btnCls} flex items-center gap-1`}
+          onClick={() => setOpen(v => !v)}
+          title="下载"
+        >
+          <Download className="h-3 w-3" />
+          <span>下载</span>
+        </button>
+        {open && !disabled && (
+          <div className="absolute right-0 top-full mt-1 z-50 min-w-[150px] rounded-md border border-border bg-popover shadow-md py-1 text-xs">
+            <button
+              className="w-full px-3 py-1.5 text-left hover:bg-accent flex justify-between items-center"
+              onClick={() => { onDownloadCode(); setOpen(false); }}
+            >
+              <span>Mermaid 源码</span>
+              <span className="text-muted-foreground ml-2">.mmd</span>
+            </button>
+            <button
+              className="w-full px-3 py-1.5 text-left hover:bg-accent flex justify-between items-center"
+              onClick={() => { onExport(); setOpen(false); }}
+            >
+              <span>矢量图</span>
+              <span className="text-muted-foreground ml-2">SVG</span>
+            </button>
+            <button
+              className="w-full px-3 py-1.5 text-left hover:bg-accent flex justify-between items-center"
+              onClick={() => { onDownloadPng(); setOpen(false); }}
+            >
+              <span>图片</span>
+              <span className="text-muted-foreground ml-2">PNG</span>
+            </button>
+          </div>
+        )}
+      </div>
+
+      <span className="mx-0.5 text-border">|</span>
       <button onClick={onFullscreen} disabled={disabled} className={btnCls} title="全屏预览">⛶</button>
     </div>
   );
 }
 
 function MermaidViewer({
-  svgHtml, height, fullscreen,
+  svgHtml, height, fullscreen, onDownloadCode, onDownloadPng,
 }: {
   svgHtml: string; height: number; fullscreen?: boolean;
+  onDownloadCode?: () => void; onDownloadPng?: () => void;
 }) {
   const viewportRef = React.useRef<HTMLDivElement>(null);
   const containerRef = React.useRef<HTMLDivElement>(null);
@@ -119,6 +173,8 @@ function MermaidViewer({
             onZoomIn={() => setZoom(z => Math.min(5, z + 0.25))}
             onReset={() => { setZoom(fitZoom); setPan({ x: 0, y: 0 }); }}
             onExport={exportSvg}
+            onDownloadCode={onDownloadCode ?? (() => {})}
+            onDownloadPng={onDownloadPng ?? (() => {})}
             onFullscreen={() => {}}
           />
         </div>
@@ -192,6 +248,50 @@ function MermaidBlock({ code, id }: { code: string; id: string }) {
     a.click(); URL.revokeObjectURL(a.href);
   };
 
+  const downloadCode = () => {
+    const a = Object.assign(document.createElement("a"), {
+      href: URL.createObjectURL(new Blob([code], { type: "text/plain" })),
+      download: `flow-diagram-${id}.mmd`,
+    });
+    a.click(); URL.revokeObjectURL(a.href);
+  };
+
+  const downloadPng = () => {
+    if (!svgHtml) return;
+    const tmp = document.createElement("div");
+    tmp.innerHTML = svgHtml;
+    const svgEl = tmp.querySelector("svg");
+    if (!svgEl) return;
+    const vb = svgEl.viewBox?.baseVal;
+    const w = (vb && vb.width > 0) ? vb.width : 800;
+    const h = (vb && vb.height > 0) ? vb.height : 600;
+    svgEl.setAttribute("width", String(w));
+    svgEl.setAttribute("height", String(h));
+    // 用 data URL 而非 blob URL，避免 Canvas 跨源污染导致 onload 不触发
+    const svgStr = new XMLSerializer().serializeToString(svgEl);
+    const dataUrl = `data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(svgStr)))}`;
+    const img = new Image();
+    img.onload = () => {
+      const scale = 2;
+      const canvas = document.createElement("canvas");
+      canvas.width = w * scale; canvas.height = h * scale;
+      const ctx = canvas.getContext("2d")!;
+      ctx.scale(scale, scale);
+      ctx.fillStyle = "#1e1e1e";
+      ctx.fillRect(0, 0, w, h);
+      ctx.drawImage(img, 0, 0, w, h);
+      canvas.toBlob(blob => {
+        if (!blob) return;
+        const a = Object.assign(document.createElement("a"), {
+          href: URL.createObjectURL(blob),
+          download: `flow-diagram-${id}.png`,
+        });
+        a.click(); URL.revokeObjectURL(a.href);
+      }, "image/png");
+    };
+    img.src = dataUrl;
+  };
+
   return (
     <>
       <div className="my-4 rounded-md border border-border overflow-hidden">
@@ -202,6 +302,8 @@ function MermaidBlock({ code, id }: { code: string; id: string }) {
               zoom={1} fitZoom={1}
               onZoomOut={() => {}} onZoomIn={() => {}} onReset={() => {}}
               onExport={exportSvg}
+              onDownloadCode={downloadCode}
+              onDownloadPng={downloadPng}
               onFullscreen={() => setFullscreen(true)}
               disabled={loading || !svgHtml}
             />
@@ -247,7 +349,7 @@ function MermaidBlock({ code, id }: { code: string; id: string }) {
             </button>
           </div>
           <div className="flex-1 overflow-hidden">
-            <MermaidViewer svgHtml={svgHtml} height={0} fullscreen />
+            <MermaidViewer svgHtml={svgHtml} height={0} fullscreen onDownloadCode={downloadCode} onDownloadPng={downloadPng} />
           </div>
         </div>
       )}
