@@ -142,3 +142,55 @@ export interface UpsertEnvConfigRequest {
   isSensitive: boolean;
   description?: string;
 }
+
+export interface BudgetSummary {
+  orgId: string;
+  days: number;
+  totalSessions: number;
+  totalExecutions: number;
+  roiScore: number;
+  dailyActivity: Array<{ date: string; sessions: number; executions: number }>;
+}
+
+export interface TeamActivity {
+  orgId: string;
+  days: number;
+  totalMembers: number;
+  topSkills: Array<{ skillName: string; usageCount: number }>;
+}
+
+export interface SecurityPosture {
+  orgId: string;
+  days: number;
+  totalEvents: number;
+  anomalyCount: number;
+  riskLevel: 'low' | 'medium' | 'high';
+  actionBreakdown: Array<{ action: string; count: number }>;
+  recentAnomalies: Array<{ timestamp: string; actorId: string; action: string; detail: string | null }>;
+}
+
+export interface KnowledgeHealth {
+  orgId: string;
+  totalTags: number;
+  activeTags: number;
+  draftTags: number;
+  emptyTags: number;
+  coverageScore: number;
+  overallHealth: number;
+  tagsByStatus: Array<{ status: string; count: number }>;
+}
+
+export interface ProcessFlow {
+  id: string;
+  orgId: string | null;
+  workspaceId: string | null;
+  flowName: string;
+  flowType: string | null;
+  rawMermaid: string;
+  parsedNodes: string | null;
+  parsedEdges: string | null;
+  nodeCount: number | null;
+  edgeCount: number | null;
+  extractedAt: string;
+  sourceTagId: string | null;
+}

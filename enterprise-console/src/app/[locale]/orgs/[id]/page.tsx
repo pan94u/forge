@@ -19,6 +19,7 @@ import {
   BarChart2,
   ClipboardList,
   Gauge,
+  ShieldCheck,
 } from "lucide-react";
 import { Link, useRouter } from "@/navigation";
 import { api } from "@/lib/api";
@@ -211,6 +212,13 @@ export default function OrgDetailPage() {
           >
             <ClipboardList size={14} />
             Audit Log
+          </Link>
+          <Link
+            href={`/orgs/${id}/governance`}
+            className="flex items-center gap-1.5 hover:text-primary transition-colors"
+          >
+            <ShieldCheck size={14} />
+            Governance
           </Link>
           {isAdmin && (
             <Link
