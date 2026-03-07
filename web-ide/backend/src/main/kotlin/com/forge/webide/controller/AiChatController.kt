@@ -4,7 +4,7 @@ import com.forge.webide.entity.ChatSessionEntity
 import com.forge.webide.model.*
 import com.forge.webide.repository.ChatMessageRepository
 import com.forge.webide.repository.ChatSessionRepository
-import com.forge.webide.service.ClaudeAgentService
+import com.forge.webide.service.ForgeAgentService
 import com.forge.webide.service.skill.SkillLoader
 import org.springframework.http.HttpStatus
 import org.springframework.http.MediaType
@@ -19,7 +19,7 @@ import java.util.UUID
 @RestController
 @RequestMapping("/api/chat")
 class AiChatController(
-    private val claudeAgentService: ClaudeAgentService,
+    private val forgeAgentService: ForgeAgentService,
     private val chatSessionRepository: ChatSessionRepository,
     private val chatMessageRepository: ChatMessageRepository,
     private val skillLoader: SkillLoader
@@ -94,7 +94,7 @@ class AiChatController(
         val session = chatSessionRepository.findById(sessionId).orElse(null)
             ?: return ResponseEntity.notFound().build()
 
-        val response = claudeAgentService.sendMessage(
+        val response = forgeAgentService.sendMessage(
             sessionId = sessionId,
             message = request.content,
             contexts = request.contexts ?: emptyList(),
@@ -127,7 +127,7 @@ class AiChatController(
         val emitter = SseEmitter(300_000L) // 5-minute timeout
 
         // Stream response asynchronously
-        claudeAgentService.streamMessage(
+        forgeAgentService.streamMessage(
             sessionId = sessionId,
             message = request.content,
             contexts = request.contexts ?: emptyList(),

@@ -16,14 +16,14 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.CopyOnWriteArrayList
 
 /**
- * Tests for ClaudeAgentService.
+ * Tests for ForgeAgentService.
  *
  * After the Sprint 6.4 refactoring, the agentic loop logic lives in
- * AgenticLoopOrchestrator. These tests verify ClaudeAgentService's own
+ * AgenticLoopOrchestrator. These tests verify ForgeAgentService's own
  * responsibilities: persistence, system prompt building, error handling,
  * and correct delegation to the orchestrator.
  */
-class ClaudeAgentServiceTest {
+class ForgeAgentServiceTest {
 
     private lateinit var claudeAdapter: ClaudeAdapter
     private lateinit var mcpProxyService: McpProxyService
@@ -36,7 +36,7 @@ class ClaudeAgentServiceTest {
     private lateinit var agenticLoopOrchestrator: AgenticLoopOrchestrator
     private lateinit var hitlCheckpointManager: HitlCheckpointManager
     private lateinit var baselineAutoChecker: BaselineAutoChecker
-    private lateinit var service: ClaudeAgentService
+    private lateinit var service: ForgeAgentService
 
     private val defaultProfile = ProfileDefinition(
         name = "development-profile",
@@ -68,7 +68,7 @@ class ClaudeAgentServiceTest {
         every { systemPromptAssembler.assemble(any(), any(), any()) } returns "You are a test assistant."
         every { systemPromptAssembler.fallbackPrompt() } returns "You are a test assistant."
 
-        service = ClaudeAgentService(
+        service = ForgeAgentService(
             claudeAdapter = claudeAdapter,
             modelRegistry = mockk(relaxed = true),
             mcpProxyService = mcpProxyService,

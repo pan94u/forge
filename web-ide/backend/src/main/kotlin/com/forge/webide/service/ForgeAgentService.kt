@@ -37,7 +37,7 @@ import java.util.concurrent.Executors
  * - [BaselineAutoChecker] for baseline quality gate auto-checks
  */
 @Service
-class ClaudeAgentService(
+class ForgeAgentService(
     private val claudeAdapter: ModelAdapter,
     private val modelRegistry: ModelRegistry,
     private val mcpProxyService: McpProxyService,
@@ -58,7 +58,7 @@ class ClaudeAgentService(
     private val baselineAutoChecker: BaselineAutoChecker,
     private val interactionEvaluationService: com.forge.webide.service.learning.InteractionEvaluationService
 ) {
-    private val logger = LoggerFactory.getLogger(ClaudeAgentService::class.java)
+    private val logger = LoggerFactory.getLogger(ForgeAgentService::class.java)
     private val executor = Executors.newFixedThreadPool(10)
 
     @Value("\${forge.model.name:\${forge.claude.model:claude-sonnet-4-6}}")

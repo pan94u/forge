@@ -4,7 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import com.forge.webide.entity.ChatSessionEntity
 import com.forge.webide.model.*
 import com.forge.webide.repository.ChatSessionRepository
-import com.forge.webide.service.ClaudeAgentService
+import com.forge.webide.service.ForgeAgentService
 import com.forge.webide.service.GitConfirmService
 import com.forge.webide.service.skill.HitlAction
 import com.forge.webide.service.skill.HitlDecision
@@ -27,7 +27,7 @@ import java.util.concurrent.ConcurrentHashMap
  */
 @Component
 class ChatWebSocketHandler(
-    private val claudeAgentService: ClaudeAgentService,
+    private val forgeAgentService: ForgeAgentService,
     private val objectMapper: ObjectMapper,
     private val chatSessionRepository: ChatSessionRepository,
     private val gitConfirmService: GitConfirmService
@@ -55,7 +55,7 @@ class ChatWebSocketHandler(
         ))
 
         // Check for pending HITL checkpoint (reconnection recovery)
-        val pendingCheckpoint = claudeAgentService.getPendingCheckpoint(chatSessionId)
+        val pendingCheckpoint = forgeAgentService.getPendingCheckpoint(chatSessionId)
         if (pendingCheckpoint != null) {
             logger.info("Resending pending HITL checkpoint for session $chatSessionId")
             sendMessage(session, mapOf(
@@ -145,7 +145,7 @@ class ChatWebSocketHandler(
         }
 
         // Stream the response back via the agentic loop
-        claudeAgentService.streamMessage(
+        forgeAgentService.streamMessage(
             sessionId = chatSessionId,
             message = content,
             contexts = contexts,
@@ -199,7 +199,7 @@ class ChatWebSocketHandler(
             modifiedPrompt = modifiedPrompt
         )
 
-        claudeAgentService.resolveCheckpoint(chatSessionId, decision)
+        forgeAgentService.resolveCheckpoint(chatSessionId, decision)
     }
 
     private fun handleIntentResponse(chatSessionId: String, payload: Map<*, *>) {
@@ -209,7 +209,7 @@ class ChatWebSocketHandler(
             return
         }
         logger.info("Intent response received for session {}: {}", chatSessionId, selectedProfile)
-        claudeAgentService.resolveIntentConfirmation(chatSessionId, selectedProfile)
+        forgeAgentService.resolveIntentConfirmation(chatSessionId, selectedProfile)
     }
 
     private fun sendMessage(session: WebSocketSession, data: Any) {
