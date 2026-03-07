@@ -1,0 +1,349 @@
+# =============================================================================
+# Forge Platform — 新加坡节点单机生产部署 (4C8G)
+# =============================================================================
+#
+# 使用方式:
+#   docker compose -f docker-compose.production-singapore.yml --env-file .env.production up -d
+#
+# 资源分配 (4C / 8G 含 4G Swap):
+# ┌──────────────────────┬───────┬────────┬─────────────────────────────────┐
+# │ 容器                  │ CPU   │ 内存    │ 说明                             │
+# ├──────────────────────┼───────┼────────┼─────────────────────────────────┤
+# │ backend + workspace  │ 1C    │ 1G     │ JVM 512M + workspace 进程 512M   │
+# │ postgres             │ 0.5C  │ 512M   │ shared_buffers=128MB             │
+# │ keycloak             │ 0.5C  │ 512M   │ SSO 认证中心                     │
+# │ knowledge-mcp        │ 0.25C │ 128M   │ Ktor 轻量服务                    │
+# │ database-mcp         │ 0.25C │ 128M   │ Ktor 轻量服务                    │
+# │ frontend             │ 0.25C │ 128M   │ Next.js standalone               │
+# │ enterprise-console   │ 0.25C │ 128M   │ Next.js standalone               │
+# │ nginx                │ 0.25C │ 64M    │ 反向代理                         │
+# ├──────────────────────┼───────┼────────┼─────────────────────────────────┤
+# │ 容器合计              │ 3.25C │ 2.6G   │                                 │
+# │ OS + 弹性余量          │ 0.75C │ 5.4G   │ 系统 + burst 缓冲 (含 4G Swap)   │
+# └──────────────────────┴───────┴────────┴─────────────────────────────────┘
+
+services:
+  # ---------------------------------------------------------------------------
+  # PostgreSQL 16 — 数据持久化到宿主机 /data/forge/postgres
+  # 首次启动时自动创建 forge 和 keycloak 两个数据库
+  # ---------------------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    container_name: forge-postgres
+    restart: unless-stopped
+    cpus: 0.5
+    mem_limit: 512m
+    environment:
+      POSTGRES_DB: forge
+      POSTGRES_USER: forge
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    command: >
+      postgres
+      -c shared_buffers=128MB
+      -c effective_cache_size=384MB
+      -c work_mem=4MB
+      -c maintenance_work_mem=64MB
+      -c max_connections=50
+      -c wal_buffers=8MB
+      -c checkpoint_completion_target=0.9
+      -c random_page_cost=1.1
+      -c log_min_duration_statement=1000
+    volumes:
+      - forge-postgres-data:/var/lib/postgresql/data
+      - ./keycloak/init-keycloak-db.sql:/docker-entrypoint-initdb.d/10-keycloak.sql:ro
+    ports:
+      - "127.0.0.1:5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U forge -d forge"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
+
+  # ---------------------------------------------------------------------------
+  # Keycloak 24 — SSO 认证中心
+  # 浏览器访问: http://<KEYCLOAK_PUBLIC_URL>   Admin: admin / ${KEYCLOAK_ADMIN_PASSWORD}
+  # 容器内访问: http://keycloak:8080
+  # ---------------------------------------------------------------------------
+  keycloak:
+    image: quay.io/keycloak/keycloak:24.0
+    container_name: forge-keycloak
+    restart: unless-stopped
+    cpus: 0.5
+    mem_limit: 512m
+    command: start --import-realm
+    environment:
+      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:-admin}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+      KC_HTTP_PORT: "8080"
+      KC_HTTP_ENABLED: "true"
+      KC_HTTP_RELATIVE_PATH: "/auth"
+      KC_HOSTNAME_STRICT: "false"
+      KC_HOSTNAME_STRICT_BACKCHANNEL: "false"
+      KC_HOSTNAME_URL: "${KEYCLOAK_PUBLIC_URL}"
+      KC_PROXY: "edge"
+      KC_HEALTH_ENABLED: "true"
+      # Keycloak 使用独立的 keycloak 数据库（同一 PG 实例）
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
+      KC_DB_USERNAME: forge
+      KC_DB_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - ./keycloak/realm-export.json:/opt/keycloak/data/import/realm-export.json:ro
+    ports:
+      - "8180:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/localhost/8080 && echo -e 'GET /auth/health/ready HTTP/1.0\r\nHost: localhost\r\n\r\n' >&3 && grep -q 'UP' <&3 || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 180s
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
+
+  # ---------------------------------------------------------------------------
+  # Knowledge MCP — 知识库检索服务
+  # ---------------------------------------------------------------------------
+  knowledge-mcp:
+    build:
+      context: ../../mcp-servers/forge-knowledge-mcp
+      dockerfile: Dockerfile
+    container_name: forge-knowledge-mcp
+    restart: unless-stopped
+    cpus: 0.25
+    mem_limit: 128m
+    environment:
+      PORT: "8081"
+      KNOWLEDGE_MODE: "local"
+      KNOWLEDGE_BASE_PATH: "/knowledge-base"
+    volumes:
+      - ../../knowledge-base:/knowledge-base:ro
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8081/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "2"
+
+  # ---------------------------------------------------------------------------
+  # Database MCP — 数据库查询服务 (只读)
+  # ---------------------------------------------------------------------------
+  database-mcp:
+    build:
+      context: ../../mcp-servers/forge-database-mcp
+      dockerfile: Dockerfile
+    container_name: forge-database-mcp
+    restart: unless-stopped
+    cpus: 0.25
+    mem_limit: 128m
+    environment:
+      PORT: "8082"
+      FORGE_DB_FORGE_URL: "jdbc:postgresql://postgres:5432/forge"
+      FORGE_DB_FORGE_USER: "forge"
+      FORGE_DB_FORGE_PASSWORD: "${DB_PASSWORD}"
+      FORGE_DB_DEFAULT_ACCESS_LEVEL: "FULL_READ"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8082/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "2"
+
+  # ---------------------------------------------------------------------------
+  # Backend — Spring Boot 3 + Workspace 运行时
+  # ---------------------------------------------------------------------------
+  backend:
+    build:
+      context: ../../web-ide/backend
+      dockerfile: Dockerfile
+    container_name: forge-backend
+    restart: unless-stopped
+    cpus: 1
+    mem_limit: 1g
+    environment:
+      # --- JVM 调优 ---
+      JAVA_OPTS: >-
+        -Xms256m -Xmx512m
+        -XX:+UseG1GC -XX:MaxGCPauseMillis=200
+        -XX:+UseStringDeduplication
+        -Djava.security.egd=file:/dev/./urandom
+      # --- Spring Profile ---
+      SPRING_PROFILES_ACTIVE: "production"
+      SPRING_JPA_HIBERNATE_DDL_AUTO: "validate"
+      # --- 模型 ---
+      MODEL_PROVIDER: ${MODEL_PROVIDER:-minimax}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ANTHROPIC_API_URL: ${ANTHROPIC_API_URL:-https://api.anthropic.com}
+      MINIMAX_API_KEY: ${MINIMAX_API_KEY:-}
+      MINIMAX_API_URL: ${MINIMAX_API_URL:-https://api.minimaxi.com/anthropic}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      DASHSCOPE_API_KEY: ${DASHSCOPE_API_KEY:-}
+      # --- 数据库 ---
+      DB_URL: "jdbc:postgresql://postgres:5432/forge"
+      DB_USERNAME: "forge"
+      DB_PASSWORD: "${DB_PASSWORD}"
+      DB_DRIVER: "org.postgresql.Driver"
+      # --- MCP ---
+      FORGE_MCP_SERVERS: "http://knowledge-mcp:8081,http://database-mcp:8082"
+      # --- 安全 + SSO ---
+      FORGE_SECURITY_ENABLED: "true"
+      FORGE_ENCRYPTION_KEY: ${FORGE_ENCRYPTION_KEY}
+      FORGE_CORS_ALLOWED_ORIGINS: ${FORGE_CORS_ALLOWED_ORIGINS}
+      FORGE_FRONTEND_URL: ${FORGE_FRONTEND_URL}
+      # JWT issuer 需与 Keycloak 签发 token 的 iss 字段一致（浏览器可见地址）
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: "${KEYCLOAK_PUBLIC_URL}/realms/forge"
+      # JWK 端点走内部容器网络（不走公网）
+      FORGE_SECURITY_JWK_SET_URI: "http://keycloak:8080/auth/realms/forge/protocol/openid-connect/certs"
+      # --- 插件 ---
+      FORGE_PLUGINS_PATH: /plugins
+    volumes:
+      - ../../plugins:/plugins:ro
+      - ../../knowledge-base:/knowledge-base:ro
+      - forge-backend-data:/app/data
+    ports:
+      - "127.0.0.1:8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      knowledge-mcp:
+        condition: service_healthy
+      database-mcp:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --server-response -O /dev/null http://localhost:8080/api/knowledge/search 2>&1 | grep -qE 'HTTP/1\\.[01] (200|401)'"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    logging:
+      driver: json-file
+      options:
+        max-size: "100m"
+        max-file: "5"
+
+  # ---------------------------------------------------------------------------
+  # Frontend — Web IDE 前端 (Next.js standalone)
+  # ---------------------------------------------------------------------------
+  frontend:
+    build:
+      context: ../../web-ide/frontend
+      dockerfile: Dockerfile
+    container_name: forge-frontend
+    restart: unless-stopped
+    cpus: 0.25
+    mem_limit: 128m
+    environment:
+      BACKEND_URL: http://backend:8080
+      BACKEND_WS_URL: ws://backend:8080
+      NEXT_PUBLIC_KEYCLOAK_URL: "${KEYCLOAK_PUBLIC_URL}"
+    depends_on:
+      backend:
+        condition: service_healthy
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "2"
+
+  # ---------------------------------------------------------------------------
+  # Enterprise Console — 企业管理控制台
+  # ---------------------------------------------------------------------------
+  enterprise-console:
+    build:
+      context: ../../enterprise-console
+      dockerfile: Dockerfile
+    container_name: forge-enterprise-console
+    restart: unless-stopped
+    cpus: 0.25
+    mem_limit: 128m
+    ports:
+      - "9001:9001"
+    environment:
+      PORT: "9001"
+      NEXT_PUBLIC_BASE_PATH: "/console"
+      NEXTAUTH_BASE_PATH: "/console/api/auth"
+      BACKEND_URL: http://backend:8080
+      KEYCLOAK_CLIENT_ID: forge-enterprise
+      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_ENTERPRISE_SECRET:-enterprise-secret}
+      # 浏览器可见的 Keycloak 地址（用于 OAuth2 redirect）
+      KEYCLOAK_ISSUER: "${KEYCLOAK_PUBLIC_URL}/realms/forge"
+      # 容器内部 Keycloak 地址（用于 token 交换，避免走公网）
+      KEYCLOAK_INTERNAL_URL: "http://keycloak:8080/auth/realms/forge"
+      NEXTAUTH_URL: "https://forge.delivery"
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
+      AUTH_TRUST_HOST: "true"
+    depends_on:
+      backend:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "2"
+
+  # ---------------------------------------------------------------------------
+  # Nginx — 统一入口 + 反向代理
+  # ---------------------------------------------------------------------------
+  nginx:
+    image: nginx:alpine
+    container_name: forge-nginx
+    restart: unless-stopped
+    cpus: 0.25
+    mem_limit: 64m
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx-production.conf:/etc/nginx/conf.d/default.conf:ro
+      - /opt/forge-ssl/forge.delivery_nginx:/etc/nginx/ssl:ro
+    depends_on:
+      - backend
+      - frontend
+      - enterprise-console
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
+
+volumes:
+  forge-postgres-data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /data/forge/postgres
+  forge-backend-data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /data/forge/backend
