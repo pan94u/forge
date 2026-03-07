@@ -30,7 +30,10 @@ export default auth((req: NextRequest & { auth: unknown }) => {
   // renewed, so the user needs to log in again.
   const session = req.auth as { error?: string } | null;
   if (!session || session.error === "RefreshAccessTokenError") {
-    return NextResponse.redirect(new URL(`${authBasePath}/signin`, req.url));
+    const signInUrl = new URL(`${authBasePath}/signin`, req.url);
+    // 保留原始访问路径，登录成功后跳回
+    signInUrl.searchParams.set("callbackUrl", req.url);
+    return NextResponse.redirect(signInUrl);
   }
 
   // Add locale prefix via redirect (NOT rewrite — avoids Next.js internal proxy loop)

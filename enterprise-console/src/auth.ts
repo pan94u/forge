@@ -106,6 +106,15 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     maxAge: 30 * 24 * 60 * 60,
   },
   callbacks: {
+    redirect({ url, baseUrl }) {
+      // 同域 URL 直接使用（保留 callbackUrl 传入的原始路径）
+      if (url.startsWith(baseUrl) || url.startsWith("/")) {
+        return url;
+      }
+      // 跨域 URL 回退到 basePath 首页
+      const basePath = process.env.NEXT_PUBLIC_BASE_PATH || "";
+      return `${baseUrl}${basePath}`;
+    },
     jwt({ token, account }) {
       // Initial sign-in: store tokens and metadata
       if (account) {
