@@ -21,6 +21,11 @@ import type {
   SecurityPosture,
   KnowledgeHealth,
   ProcessFlow,
+  ArchitectureSummary,
+  ProcessSummary,
+  ComplianceSummary,
+  CapacitySummary,
+  VendorSummary,
 } from "./types";
 
 async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
@@ -197,5 +202,15 @@ export const api = {
       fetchJson<ProcessFlow[]>(`/api/governance/${orgId}/process`),
     createSnapshot: (orgId: string) =>
       fetchJson<void>(`/api/governance/${orgId}/snapshot`, { method: 'POST' }),
+    getArchitecture: (orgId: string) =>
+      fetchJson<ArchitectureSummary>(`/api/governance/${orgId}/architecture`),
+    getProcessSummary: (orgId: string) =>
+      fetchJson<ProcessSummary>(`/api/governance/${orgId}/process-summary`),
+    getCompliance: (orgId: string, days = 30) =>
+      fetchJson<ComplianceSummary>(`/api/governance/${orgId}/compliance?days=${days}`),
+    getCapacity: (orgId: string) =>
+      fetchJson<CapacitySummary>(`/api/governance/${orgId}/capacity`),
+    getVendor: (orgId: string, days = 30) =>
+      fetchJson<VendorSummary>(`/api/governance/${orgId}/vendor?days=${days}`),
   },
 };

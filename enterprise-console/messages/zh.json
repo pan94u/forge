@@ -200,7 +200,52 @@
     "analyze": "开始分析",
     "analyzing": "分析中...",
     "snapshotBtn": "生成快照",
-    "snapshotSuccess": "快照已生成"
+    "snapshotSuccess": "快照已生成",
+    "architecture": {
+      "title": "架构治理",
+      "totalWorkspaces": "工作区总数",
+      "withKnowledge": "有知识沉淀",
+      "coverage": "知识覆盖率",
+      "healthScore": "架构健康度",
+      "recentWorkspaces": "最近工作区"
+    },
+    "process": {
+      "title": "流程治理",
+      "totalFlows": "流程图总数",
+      "totalNodes": "节点总数",
+      "totalEdges": "连线总数",
+      "avgNodes": "平均节点数",
+      "byType": "按类型分布",
+      "recentFlows": "最近流程图"
+    },
+    "compliance": {
+      "title": "合规风险",
+      "totalEvents": "审计事件",
+      "hitlEvents": "HITL 事件",
+      "approvalRate": "审批通过率",
+      "anomalies": "异常事件",
+      "riskLevel": "风险等级",
+      "recentEvents": "最近事件"
+    },
+    "capacity": {
+      "title": "容量规划",
+      "currentWorkspaces": "当前工作区",
+      "newLast30d": "近 30 天新增",
+      "growthRate": "增长率",
+      "currentSessions": "当前会话量",
+      "forecast": "30 天预测",
+      "status": "容量状态",
+      "normal": "正常",
+      "growing": "增长中",
+      "rapid_growth": "快速增长"
+    },
+    "vendor": {
+      "title": "供应商管理",
+      "totalProviders": "Provider 数量",
+      "primaryProvider": "主要 Provider",
+      "diversification": "多样化评分",
+      "providerStats": "Provider 用量分布"
+    }
   },
   "common": {
     "loading": "加载中...",

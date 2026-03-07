@@ -1,7 +1,7 @@
 "use client";
 
 import { useParams } from "next/navigation";
-import { ArrowLeft, DollarSign, Users, Shield, Database, Bot } from "lucide-react";
+import { ArrowLeft, DollarSign, Users, Shield, Database, Bot, Building2, GitBranch, ClipboardCheck, TrendingUp, Package } from "lucide-react";
 import { Link } from "@/navigation";
 import { Button } from "@/components/ui/Button";
 
@@ -42,12 +42,52 @@ export default function GovernancePage() {
       color: "text-purple-500",
     },
     {
+      key: "architecture",
+      title: "架构治理",
+      desc: "工作区架构健康度、知识覆盖率分析",
+      icon: Building2,
+      href: `/orgs/${id}/governance/architecture`,
+      color: "text-indigo-500",
+    },
+    {
+      key: "process",
+      title: "流程治理",
+      desc: "流程图分布、节点统计、类型分析",
+      icon: GitBranch,
+      href: `/orgs/${id}/governance/process`,
+      color: "text-cyan-500",
+    },
+    {
+      key: "compliance",
+      title: "合规风险",
+      desc: "审计事件、HITL 审批、风险等级评估",
+      icon: ClipboardCheck,
+      href: `/orgs/${id}/governance/compliance`,
+      color: "text-yellow-500",
+    },
+    {
+      key: "capacity",
+      title: "容量规划",
+      desc: "工作区增长趋势、30 天容量预测",
+      icon: TrendingUp,
+      href: `/orgs/${id}/governance/capacity`,
+      color: "text-orange-500",
+    },
+    {
+      key: "vendor",
+      title: "供应商管理",
+      desc: "Provider 用量分布、多样化评分",
+      icon: Package,
+      href: `/orgs/${id}/governance/vendor`,
+      color: "text-pink-500",
+    },
+    {
       key: "agent",
       title: "治理 Agent",
       desc: "AI 驱动的治理分析与决策支持",
       icon: Bot,
       href: `/orgs/${id}/governance/agent`,
-      color: "text-orange-500",
+      color: "text-teal-500",
     },
   ];
 

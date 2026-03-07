@@ -194,3 +194,83 @@ export interface ProcessFlow {
   extractedAt: string;
   sourceTagId: string | null;
 }
+
+// Phase 20 governance domain types
+
+export interface WorkspaceItem {
+  id: string;
+  name: string;
+  createdAt: string;
+}
+
+export interface ArchitectureSummary {
+  orgId: string;
+  totalWorkspaces: number;
+  workspacesWithKnowledge: number;
+  knowledgeCoverageRate: number;
+  healthScore: number;
+  recentWorkspaces: WorkspaceItem[];
+}
+
+export interface ProcessFlowSummaryItem {
+  id: string;
+  flowName: string;
+  flowType: string;
+  nodeCount: number;
+  edgeCount: number;
+  extractedAt: string;
+}
+
+export interface ProcessSummary {
+  orgId: string;
+  totalFlows: number;
+  totalNodes: number;
+  totalEdges: number;
+  flowsByType: Record<string, number>;
+  avgNodesPerFlow: number;
+  recentFlows: ProcessFlowSummaryItem[];
+}
+
+export interface ComplianceEvent {
+  timestamp: string;
+  action: string;
+  actor: string;
+  domain: string;
+}
+
+export interface ComplianceSummary {
+  orgId: string;
+  days: number;
+  totalAuditEvents: number;
+  hitlEvents: number;
+  hitlApprovalRate: number;
+  anomalyCount: number;
+  riskLevel: 'low' | 'medium' | 'high';
+  recentEvents: ComplianceEvent[];
+}
+
+export interface CapacitySummary {
+  orgId: string;
+  currentWorkspaces: number;
+  workspacesLast30Days: number;
+  workspaceGrowthRate: number;
+  currentSessions: number;
+  sessionsGrowthRate: number;
+  forecastWorkspaces30Days: number;
+  capacityStatus: 'normal' | 'growing' | 'rapid_growth';
+}
+
+export interface ProviderStat {
+  provider: string;
+  sessionCount: number;
+  sharePercent: number;
+}
+
+export interface VendorSummary {
+  orgId: string;
+  days: number;
+  totalProviders: number;
+  primaryProvider: string;
+  diversificationScore: number;
+  providerStats: ProviderStat[];
+}
