@@ -158,51 +158,28 @@ cp .env.example .env.production
 # 编辑 .env.production:
 f=.env.production
 echo 'SSO_URL=https://sso.forge.delivery/auth' > $f
-echo 'KC_COMMAND=start' >> $f          # 生产模式
+echo 'KC_COMMAND=start' >> $f                      # 生产模式
 echo 'KC_PORT=8180' >> $f
 echo 'KC_ADMIN=admin' >> $f
 echo "KC_ADMIN_PASSWORD=$(openssl rand -base64 16)" >> $f
 echo "KC_DB_PASSWORD=$(openssl rand -base64 16)" >> $f
+echo 'KC_PROXY=edge' >> $f                         # 反向代理模式
+echo 'COMPOSE_PROFILES=production' >> $f           # 启用 nginx 容器
+echo 'SSL_CERT_PATH=/opt/sso-ssl' >> $f            # SSL 证书目录
 
-# 2. 启动
+# 2. 放置 SSL 证书
+mkdir -p /opt/sso-ssl
+# 将 sso.forge.delivery_bundle.crt 和 sso.forge.delivery.key 复制到 /opt/sso-ssl/
+
+# 3. 启动（含 nginx）
 docker compose --env-file .env.production up -d
-
-# 3. 配置反向代理
-# 在 SSO 机器的 nginx 中配置 sso.forge.delivery → localhost:8180
-# 需要 SSL 证书（Let's Encrypt 或购买）
 
 # 4. 验证
 curl -sf https://sso.forge.delivery/auth/realms/forge | python3 -c "import sys,json; print(json.load(sys.stdin)['realm'])"
 # 预期: forge
 ```
 
-**SSO 机器 nginx 示例配置：**
-
-```nginx
-server {
-    listen 80;
-    server_name sso.forge.delivery;
-    return 301 https://$server_name$request_uri;
-}
-
-server {
-    listen 443 ssl http2;
-    server_name sso.forge.delivery;
-
-    ssl_certificate /etc/nginx/ssl/sso.forge.delivery.crt;
-    ssl_certificate_key /etc/nginx/ssl/sso.forge.delivery.key;
-
-    location / {
-        proxy_pass http://localhost:8180;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_buffer_size 16k;
-        proxy_buffers 4 16k;
-    }
-}
-```
+> nginx 配置文件为 `infrastructure/sso/nginx-sso.conf`，通过 compose volume 挂载，无需手动安装 nginx。
 
 ---
 
@@ -556,7 +533,8 @@ infrastructure/
 │   ├── .env.production.example          # Production 环境变量模板
 │   └── .env / .env.production           # 实际环境变量（不入库）
 ├── sso/                                 # SSO 独立部署（SSO 机器或同机）
-│   ├── docker-compose.yml               # Keycloak 24 + PostgreSQL 16
+│   ├── docker-compose.yml               # Keycloak 24 + PostgreSQL 16 + Nginx（生产）
+│   ├── nginx-sso.conf                   # SSO nginx 配置（SSL 终止 + 反向代理）
 │   ├── realm-export.json                # Realm 配置（3 客户端 + 角色 + 测试账号）
 │   └── .env.example                     # SSO 环境变量模板
 ├── deployment-architecture.md           # 部署架构文档
