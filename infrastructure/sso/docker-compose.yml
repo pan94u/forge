@@ -11,9 +11,10 @@
 #   3. 访问 http://sso.forge.local:8180/auth/admin (admin/admin)
 #
 # 生产部署 (独立机器 + 域名 sso.forge.delivery):
-#   1. 复制 .env.example → .env.production，修改配置
+#   1. 复制 .env.example → .env，修改配置
 #   2. 放置 SSL 证书到 SSL_CERT_PATH 目录
-#   3. docker compose --env-file .env.production up -d
+#   3. docker compose up -d
+#      （生产默认启动 nginx，本地开发用 COMPOSE_PROFILES= 可跳过）
 #
 # 应用接入（仅需两步）:
 #   1. Docker 网络: 加入 sso-net（同机部署）或通过 HTTPS 访问（跨机部署）
@@ -26,20 +27,30 @@ networks:
 
 services:
   # ---------------------------------------------------------------------------
-  # PostgreSQL — Keycloak 专属数据库（与应用数据库完全隔离）
+  # PostgreSQL 16 — Keycloak 专属数据库
   # ---------------------------------------------------------------------------
   sso-postgres:
     image: postgres:16-alpine
-    container_name: sso-postgres
+    container_name: forge-sso-postgres
     restart: unless-stopped
+    cpus: 0.5
+    mem_limit: 512m
     networks: [sso-net]
     environment:
       POSTGRES_DB: keycloak
       POSTGRES_USER: keycloak
       POSTGRES_PASSWORD: ${KC_DB_PASSWORD:-keycloak}
       PGDATA: /var/lib/postgresql/data/pgdata
+    command: >
+      postgres
+      -c shared_buffers=128MB
+      -c effective_cache_size=256MB
+      -c work_mem=4MB
+      -c max_connections=40
     volumes:
-      - sso-postgres-data:/var/lib/postgresql/data
+      - ${PG_DATA_PATH:-/data/sso-postgres}:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5432:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U keycloak -d keycloak"]
       interval: 10s
@@ -61,9 +72,11 @@ services:
   # ---------------------------------------------------------------------------
   keycloak:
     image: quay.io/keycloak/keycloak:24.0
-    command: ${KC_COMMAND:-start-dev} --import-realm
-    container_name: sso-keycloak
+    command: ${KC_COMMAND:-start} --import-realm
+    container_name: forge-sso-keycloak
     restart: unless-stopped
+    cpus: 1
+    mem_limit: 1g
     networks:
       sso-net:
         aliases:
@@ -73,7 +86,7 @@ services:
     environment:
       # --- Admin ---
       KEYCLOAK_ADMIN: ${KC_ADMIN:-admin}
-      KEYCLOAK_ADMIN_PASSWORD: ${KC_ADMIN_PASSWORD:-admin}
+      KEYCLOAK_ADMIN_PASSWORD: ${KC_ADMIN_PASSWORD}
       # --- HTTP ---
       KC_HTTP_PORT: "8180"
       KC_HTTP_ENABLED: "true"
@@ -81,9 +94,10 @@ services:
       # --- Hostname ---
       KC_HOSTNAME_URL: "${SSO_URL:-http://sso.forge.local:8180/auth}"
       KC_HOSTNAME_STRICT: "false"
+      KC_HOSTNAME_STRICT_BACKCHANNEL: "false"
       KC_HEALTH_ENABLED: "true"
-      # --- Proxy (生产环境通过 .env 设置 KC_PROXY=edge) ---
-      KC_PROXY: ${KC_PROXY:-}
+      # --- Proxy (生产必须设置 edge，本地开发可不设) ---
+      KC_PROXY: ${KC_PROXY:-edge}
       # --- Database ---
       KC_DB: postgres
       KC_DB_URL: jdbc:postgresql://sso-postgres:5432/keycloak
@@ -99,7 +113,7 @@ services:
       interval: 15s
       timeout: 5s
       retries: 20
-      start_period: 60s
+      start_period: 180s
     logging:
       driver: json-file
       options:
@@ -107,15 +121,16 @@ services:
         max-file: "3"
 
   # ---------------------------------------------------------------------------
-  # Nginx — SSL 终止 + 反向代理（仅生产环境需要）
+  # Nginx — SSL 终止 + 反向代理
   #
-  # 本地开发时不启动此服务（profiles: [production]），直接访问 :8180。
-  # 生产部署通过 --profile production 或 COMPOSE_PROFILES=production 启用。
+  # 生产默认启动。本地开发可通过 COMPOSE_PROFILES= 跳过，直接访问 :8180。
   # ---------------------------------------------------------------------------
   nginx:
     image: nginx:alpine
-    container_name: sso-nginx
+    container_name: forge-sso-nginx
     restart: unless-stopped
+    cpus: 0.25
+    mem_limit: 128m
     profiles: ["production"]
     networks: [sso-net]
     ports:
@@ -130,8 +145,7 @@ services:
     logging:
       driver: json-file
       options:
-        max-size: "20m"
-        max-file: "2"
+        max-size: "50m"
+        max-file: "3"
 
-volumes:
-  sso-postgres-data:
+# 数据库数据映射到宿主机 ${PG_DATA_PATH:-/data/sso-postgres}，便于备份和管理
