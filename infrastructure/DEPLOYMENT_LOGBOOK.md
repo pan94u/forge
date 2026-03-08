@@ -93,3 +93,94 @@ NEXT_PUBLIC_KEYCLOAK_URL=https://forge.delivery/auth npm run build
 cd ../../infrastructure/docker
 docker compose -f docker-compose.production-single.yml up -d --build frontend
 ```
+
+---
+
+## Synapse AI 部署 (synapse.gold)
+
+- 日期: 2026-03-09
+- 仓库: git@github.com:pan94u/Synapse-AI.git (main)
+- 部署路径: /home/deploy/Synapse-AI
+- 域名: https://synapse.gold
+- SSO: Keycloak forge-synapse client 接入
+
+### 步骤与耗时
+
+| 步骤 | 操作 | 耗时 |
+|------|------|------|
+| 1 | 生成 SSH key + 克隆仓库 | ~2min |
+| 2 | 安装 bun | ~1min |
+| 3 | bun install + next build | ~1min |
+| 4 | docker compose up --build | ~3min |
+| 5 | SSL 证书部署 + nginx 重载 | ~1min |
+| 6 | Keycloak client 更新 redirectUris | ~1min |
+| 7 | DNS 修正 + 端到端验证 | ~2min |
+
+### 问题汇总
+
+#### 1. NEXTAUTH_SECRET 未传入容器
+- **现象**: synapse-web 启动后报 `MissingSecret`，`/api/auth/providers` 返回 500
+- **原因**: docker-compose.production.yml 中 `NEXTAUTH_SECRET=${NEXTAUTH_SECRET}` 从 shell 环境变量读取，覆盖了 env_file 中的值，而 shell 中未 export 该变量
+- **解决**: 移除 environment 中的 `NEXTAUTH_SECRET` 行，让 env_file (.env.production) 自动加载
+
+#### 2. nginx 配置修改后未生效
+- **现象**: nginx -s reload 后 synapse.gold server block 未加载，只有 forge.delivery
+- **原因**: Docker bind mount 单文件时，宿主机文件 inode 变化后容器内不会自动更新
+- **解决**: `docker restart forge-nginx` 重启容器使新配置生效
+
+#### 3. synapse.gold DNS 指向错误 IP
+- **现象**: 浏览器访问 synapse.gold 跳转到 `/auth/admin/master/console/`（Keycloak Admin Console）
+- **原因**: synapse.gold DNS A 记录指向 43.156.185.112（非本机），请求到了另一台机器的 nginx，该 nginx 无 synapse.gold server block，fallback 到 Keycloak
+- **解决**: 将 DNS A 记录改为 124.156.192.129（App 机器公网 IP，与 forge.delivery 相同）
+
+### 架构
+
+```
+浏览器 → synapse.gold (DNS: 124.156.192.129)
+       → forge-nginx (443, SSL 终止)
+       → proxy_pass http://172.19.0.1:19300 (docker gateway → 宿主机端口)
+       → synapse-web 容器 (3000)
+       → synapse-server 容器 (3001)
+
+认证流:
+synapse.gold → 307 → /api/auth/signin → 302 → sso.forge.delivery/auth/realms/forge/...
+→ 用户登录 → callback → session cookie → synapse.gold/chat
+```
+
+### 修改的文件
+
+| 仓库 | 文件 | 改动 | Commit |
+|------|------|------|--------|
+| forge | infrastructure/docker/nginx-production.conf | SYNAPSE_APP_HOST → 172.19.0.1 | d3c661e |
+| Synapse-AI | docker-compose.production.yml | 移除 environment 中的 NEXTAUTH_SECRET | b40eb1f |
+| Synapse-AI | .env.production | 填入 MINIMAX_API_KEY + NEXTAUTH_SECRET（未提交，含密钥） | — |
+| Keycloak | forge-synapse client | redirectUris/webOrigins 添加 https://synapse.gold | API 更新 |
+
+### 端口
+
+- synapse-web: 19300 (宿主机) → 3000 (容器)
+- synapse-server: 19301 (宿主机) → 3001 (容器)
+
+### 访问地址
+
+- Synapse AI: https://synapse.gold
+- SSO 登录: https://sso.forge.delivery/auth/realms/forge
+
+### 命令
+
+```bash
+# 启动 Synapse
+cd /home/deploy/Synapse-AI
+docker compose -f docker-compose.production.yml up --build -d
+
+# 查看日志
+docker logs synapse-web --tail 50
+docker logs synapse-server --tail 50
+
+# 重启
+docker compose -f docker-compose.production.yml down
+docker compose -f docker-compose.production.yml up -d
+
+# 重载 nginx（修改 nginx-production.conf 后需 restart 而非 reload）
+docker restart forge-nginx
+```
