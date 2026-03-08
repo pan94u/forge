@@ -83,6 +83,7 @@ services:
       KC_HOSTNAME_STRICT: "false"
       KC_HEALTH_ENABLED: "true"
       # --- Proxy (生产环境通过 .env 设置 KC_PROXY=edge) ---
+      KC_PROXY: ${KC_PROXY:-}
       # --- Database ---
       KC_DB: postgres
       KC_DB_URL: jdbc:postgresql://sso-postgres:5432/keycloak

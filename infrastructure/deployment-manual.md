@@ -147,7 +147,7 @@ curl -sf http://sso.forge.local:8180/auth/realms/forge | python3 -c "import sys,
 
 ### 4.2 Production（独立 SSO 机器）
 
-在 SSO 机器上操作：
+前置：DNS 已将 `sso.forge.delivery` 解析到本机。在 SSO 机器上操作：
 
 ```bash
 cd /opt/forge/infrastructure/sso
