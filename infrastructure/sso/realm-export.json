@@ -173,21 +173,28 @@
       "secret": "synapse-secret",
       "standardFlowEnabled": true,
       "directAccessGrantsEnabled": false,
-      "rootUrl": "https://synapse.forge.delivery",
+      "rootUrl": "https://synapse.gold",
       "baseUrl": "/",
       "redirectUris": [
+        "https://synapse.gold/*",
+        "https://synapse.gold/api/auth/callback/*",
         "https://synapse.forge.delivery/*",
+        "http://synapse.local:3000/*",
+        "http://localhost:3000/*",
         "http://localhost:19300/*",
         "http://localhost:19000/synapse/*"
       ],
       "webOrigins": [
+        "https://synapse.gold",
         "https://synapse.forge.delivery",
+        "http://synapse.local:3000",
+        "http://localhost:3000",
         "http://localhost:19300",
         "http://localhost:19000"
       ],
       "protocol": "openid-connect",
       "attributes": {
-        "post.logout.redirect.uris": "https://synapse.forge.delivery/*##http://localhost:19300/*"
+        "post.logout.redirect.uris": "https://synapse.gold/*##https://synapse.forge.delivery/*##http://localhost:3000/*##http://localhost:19300/*"
       },
       "defaultClientScopes": [
         "openid",
