@@ -32,11 +32,15 @@ java -version  # 确认 21+
 # 构建前端
 cd web-ide/frontend && npm install && npm run build && cd ../..
 
-# Docker 一键部署（4 容器：backend + frontend + nginx + keycloak）
+# 构建企业控制台
+cd enterprise-console && npm install && npm run build && cd ..
+
+# Docker 一键部署（7 容器：backend + frontend + console + nginx + postgres + 2 MCP）
+# 前置：先启动 SSO（cd infrastructure/sso && docker compose up -d）
 cd infrastructure/docker
 docker compose -f docker-compose.trial.yml up --build -d
 
-# 访问 http://localhost:9000
+# 访问 http://forge.local:19000（需 /etc/hosts 配置 127.0.0.1 forge.local sso.forge.local）
 
 # 运行全量单元测试（当前 335 个）
 ./gradlew :web-ide:backend:test :adapters:model-adapter:test
@@ -140,6 +144,10 @@ Forge is a Gradle monorepo (Kotlin DSL) with the following modules:
 - **workspaceId 传递**: REST API（McpController）和 WebSocket（agenticStream）是两条独立路径，都需要传 workspaceId
 - **Kotlin 枚举序列化**: `enum class` 默认序列化为大写（`DIRECTORY`），前端期望小写（`directory`）。所有枚举必须加 `@JsonValue` 返回小写。**新增枚举时立即全局排查** `grep -r "enum class" --include="*.kt"`
 - **空字符串 vs null**: Kotlin `String?` 从 HTTP query param 接收时，`q=`（空串）和不传 `q`（null）不同。`?: default` 只处理 null，需用 `isNullOrBlank()` 同时处理两者
+- **NEXT_PUBLIC_* 构建时变量**: Next.js `NEXT_PUBLIC_*` 在 `npm run build` 时烘焙进产物，运行时设置无效。Enterprise Console 的 `NEXT_PUBLIC_BASE_PATH=/console` 已固化在项目 `.env` 文件中，构建时自动读取
+- **Console fetch() 不自动加 basePath**: `<Link>` 和 `useRouter` 自动加 basePath，但 `fetch()` 不加。`api.ts` 中所有请求必须手动加 `process.env.NEXT_PUBLIC_BASE_PATH` 前缀，否则 nginx 直接路由到 backend（绕过 auth 代理层导致 401）
+- **Auth.js RFC 9207 issuer 校验**: Keycloak 24 在授权回调中带 `iss` 参数，Auth.js 会校验。`type: "oauth"` 时设置 `issuer` **不会**触发 OIDC discovery，但**必须**设置以通过 RFC 9207 校验
+- **nginx proxy_buffer_size**: NextAuth session cookie 超过 4KB 默认值，所有代理到 Console 的 nginx location 需设 `proxy_buffer_size 16k; proxy_buffers 4 16k;`
 
 ## 交付方法论（从 29 Session 实践总结）
 

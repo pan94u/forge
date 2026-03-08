@@ -2,36 +2,30 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { auth } from "@/auth";
 
-// In Next.js 15 standalone mode, NextResponse.rewrite() with an absolute URL
-// triggers an internal HTTP proxy request. When next-intl's createIntlMiddleware
-// does this rewrite to inject locale context, it proxies to itself → ECONNRESET loop.
-// Fix: handle locale routing with NextResponse.redirect() (browser-side) instead.
-// next-intl's getRequestConfig reads locale from requestLocale (URL params), so
-// the intl middleware rewrite is not needed for i18n to work in App Router.
-
 const locales = ["zh", "en"];
 const defaultLocale = "zh";
 
-// Auth basePath: /console/api/auth in production, /api/auth in trial (empty basePath)
-const authBasePath = process.env.NEXTAUTH_BASE_PATH || "/api/auth";
+// Build-time variable inlined by Next.js: "/console" in production, "" in dev.
+const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH || "";
 
 export default auth((req: NextRequest & { auth: unknown }) => {
-  const { pathname } = req.nextUrl;
+  // req.nextUrl.pathname in middleware INCLUDES basePath (Next.js behavior).
+  // Strip it so route matching works consistently.
+  const rawPathname = req.nextUrl.pathname;
+  const pathname =
+    BASE_PATH && rawPathname.startsWith(BASE_PATH)
+      ? rawPathname.slice(BASE_PATH.length) || "/"
+      : rawPathname;
 
-  // API routes: skip auth check (handled server-side)
-  // Also skip auth API routes (they handle auth themselves)
+  // API routes: skip auth check (handled server-side / auth.js route handler)
   if (pathname.startsWith("/api/")) {
     return NextResponse.next();
   }
 
   // Redirect unauthenticated users to sign-in.
-  // Also redirect when the refresh token has expired (RefreshAccessTokenError) —
-  // the session cookie is still present but the access token can no longer be
-  // renewed, so the user needs to log in again.
   const session = req.auth as { error?: string } | null;
   if (!session || session.error === "RefreshAccessTokenError") {
-    const signInUrl = new URL(`${authBasePath}/signin`, req.url);
-    // 保留原始访问路径，登录成功后跳回
+    const signInUrl = new URL(`${BASE_PATH}/api/auth/signin`, req.url);
     signInUrl.searchParams.set("callbackUrl", req.url);
     return NextResponse.redirect(signInUrl);
   }
@@ -41,8 +35,10 @@ export default auth((req: NextRequest & { auth: unknown }) => {
     (l) => pathname === `/${l}` || pathname.startsWith(`/${l}/`)
   );
   if (!hasLocale) {
-    const url = req.nextUrl.clone();
-    url.pathname = `/${defaultLocale}${pathname}`;
+    const url = new URL(
+      `${BASE_PATH}/${defaultLocale}${pathname}`,
+      req.url
+    );
     return NextResponse.redirect(url);
   }
 

@@ -28,8 +28,13 @@ import type {
   VendorSummary,
 } from "./types";
 
+// Next.js basePath (e.g. "/console") — needed because browser fetch() doesn't
+// auto-prepend basePath like <Link> does. Without this, requests go to /api/*
+// which nginx routes directly to backend (bypassing Console's auth proxy layer).
+const BASE = process.env.NEXT_PUBLIC_BASE_PATH || "";
+
 async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(url, {
+  const res = await fetch(`${BASE}${url}`, {
     headers: { "Content-Type": "application/json" },
     ...options,
   });

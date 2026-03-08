@@ -1,0 +1,109 @@
+# =============================================================================
+# SSO Infrastructure — Keycloak + PostgreSQL（独立部署）
+# =============================================================================
+#
+# 独立 SSO 服务，供 Forge、Console、Synapse 等应用统一接入。
+# 应用只需一个环境变量 SSO_URL 即可完成对接，无需关心 SSO 部署位置。
+#
+# 本地开发:
+#   1. 添加 /etc/hosts: 127.0.0.1 sso.forge.local
+#   2. docker compose up -d
+#   3. 访问 http://sso.forge.local:8180/auth/admin (admin/admin)
+#
+# 生产部署 (独立机器 + 域名 sso.forge.delivery):
+#   1. 复制 .env.example → .env.production，修改配置
+#   2. docker compose --env-file .env.production up -d
+#   3. 配置反向代理 (nginx) 将 https://sso.forge.delivery/auth → localhost:8180/auth
+#
+# 应用接入（仅需两步）:
+#   1. Docker 网络: 加入 sso-net（同机部署）或通过 HTTPS 访问（跨机部署）
+#   2. 环境变量: SSO_URL=http://sso.forge.local:8180/auth（开发）
+#              SSO_URL=https://sso.forge.delivery/auth（生产）
+
+networks:
+  sso-net:
+    name: sso-net
+
+services:
+  # ---------------------------------------------------------------------------
+  # PostgreSQL — Keycloak 专属数据库（与应用数据库完全隔离）
+  # ---------------------------------------------------------------------------
+  sso-postgres:
+    image: postgres:16-alpine
+    container_name: sso-postgres
+    restart: unless-stopped
+    networks: [sso-net]
+    environment:
+      POSTGRES_DB: keycloak
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: ${KC_DB_PASSWORD:-keycloak}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - sso-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U keycloak -d keycloak"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
+
+  # ---------------------------------------------------------------------------
+  # Keycloak 24 — SSO 认证中心
+  #
+  # 统一域名机制:
+  #   KC_HOSTNAME_URL 决定 Keycloak 签发的所有 URL（OIDC Discovery、token iss）。
+  #   本地开发时，Docker 网络别名 sso.forge.local 让容器也能解析该域名，
+  #   加上 KC_HTTP_PORT=8180 = 宿主机映射端口，实现浏览器 + 容器同一 URL。
+  # ---------------------------------------------------------------------------
+  keycloak:
+    image: quay.io/keycloak/keycloak:24.0
+    command: ${KC_COMMAND:-start-dev} --import-realm
+    container_name: sso-keycloak
+    restart: unless-stopped
+    networks:
+      sso-net:
+        aliases:
+          - sso.forge.local
+    ports:
+      - "${KC_PORT:-8180}:8180"
+    environment:
+      # --- Admin ---
+      KEYCLOAK_ADMIN: ${KC_ADMIN:-admin}
+      KEYCLOAK_ADMIN_PASSWORD: ${KC_ADMIN_PASSWORD:-admin}
+      # --- HTTP ---
+      KC_HTTP_PORT: "8180"
+      KC_HTTP_ENABLED: "true"
+      KC_HTTP_RELATIVE_PATH: "/auth"
+      # --- Hostname ---
+      KC_HOSTNAME_URL: "${SSO_URL:-http://sso.forge.local:8180/auth}"
+      KC_HOSTNAME_STRICT: "false"
+      KC_HEALTH_ENABLED: "true"
+      # --- Proxy (生产环境通过 .env 设置 KC_PROXY=edge) ---
+      # --- Database ---
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://sso-postgres:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: ${KC_DB_PASSWORD:-keycloak}
+    volumes:
+      - ./realm-export.json:/opt/keycloak/data/import/realm-export.json:ro
+    depends_on:
+      sso-postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/localhost/8180 && echo -e 'GET /auth/health/ready HTTP/1.0\\r\\nHost: localhost\\r\\n\\r\\n' >&3 && grep -q 'UP' <&3 || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 60s
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
+
+volumes:
+  sso-postgres-data:

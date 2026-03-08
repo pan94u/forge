@@ -1,3 +1,20 @@
+# =============================================================================
+# Forge Platform — Trial 本地开发部署
+# =============================================================================
+#
+# 前置条件:
+#   1. 启动 SSO: cd ../sso && docker compose up -d
+#   2. /etc/hosts 已添加: 127.0.0.1 sso.forge.local
+#
+# 使用方式:
+#   docker compose -f docker-compose.trial.yml up --build -d
+#   访问 http://localhost:19000
+
+# 加入 SSO 共享网络（本地开发时 SSO 在同一台机器）
+networks:
+  sso-net:
+    external: true
+
 services:
   postgres:
     image: postgres:16-alpine
@@ -63,6 +80,9 @@ services:
       dockerfile: Dockerfile
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    networks:
+      - default
+      - sso-net
     environment:
       # --- Model Provider Selection ---
       MODEL_PROVIDER: ${MODEL_PROVIDER:-minimax}
@@ -85,13 +105,15 @@ services:
       # --- Security & Platform ---
       FORGE_ENCRYPTION_KEY: ${FORGE_ENCRYPTION_KEY:-}
       FORGE_SECURITY_ENABLED: ${FORGE_SECURITY_ENABLED:-true}
-      FORGE_SECURITY_JWK_SET_URI: ${FORGE_SECURITY_JWK_SET_URI:-http://host.docker.internal:8180/realms/forge/protocol/openid-connect/certs}
-      FORGE_CORS_ALLOWED_ORIGINS: "http://localhost:19000,http://localhost:19001"
-      FORGE_FRONTEND_URL: "http://localhost:19000"
+      FORGE_CORS_ALLOWED_ORIGINS: "http://forge.local:19000,http://localhost:19000,http://localhost:19001"
+      FORGE_FRONTEND_URL: "http://forge.local:19000"
+      # --- SSO (统一 URL，浏览器 + 容器可达) ---
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: "${SSO_URL:-http://sso.forge.local:8180/auth}/realms/forge"
+      FORGE_SECURITY_JWK_SET_URI: "${SSO_URL:-http://sso.forge.local:8180/auth}/realms/forge/protocol/openid-connect/certs"
+      # --- Database ---
       SPRING_JPA_HIBERNATE_DDL_AUTO: update
       FORGE_PLUGINS_PATH: /plugins
       FORGE_MCP_SERVERS: "http://knowledge-mcp:8081,http://database-mcp:8082"
-      # --- DataSource (PostgreSQL) ---
       DB_URL: ${DB_URL:-jdbc:postgresql://postgres:5432/forge}
       DB_USERNAME: ${DB_USERNAME:-forge}
       DB_PASSWORD: ${DB_PASSWORD:-forge123}
@@ -127,6 +149,7 @@ services:
     environment:
       BACKEND_URL: http://backend:8080
       BACKEND_WS_URL: ws://backend:8080
+      # SSO URL 已移除 — 前端运行时从 /api/auth/sso-config 获取 SSO 配置
     depends_on:
       backend:
         condition: service_healthy
@@ -137,16 +160,20 @@ services:
       dockerfile: Dockerfile
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    networks:
+      - default
+      - sso-net
     ports:
-      - "19001:19001"
+      - "19001:9001"
     environment:
-      PORT: "19001"
+      PORT: "9001"
+      NEXT_PUBLIC_BASE_PATH: "/console"
       BACKEND_URL: http://backend:8080
       KEYCLOAK_CLIENT_ID: forge-enterprise
       KEYCLOAK_CLIENT_SECRET: enterprise-secret
-      KEYCLOAK_ISSUER: ${KEYCLOAK_ISSUER:-http://localhost:8180/realms/forge}
-      KEYCLOAK_INTERNAL_URL: ${KEYCLOAK_INTERNAL_URL:-http://host.docker.internal:8180/realms/forge}
-      NEXTAUTH_URL: http://localhost:19001
+      # SSO 统一 URL — 浏览器和容器都用同一个地址
+      KEYCLOAK_ISSUER: "${SSO_URL:-http://sso.forge.local:8180/auth}/realms/forge"
+      NEXTAUTH_URL: "http://forge.local:19000"
       AUTH_TRUST_HOST: "true"
       NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:-forge-enterprise-nextauth-secret-32c}
     depends_on:
@@ -162,6 +189,7 @@ services:
     depends_on:
       - backend
       - frontend
+      - enterprise-console
 
 volumes:
   forge-backend-data:

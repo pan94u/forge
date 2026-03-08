@@ -2,26 +2,76 @@
  * OIDC authentication helper for Keycloak SSO.
  * Uses Authorization Code flow with PKCE for public clients.
  *
+ * SSO URL discovery:
+ * - Frontend fetches /api/auth/sso-config from the backend at runtime.
+ * - This eliminates build-time NEXT_PUBLIC_* env var dependencies.
+ * - The browser redirects directly to the SSO domain for login (standard OIDC).
+ * - Token exchange and refresh also go directly to SSO (Keycloak handles CORS
+ *   via the client's webOrigins configuration).
+ *
  * Token lifecycle:
  * - After login, scheduleTokenRefresh() sets a timer to refresh 60s before expiry.
  * - initTokenRefresh() restores the schedule on page reload.
  * - On 401 from backend, callers should call refreshToken() before redirecting to login.
  */
 
-const KEYCLOAK_URL =
-  process.env.NEXT_PUBLIC_KEYCLOAK_URL || "http://localhost:8180";
-const KEYCLOAK_REALM = process.env.NEXT_PUBLIC_KEYCLOAK_REALM || "forge";
-const KEYCLOAK_CLIENT_ID =
-  process.env.NEXT_PUBLIC_KEYCLOAK_CLIENT_ID || "forge-web-ide";
+import { sha256 } from "js-sha256";
 
 const TOKEN_KEY = "forge_access_token";
 const REFRESH_TOKEN_KEY = "forge_refresh_token";
 const TOKEN_EXPIRY_KEY = "forge_token_expiry";
 const CODE_VERIFIER_KEY = "forge_code_verifier";
 
-function getBaseUrl(): string {
-  return `${KEYCLOAK_URL}/realms/${KEYCLOAK_REALM}/protocol/openid-connect`;
+// ---------------------------------------------------------------------------
+// SSO config — fetched once from backend, cached in memory
+// ---------------------------------------------------------------------------
+
+interface SsoConfig {
+  ssoUrl: string;
+  realm: string;
+  clientId: string;
 }
+
+let _ssoConfig: SsoConfig | null = null;
+let _ssoConfigPromise: Promise<SsoConfig> | null = null;
+
+async function ensureSsoConfig(): Promise<SsoConfig> {
+  if (_ssoConfig) return _ssoConfig;
+  if (!_ssoConfigPromise) {
+    _ssoConfigPromise = fetch("/api/auth/sso-config")
+      .then((res) => {
+        if (!res.ok) throw new Error(`SSO config fetch failed: ${res.status}`);
+        return res.json();
+      })
+      .then((data: SsoConfig) => {
+        _ssoConfig = data;
+        return data;
+      })
+      .catch((err) => {
+        _ssoConfigPromise = null; // allow retry on failure
+        throw err;
+      });
+  }
+  return _ssoConfigPromise;
+}
+
+function getBaseUrl(): string {
+  if (!_ssoConfig) {
+    throw new Error("SSO config not loaded. Call ensureSsoConfig() first.");
+  }
+  return `${_ssoConfig.ssoUrl}/realms/${_ssoConfig.realm}/protocol/openid-connect`;
+}
+
+function getClientId(): string {
+  if (!_ssoConfig) {
+    throw new Error("SSO config not loaded. Call ensureSsoConfig() first.");
+  }
+  return _ssoConfig.clientId;
+}
+
+// ---------------------------------------------------------------------------
+// PKCE helpers
+// ---------------------------------------------------------------------------
 
 function generateCodeVerifier(): string {
   const array = new Uint8Array(32);
@@ -35,14 +85,29 @@ function generateCodeVerifier(): string {
 async function generateCodeChallenge(verifier: string): Promise<string> {
   const encoder = new TextEncoder();
   const data = encoder.encode(verifier);
-  const digest = await crypto.subtle.digest("SHA-256", data);
+
+  let digest: ArrayBuffer;
+  if (typeof crypto !== "undefined" && crypto.subtle) {
+    // Secure context (HTTPS or localhost) — use native Web Crypto
+    digest = await crypto.subtle.digest("SHA-256", data);
+  } else {
+    // Non-secure context (e.g., http://forge.local) — use js-sha256 fallback
+    const hash = sha256.arrayBuffer(data);
+    digest = hash;
+  }
+
   return btoa(String.fromCharCode(...new Uint8Array(digest)))
     .replace(/\+/g, "-")
     .replace(/\//g, "_")
     .replace(/=+$/, "");
 }
 
+// ---------------------------------------------------------------------------
+// Login / Callback
+// ---------------------------------------------------------------------------
+
 export async function login(): Promise<void> {
+  const config = await ensureSsoConfig();
   const verifier = generateCodeVerifier();
   const challenge = await generateCodeChallenge(verifier);
 
@@ -50,7 +115,7 @@ export async function login(): Promise<void> {
   sessionStorage.setItem("forge_redirect_after_login", window.location.pathname);
 
   const params = new URLSearchParams({
-    client_id: KEYCLOAK_CLIENT_ID,
+    client_id: config.clientId,
     redirect_uri: `${window.location.origin}/auth/callback`,
     response_type: "code",
     scope: "openid profile email",
@@ -69,12 +134,13 @@ export async function handleCallback(code: string): Promise<boolean> {
   }
 
   try {
+    await ensureSsoConfig();
     const response = await fetch(`${getBaseUrl()}/token`, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
         grant_type: "authorization_code",
-        client_id: KEYCLOAK_CLIENT_ID,
+        client_id: getClientId(),
         code,
         redirect_uri: `${window.location.origin}/auth/callback`,
         code_verifier: verifier,
@@ -149,12 +215,13 @@ export async function refreshToken(): Promise<boolean> {
 
   _refreshInFlight = (async () => {
     try {
+      await ensureSsoConfig();
       const response = await fetch(`${getBaseUrl()}/token`, {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: new URLSearchParams({
           grant_type: "refresh_token",
-          client_id: KEYCLOAK_CLIENT_ID,
+          client_id: getClientId(),
           refresh_token: refreshTokenStr,
         }),
       });
@@ -183,8 +250,14 @@ export async function refreshToken(): Promise<boolean> {
  * the refresh schedule after a page reload.
  * If the token is already expired, attempts an immediate refresh.
  */
-export function initTokenRefresh(): void {
+export async function initTokenRefresh(): Promise<void> {
   if (typeof window === "undefined") return;
+
+  // Pre-load SSO config so subsequent calls are synchronous
+  await ensureSsoConfig().catch(() => {
+    console.warn("[auth] Failed to load SSO config — SSO login may not work");
+  });
+
   const expiry = localStorage.getItem(TOKEN_EXPIRY_KEY);
   const stored = localStorage.getItem(REFRESH_TOKEN_KEY);
   if (!expiry || !stored) return;
@@ -194,12 +267,11 @@ export function initTokenRefresh(): void {
 
   if (now >= expiresAt) {
     // Already expired — refresh immediately
-    refreshToken().then((ok) => {
-      if (!ok) {
-        clearTokens();
-        window.location.href = "/login";
-      }
-    });
+    const ok = await refreshToken();
+    if (!ok) {
+      clearTokens();
+      window.location.href = "/login";
+    }
   } else {
     // Still valid — schedule refresh before expiry
     const expiresIn = Math.floor((expiresAt - now) / 1000);
@@ -239,13 +311,19 @@ export function clearTokens(): void {
   localStorage.removeItem(TOKEN_EXPIRY_KEY);
 }
 
-export function logout(): void {
+export async function logout(): Promise<void> {
   clearTokens();
-  const params = new URLSearchParams({
-    client_id: KEYCLOAK_CLIENT_ID,
-    post_logout_redirect_uri: window.location.origin,
-  });
-  window.location.href = `${getBaseUrl()}/logout?${params}`;
+  try {
+    await ensureSsoConfig();
+    const params = new URLSearchParams({
+      client_id: getClientId(),
+      post_logout_redirect_uri: window.location.origin,
+    });
+    window.location.href = `${getBaseUrl()}/logout?${params}`;
+  } catch {
+    // SSO config unavailable — just go to login page
+    window.location.href = "/login";
+  }
 }
 
 export function getRedirectAfterLogin(): string {

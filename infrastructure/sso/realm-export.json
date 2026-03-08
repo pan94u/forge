@@ -1,0 +1,314 @@
+{
+  "id": "forge",
+  "realm": "forge",
+  "displayName": "Forge Platform",
+  "enabled": true,
+  "sslRequired": "none",
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "resetPasswordAllowed": true,
+  "editUsernameAllowed": false,
+  "bruteForceProtected": true,
+  "accessTokenLifespan": 3600,
+  "ssoSessionIdleTimeout": 14400,
+  "ssoSessionMaxLifespan": 86400,
+  "clientSessionIdleTimeout": 14400,
+  "clientSessionMaxLifespan": 86400,
+  "roles": {
+    "realm": [
+      {
+        "name": "admin",
+        "description": "Full platform administrator"
+      },
+      {
+        "name": "developer",
+        "description": "Developer with full IDE access"
+      },
+      {
+        "name": "viewer",
+        "description": "Read-only access to workspaces and knowledge"
+      }
+    ]
+  },
+  "users": [
+    {
+      "username": "admin",
+      "email": "admin@forge.dev",
+      "firstName": "Admin",
+      "lastName": "User",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "admin",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "admin",
+        "developer"
+      ]
+    },
+    {
+      "username": "dev1",
+      "email": "dev1@forge.dev",
+      "firstName": "Developer",
+      "lastName": "One",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "dev1",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "developer"
+      ]
+    },
+    {
+      "username": "viewer1",
+      "email": "viewer1@forge.dev",
+      "firstName": "Viewer",
+      "lastName": "One",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "viewer1",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "viewer"
+      ]
+    }
+  ],
+  "clients": [
+    {
+      "clientId": "forge-web-ide",
+      "name": "Forge Web IDE",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": true,
+      "rootUrl": "https://forge.delivery",
+      "baseUrl": "/",
+      "redirectUris": [
+        "https://forge.delivery/*",
+        "https://www.forge.delivery/*",
+        "http://forge.local:19000/*",
+        "http://localhost:9000/*",
+        "http://localhost:3000/*",
+        "http://localhost:19000/*"
+      ],
+      "webOrigins": [
+        "https://forge.delivery",
+        "https://www.forge.delivery",
+        "http://forge.local:19000",
+        "http://localhost:9000",
+        "http://localhost:3000",
+        "http://localhost:19000"
+      ],
+      "protocol": "openid-connect",
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "https://forge.delivery/*##http://forge.local:19000/*##http://localhost:19000/*"
+      },
+      "defaultClientScopes": [
+        "openid",
+        "profile",
+        "email",
+        "roles"
+      ]
+    },
+    {
+      "clientId": "forge-enterprise",
+      "name": "Forge Enterprise Console",
+      "enabled": true,
+      "publicClient": false,
+      "secret": "enterprise-secret",
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "rootUrl": "https://forge.delivery/console",
+      "baseUrl": "/",
+      "redirectUris": [
+        "https://forge.delivery/console/*",
+        "https://forge.delivery/api/auth/*",
+        "https://www.forge.delivery/console/*",
+        "https://www.forge.delivery/api/auth/*",
+        "http://forge.local:19000/console/*",
+        "http://forge.local:19000/api/auth/*",
+        "http://localhost:19000/console/*",
+        "http://localhost:19000/api/auth/*",
+        "http://localhost:19001/*"
+      ],
+      "webOrigins": [
+        "https://forge.delivery",
+        "https://www.forge.delivery",
+        "http://forge.local:19000",
+        "http://localhost:19000",
+        "http://localhost:19001"
+      ],
+      "protocol": "openid-connect",
+      "attributes": {
+        "post.logout.redirect.uris": "https://forge.delivery/console/*##http://forge.local:19000/console/*##http://localhost:19000/console/*"
+      },
+      "defaultClientScopes": [
+        "openid",
+        "profile",
+        "email",
+        "roles"
+      ]
+    },
+    {
+      "clientId": "forge-synapse",
+      "name": "Synapse AI Platform",
+      "enabled": true,
+      "publicClient": false,
+      "secret": "synapse-secret",
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "rootUrl": "https://synapse.forge.delivery",
+      "baseUrl": "/",
+      "redirectUris": [
+        "https://synapse.forge.delivery/*",
+        "http://localhost:19300/*",
+        "http://localhost:19000/synapse/*"
+      ],
+      "webOrigins": [
+        "https://synapse.forge.delivery",
+        "http://localhost:19300",
+        "http://localhost:19000"
+      ],
+      "protocol": "openid-connect",
+      "attributes": {
+        "post.logout.redirect.uris": "https://synapse.forge.delivery/*##http://localhost:19300/*"
+      },
+      "defaultClientScopes": [
+        "openid",
+        "profile",
+        "email",
+        "roles"
+      ]
+    }
+  ],
+  "clientScopes": [
+    {
+      "name": "openid",
+      "protocol": "openid-connect",
+      "attributes": { "include.in.token.scope": "false" }
+    },
+    {
+      "name": "profile",
+      "protocol": "openid-connect",
+      "attributes": { "include.in.token.scope": "true" },
+      "protocolMappers": [
+        {
+          "name": "username",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-property-mapper",
+          "consentRequired": false,
+          "config": {
+            "userinfo.token.claim": "true",
+            "user.attribute": "username",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "claim.name": "preferred_username",
+            "jsonType.label": "String"
+          }
+        },
+        {
+          "name": "given name",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-property-mapper",
+          "consentRequired": false,
+          "config": {
+            "userinfo.token.claim": "true",
+            "user.attribute": "firstName",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "claim.name": "given_name",
+            "jsonType.label": "String"
+          }
+        },
+        {
+          "name": "family name",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-property-mapper",
+          "consentRequired": false,
+          "config": {
+            "userinfo.token.claim": "true",
+            "user.attribute": "lastName",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "claim.name": "family_name",
+            "jsonType.label": "String"
+          }
+        }
+      ]
+    },
+    {
+      "name": "email",
+      "protocol": "openid-connect",
+      "attributes": { "include.in.token.scope": "true" },
+      "protocolMappers": [
+        {
+          "name": "email",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-property-mapper",
+          "consentRequired": false,
+          "config": {
+            "userinfo.token.claim": "true",
+            "user.attribute": "email",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "claim.name": "email",
+            "jsonType.label": "String"
+          }
+        },
+        {
+          "name": "email verified",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-property-mapper",
+          "consentRequired": false,
+          "config": {
+            "userinfo.token.claim": "true",
+            "user.attribute": "emailVerified",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "claim.name": "email_verified",
+            "jsonType.label": "boolean"
+          }
+        }
+      ]
+    },
+    {
+      "name": "roles",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true"
+      },
+      "protocolMappers": [
+        {
+          "name": "realm roles",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-realm-role-mapper",
+          "consentRequired": false,
+          "config": {
+            "multivalued": "true",
+            "userinfo.token.claim": "true",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "claim.name": "realm_roles",
+            "jsonType.label": "String"
+          }
+        }
+      ]
+    }
+  ]
+}
