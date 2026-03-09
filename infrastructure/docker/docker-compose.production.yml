@@ -1,48 +1,50 @@
 # =============================================================================
-# Forge Platform — 单机生产部署 (8C16G)
+# Forge Platform — 生产部署（应用机器）
 # =============================================================================
 #
-# 使用方式:
-#   docker compose -f docker-compose.production-single.yml --env-file .env.production up -d
+# 架构: 双机部署
+#   - 本机（应用机器）: nginx + frontend + backend + console + postgres + MCP
+#   - 远端（SSO 机器）: Keycloak + SSO PostgreSQL（独立部署，域名 sso.forge.delivery）
 #
 # 前置条件:
-#   1. 宿主机创建数据目录: mkdir -p /data/forge/{postgres,backend,keycloak}
-#   2. 本地构建产物（不在 Docker 内编译）:
-#      - ./gradlew :web-ide:backend:bootJar -x test
-#      - cd web-ide/frontend && npm ci && npm run build
-#      - cd enterprise-console && npm ci && npm run build
-#      - ./gradlew :mcp-servers:forge-knowledge-mcp:shadowJar
-#      - ./gradlew :mcp-servers:forge-database-mcp:shadowJar
+#   1. SSO 已独立部署在 sso.forge.delivery（独立机器 + 域名 + HTTPS）
+#   2. 宿主机创建数据目录: mkdir -p /data/forge/{postgres,backend}
 #   3. 复制 .env.production.example → .env.production 并填入真实值
+#   4. SSL 证书已放置在 /opt/forge-ssl/forge.delivery_nginx/
 #
-# 资源分配 (8C / 16G):
+# 使用方式:
+#   docker compose -f docker-compose.production.yml --env-file .env.production up -d
+#
+# 资源分配 (4C / 8G 含 4G Swap):
 # ┌──────────────────────┬───────┬────────┬─────────────────────────────────┐
 # │ 容器                  │ CPU   │ 内存    │ 说明                             │
 # ├──────────────────────┼───────┼────────┼─────────────────────────────────┤
-# │ backend + workspace  │ 3C    │ 5G     │ JVM 1.5G + workspace 进程 3.5G   │
-# │ postgres             │ 1C    │ 1.5G   │ shared_buffers=384MB             │
-# │ keycloak             │ 0.5C  │ 768M   │ SSO 认证中心 (PostgreSQL 后端)   │
-# │ knowledge-mcp        │ 0.25C │ 256M   │ Ktor 轻量服务                    │
-# │ database-mcp         │ 0.25C │ 256M   │ Ktor 轻量服务                    │
-# │ frontend             │ 0.25C │ 256M   │ Next.js standalone               │
-# │ enterprise-console   │ 0.25C │ 256M   │ Next.js standalone               │
-# │ nginx                │ 0.25C │ 128M   │ 反向代理                         │
+# │ backend + workspace  │ 1.5C  │ 1.5G   │ JVM 512M + workspace 进程 1G    │
+# │ postgres             │ 0.5C  │ 512M   │ shared_buffers=128MB             │
+# │ knowledge-mcp        │ 0.25C │ 128M   │ Ktor 轻量服务                    │
+# │ database-mcp         │ 0.25C │ 128M   │ Ktor 轻量服务                    │
+# │ frontend             │ 0.25C │ 128M   │ Next.js standalone               │
+# │ enterprise-console   │ 0.25C │ 128M   │ Next.js standalone               │
+# │ nginx                │ 0.25C │ 64M    │ 反向代理 + SSL 终止              │
 # ├──────────────────────┼───────┼────────┼─────────────────────────────────┤
-# │ 容器合计              │ 5.75C │ 8.4G   │                                 │
-# │ OS + 弹性余量         │ 2.25C │ 7.6G   │ 系统 + burst 缓冲               │
+# │ 容器合计              │ 3.25C │ 2.6G   │                                 │
+# │ OS + 弹性余量          │ 0.75C │ 5.4G   │ 系统 + burst 缓冲 (含 4G Swap)   │
 # └──────────────────────┴───────┴────────┴─────────────────────────────────┘
+#
+# SSO 连接方式:
+#   生产环境通过公网 DNS 解析 sso.forge.delivery（HTTPS），无需 Docker 网络。
+#   浏览器和容器都通过同一个 SSO_URL 访问 Keycloak。
 
 services:
   # ---------------------------------------------------------------------------
-  # PostgreSQL 16 — 数据持久化到宿主机 /data/forge/postgres
-  # 首次启动时自动创建 forge 和 keycloak 两个数据库
+  # PostgreSQL 16 — Forge 应用数据库（Keycloak 数据库已独立）
   # ---------------------------------------------------------------------------
   postgres:
     image: postgres:16-alpine
     container_name: forge-postgres
     restart: unless-stopped
-    cpus: 1
-    mem_limit: 1536m
+    cpus: 0.5
+    mem_limit: 512m
     environment:
       POSTGRES_DB: forge
       POSTGRES_USER: forge
@@ -50,18 +52,17 @@ services:
       PGDATA: /var/lib/postgresql/data/pgdata
     command: >
       postgres
-      -c shared_buffers=384MB
-      -c effective_cache_size=1GB
-      -c work_mem=8MB
-      -c maintenance_work_mem=128MB
-      -c max_connections=80
-      -c wal_buffers=16MB
+      -c shared_buffers=128MB
+      -c effective_cache_size=384MB
+      -c work_mem=4MB
+      -c maintenance_work_mem=64MB
+      -c max_connections=50
+      -c wal_buffers=8MB
       -c checkpoint_completion_target=0.9
       -c random_page_cost=1.1
       -c log_min_duration_statement=1000
     volumes:
       - forge-postgres-data:/var/lib/postgresql/data
-      - ./keycloak/init-keycloak-db.sql:/docker-entrypoint-initdb.d/10-keycloak.sql:ro
     ports:
       - "127.0.0.1:5432:5432"
     healthcheck:
@@ -69,53 +70,6 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-    logging:
-      driver: json-file
-      options:
-        max-size: "50m"
-        max-file: "3"
-
-  # ---------------------------------------------------------------------------
-  # Keycloak 24 — SSO 认证中心
-  # 浏览器访问: http://<KEYCLOAK_PUBLIC_URL>   Admin: admin / ${KEYCLOAK_ADMIN_PASSWORD}
-  # 容器内访问: http://keycloak:8080
-  # ---------------------------------------------------------------------------
-  keycloak:
-    image: quay.io/keycloak/keycloak:24.0
-    container_name: forge-keycloak
-    restart: unless-stopped
-    cpus: 0.5
-    mem_limit: 768m
-    command: start --import-realm
-    environment:
-      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:-admin}
-      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
-      KC_HTTP_PORT: "8080"
-      KC_HTTP_ENABLED: "true"
-      KC_HTTP_RELATIVE_PATH: "/auth"
-      KC_HOSTNAME_STRICT: "false"
-      KC_HOSTNAME_STRICT_BACKCHANNEL: "false"
-      KC_HOSTNAME_URL: "${KEYCLOAK_PUBLIC_URL}"
-      KC_PROXY: "edge"
-      KC_HEALTH_ENABLED: "true"
-      # Keycloak 使用独立的 keycloak 数据库（同一 PG 实例）
-      KC_DB: postgres
-      KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
-      KC_DB_USERNAME: forge
-      KC_DB_PASSWORD: ${DB_PASSWORD}
-    volumes:
-      - ./keycloak/realm-export.json:/opt/keycloak/data/import/realm-export.json:ro
-    ports:
-      - "8180:8080"
-    depends_on:
-      postgres:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD-SHELL", "exec 3<>/dev/tcp/localhost/8080 && echo -e 'GET /auth/health/ready HTTP/1.0\r\nHost: localhost\r\n\r\n' >&3 && grep -q 'UP' <&3 || exit 1"]
-      interval: 15s
-      timeout: 5s
-      retries: 20
-      start_period: 180s
     logging:
       driver: json-file
       options:
@@ -132,7 +86,7 @@ services:
     container_name: forge-knowledge-mcp
     restart: unless-stopped
     cpus: 0.25
-    mem_limit: 256m
+    mem_limit: 128m
     environment:
       PORT: "8081"
       KNOWLEDGE_MODE: "local"
@@ -161,7 +115,7 @@ services:
     container_name: forge-database-mcp
     restart: unless-stopped
     cpus: 0.25
-    mem_limit: 256m
+    mem_limit: 128m
     environment:
       PORT: "8082"
       FORGE_DB_FORGE_URL: "jdbc:postgresql://postgres:5432/forge"
@@ -192,12 +146,12 @@ services:
       dockerfile: Dockerfile
     container_name: forge-backend
     restart: unless-stopped
-    cpus: 2
-    mem_limit: 5g
+    cpus: 1.5
+    mem_limit: 1536m
     environment:
       # --- JVM 调优 ---
       JAVA_OPTS: >-
-        -Xms512m -Xmx1536m
+        -Xms256m -Xmx512m
         -XX:+UseG1GC -XX:MaxGCPauseMillis=200
         -XX:+UseStringDeduplication
         -Djava.security.egd=file:/dev/./urandom
@@ -224,10 +178,9 @@ services:
       FORGE_ENCRYPTION_KEY: ${FORGE_ENCRYPTION_KEY}
       FORGE_CORS_ALLOWED_ORIGINS: ${FORGE_CORS_ALLOWED_ORIGINS}
       FORGE_FRONTEND_URL: ${FORGE_FRONTEND_URL}
-      # JWT issuer 需与 Keycloak 签发 token 的 iss 字段一致（浏览器可见地址）
-      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: "${KEYCLOAK_PUBLIC_URL}/realms/forge"
-      # JWK 端点走内部容器网络（不走公网）
-      FORGE_SECURITY_JWK_SET_URI: "http://keycloak:8080/auth/realms/forge/protocol/openid-connect/certs"
+      # SSO 统一 URL（跨机部署，通过 HTTPS 访问 SSO 服务器）
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: "${SSO_URL}/realms/forge"
+      FORGE_SECURITY_JWK_SET_URI: "${SSO_URL}/realms/forge/protocol/openid-connect/certs"
       # --- 插件 ---
       FORGE_PLUGINS_PATH: /plugins
     volumes:
@@ -242,8 +195,6 @@ services:
       knowledge-mcp:
         condition: service_healthy
       database-mcp:
-        condition: service_healthy
-      keycloak:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "wget -q --server-response -O /dev/null http://localhost:8080/api/knowledge/search 2>&1 | grep -qE 'HTTP/1\\.[01] (200|401)'"]
@@ -267,11 +218,11 @@ services:
     container_name: forge-frontend
     restart: unless-stopped
     cpus: 0.25
-    mem_limit: 256m
+    mem_limit: 128m
     environment:
       BACKEND_URL: http://backend:8080
       BACKEND_WS_URL: ws://backend:8080
-      NEXT_PUBLIC_KEYCLOAK_URL: "${KEYCLOAK_PUBLIC_URL}"
+      # SSO URL 已移除 — 前端运行时从 /api/auth/sso-config 获取 SSO 配置
     depends_on:
       backend:
         condition: service_healthy
@@ -291,27 +242,22 @@ services:
     container_name: forge-enterprise-console
     restart: unless-stopped
     cpus: 0.25
-    mem_limit: 256m
+    mem_limit: 128m
     ports:
       - "9001:9001"
     environment:
       PORT: "9001"
       NEXT_PUBLIC_BASE_PATH: "/console"
-      NEXTAUTH_BASE_PATH: "/console/api/auth"
       BACKEND_URL: http://backend:8080
       KEYCLOAK_CLIENT_ID: forge-enterprise
       KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_ENTERPRISE_SECRET:-enterprise-secret}
-      # 浏览器可见的 Keycloak 地址（用于 OAuth2 redirect）
-      KEYCLOAK_ISSUER: "${KEYCLOAK_PUBLIC_URL}/realms/forge"
-      # 容器内部 Keycloak 地址（用于 token 交换，避免走公网）
-      KEYCLOAK_INTERNAL_URL: "http://keycloak:8080/auth/realms/forge"
-      NEXTAUTH_URL: "https://forge.delivery"
+      # SSO 统一 URL — 无需区分 internal/external，同一个 URL 全局可达
+      KEYCLOAK_ISSUER: "${SSO_URL}/realms/forge"
+      NEXTAUTH_URL: ${NEXTAUTH_URL:-https://forge.delivery}
       NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
       AUTH_TRUST_HOST: "true"
     depends_on:
       backend:
-        condition: service_healthy
-      keycloak:
         condition: service_healthy
     logging:
       driver: json-file
@@ -327,7 +273,7 @@ services:
     container_name: forge-nginx
     restart: unless-stopped
     cpus: 0.25
-    mem_limit: 128m
+    mem_limit: 64m
     ports:
       - "80:80"
       - "443:443"

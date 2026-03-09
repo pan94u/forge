@@ -1,5 +1,6 @@
 package com.forge.webide.controller
 
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.security.core.annotation.AuthenticationPrincipal
 import org.springframework.security.oauth2.jwt.Jwt
 import org.springframework.web.bind.annotation.GetMapping
@@ -17,6 +18,25 @@ import org.springframework.web.bind.annotation.RestController
 @RestController
 @RequestMapping("/api/auth")
 class AuthController {
+
+    @Value("\${spring.security.oauth2.resourceserver.jwt.issuer-uri:http://localhost:8180/realms/forge}")
+    private lateinit var jwtIssuerUri: String
+
+    /**
+     * Public SSO configuration for the frontend.
+     * Frontend fetches this at runtime to discover the SSO server URL,
+     * eliminating build-time NEXT_PUBLIC_* env var dependencies.
+     */
+    @GetMapping("/sso-config")
+    fun ssoConfig(): Map<String, String> {
+        val ssoUrl = jwtIssuerUri.substringBefore("/realms/")
+        val realm = jwtIssuerUri.substringAfter("/realms/")
+        return mapOf(
+            "ssoUrl" to ssoUrl,
+            "realm" to realm,
+            "clientId" to "forge-web-ide"
+        )
+    }
 
     @GetMapping("/me")
     fun me(@AuthenticationPrincipal jwt: Jwt?): Map<String, Any?> {

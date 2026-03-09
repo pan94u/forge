@@ -23,6 +23,9 @@ const KeycloakProvider: OAuthConfig<KeycloakProfile> = {
   type: "oauth",
   clientId: process.env.KEYCLOAK_CLIENT_ID!,
   clientSecret: process.env.KEYCLOAK_CLIENT_SECRET!,
+  // issuer is required for RFC 9207: Keycloak 24 includes `iss` in the authorization
+  // callback, Auth.js validates it against this value. With type:"oauth", setting issuer
+  // does NOT trigger OIDC discovery — all endpoints are configured explicitly below.
   issuer: keycloakIssuer,
   authorization: {
     url: `${keycloakIssuer}/protocol/openid-connect/auth`,
@@ -30,6 +33,8 @@ const KeycloakProvider: OAuthConfig<KeycloakProfile> = {
   },
   token: `${keycloakInternal}/protocol/openid-connect/token`,
   userinfo: `${keycloakInternal}/protocol/openid-connect/userinfo`,
+  // JWKS endpoint must use internal URL (container can't reach browser-facing issuer URL)
+  jwks_endpoint: `${keycloakInternal}/protocol/openid-connect/certs`,
   checks: ["pkce", "state"],
   profile(profile) {
     return {
@@ -98,7 +103,12 @@ async function refreshAccessToken(token: JWT): Promise<JWT> {
 }
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
-  basePath: process.env.NEXTAUTH_BASE_PATH || "/api/auth",
+  // Must be the INTERNAL path (after Next.js basePath stripping).
+  // Next.js strips basePath="/console" before auth.js sees the request,
+  // so auth.js basePath must be "/api/auth" (not "/console/api/auth").
+  // Auth.js constructs redirect_uri as {origin}/api/auth/callback/keycloak;
+  // nginx rewrites /api/auth/* → /console/api/auth/* before proxying to this app.
+  basePath: "/api/auth",
   providers: [KeycloakProvider],
   session: {
     // Explicit 30-day session lifetime so the cookie never expires during normal use.

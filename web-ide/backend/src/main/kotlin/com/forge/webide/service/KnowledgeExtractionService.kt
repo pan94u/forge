@@ -790,9 +790,14 @@ $discoveryReasonBlock
             "workspace_list_files", "workspace_read_file", "analyze_codebase",
             "search_knowledge", "read_file"
         )
-        return mcpProxyService.listTools()
+        val allTools = mcpProxyService.listTools()
+        val filtered = allTools
             .filter { it.name in allowedTools }
             .map { ToolDefinition(name = it.name, description = it.description, inputSchema = it.inputSchema) }
+        logger.info("Extraction tools: allTools={} [{}], filtered={} [{}]",
+            allTools.size, allTools.joinToString(", ") { it.name },
+            filtered.size, filtered.joinToString(", ") { it.name })
+        return filtered
     }
 
     // =========================================================================

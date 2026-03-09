@@ -200,7 +200,52 @@
     "analyze": "Analyze",
     "analyzing": "Analyzing...",
     "snapshotBtn": "Create Snapshot",
-    "snapshotSuccess": "Snapshot created"
+    "snapshotSuccess": "Snapshot created",
+    "architecture": {
+      "title": "Architecture Governance",
+      "totalWorkspaces": "Total Workspaces",
+      "withKnowledge": "With Knowledge",
+      "coverage": "Knowledge Coverage",
+      "healthScore": "Architecture Health",
+      "recentWorkspaces": "Recent Workspaces"
+    },
+    "process": {
+      "title": "Process Governance",
+      "totalFlows": "Total Flows",
+      "totalNodes": "Total Nodes",
+      "totalEdges": "Total Edges",
+      "avgNodes": "Avg Nodes/Flow",
+      "byType": "By Type",
+      "recentFlows": "Recent Flows"
+    },
+    "compliance": {
+      "title": "Compliance & Risk",
+      "totalEvents": "Audit Events",
+      "hitlEvents": "HITL Events",
+      "approvalRate": "Approval Rate",
+      "anomalies": "Anomalies",
+      "riskLevel": "Risk Level",
+      "recentEvents": "Recent Events"
+    },
+    "capacity": {
+      "title": "Capacity Planning",
+      "currentWorkspaces": "Current Workspaces",
+      "newLast30d": "New (Last 30d)",
+      "growthRate": "Growth Rate",
+      "currentSessions": "Current Sessions",
+      "forecast": "30-Day Forecast",
+      "status": "Capacity Status",
+      "normal": "Normal",
+      "growing": "Growing",
+      "rapid_growth": "Rapid Growth"
+    },
+    "vendor": {
+      "title": "Vendor Management",
+      "totalProviders": "Providers",
+      "primaryProvider": "Primary Provider",
+      "diversification": "Diversification Score",
+      "providerStats": "Provider Usage"
+    }
   },
   "common": {
     "loading": "Loading...",

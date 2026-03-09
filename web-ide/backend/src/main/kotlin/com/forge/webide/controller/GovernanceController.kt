@@ -20,6 +20,11 @@ class GovernanceController(
     private val securityService: SecurityGovernanceService,
     private val knowledgeService: KnowledgeGovernanceService,
     private val processMiningService: ProcessMiningService,
+    private val architectureService: ArchitectureGovernanceService,
+    private val processSummaryService: ProcessSummaryService,
+    private val complianceService: ComplianceGovernanceService,
+    private val capacityService: CapacityGovernanceService,
+    private val vendorService: VendorGovernanceService,
     private val snapshotRepo: GovernanceSnapshotRepository,
     private val rbacHelper: RbacHelper
 ) {
@@ -73,6 +78,53 @@ class GovernanceController(
         return ResponseEntity.ok(processMiningService.getProcessFlows(orgId, workspaceId))
     }
 
+    @GetMapping("/{orgId}/architecture")
+    fun getArchitecture(
+        @PathVariable orgId: String,
+        @AuthenticationPrincipal jwt: Jwt? = null
+    ): ResponseEntity<ArchitectureSummary> {
+        rbacHelper.requireOrgAdmin(jwt, orgId)
+        return ResponseEntity.ok(architectureService.getArchitectureSummary(orgId))
+    }
+
+    @GetMapping("/{orgId}/process-summary")
+    fun getProcessSummary(
+        @PathVariable orgId: String,
+        @AuthenticationPrincipal jwt: Jwt? = null
+    ): ResponseEntity<ProcessSummary> {
+        rbacHelper.requireOrgAdmin(jwt, orgId)
+        return ResponseEntity.ok(processSummaryService.getProcessSummary(orgId))
+    }
+
+    @GetMapping("/{orgId}/compliance")
+    fun getCompliance(
+        @PathVariable orgId: String,
+        @RequestParam(defaultValue = "30") days: Int,
+        @AuthenticationPrincipal jwt: Jwt? = null
+    ): ResponseEntity<ComplianceSummary> {
+        rbacHelper.requireOrgAdmin(jwt, orgId)
+        return ResponseEntity.ok(complianceService.getComplianceSummary(orgId, days))
+    }
+
+    @GetMapping("/{orgId}/capacity")
+    fun getCapacity(
+        @PathVariable orgId: String,
+        @AuthenticationPrincipal jwt: Jwt? = null
+    ): ResponseEntity<CapacitySummary> {
+        rbacHelper.requireOrgAdmin(jwt, orgId)
+        return ResponseEntity.ok(capacityService.getCapacitySummary(orgId))
+    }
+
+    @GetMapping("/{orgId}/vendor")
+    fun getVendor(
+        @PathVariable orgId: String,
+        @RequestParam(defaultValue = "30") days: Int,
+        @AuthenticationPrincipal jwt: Jwt? = null
+    ): ResponseEntity<VendorSummary> {
+        rbacHelper.requireOrgAdmin(jwt, orgId)
+        return ResponseEntity.ok(vendorService.getVendorSummary(orgId, days))
+    }
+
     @GetMapping("/{orgId}/snapshot")
     fun getSnapshot(
         @PathVariable orgId: String,
@@ -92,7 +144,7 @@ class GovernanceController(
 
         val now = Instant.now()
         val periodStart = now.minus(30, ChronoUnit.DAYS)
-        val domains = listOf("budget", "team", "security", "data", "process")
+        val domains = listOf("budget", "team", "security", "data", "process", "architecture", "process-summary", "compliance", "capacity", "vendor")
 
         val created = mutableListOf<String>()
         for (domain in domains) {
@@ -124,6 +176,11 @@ class GovernanceController(
                 "security" -> com.google.gson.Gson().toJson(securityService.getSecurityPosture(orgId, 30))
                 "data" -> com.google.gson.Gson().toJson(knowledgeService.getKnowledgeHealth(orgId))
                 "process" -> com.google.gson.Gson().toJson(processMiningService.getProcessFlows(orgId))
+                "architecture" -> com.google.gson.Gson().toJson(architectureService.getArchitectureSummary(orgId))
+                "process-summary" -> com.google.gson.Gson().toJson(processSummaryService.getProcessSummary(orgId))
+                "compliance" -> com.google.gson.Gson().toJson(complianceService.getComplianceSummary(orgId, 30))
+                "capacity" -> com.google.gson.Gson().toJson(capacityService.getCapacitySummary(orgId))
+                "vendor" -> com.google.gson.Gson().toJson(vendorService.getVendorSummary(orgId, 30))
                 else -> "{}"
             }
         } catch (t: Throwable) {

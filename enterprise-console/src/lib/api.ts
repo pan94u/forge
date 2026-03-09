@@ -21,10 +21,20 @@ import type {
   SecurityPosture,
   KnowledgeHealth,
   ProcessFlow,
+  ArchitectureSummary,
+  ProcessSummary,
+  ComplianceSummary,
+  CapacitySummary,
+  VendorSummary,
 } from "./types";
 
+// Next.js basePath (e.g. "/console") — needed because browser fetch() doesn't
+// auto-prepend basePath like <Link> does. Without this, requests go to /api/*
+// which nginx routes directly to backend (bypassing Console's auth proxy layer).
+const BASE = process.env.NEXT_PUBLIC_BASE_PATH || "";
+
 async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(url, {
+  const res = await fetch(`${BASE}${url}`, {
     headers: { "Content-Type": "application/json" },
     ...options,
   });
@@ -197,5 +207,15 @@ export const api = {
       fetchJson<ProcessFlow[]>(`/api/governance/${orgId}/process`),
     createSnapshot: (orgId: string) =>
       fetchJson<void>(`/api/governance/${orgId}/snapshot`, { method: 'POST' }),
+    getArchitecture: (orgId: string) =>
+      fetchJson<ArchitectureSummary>(`/api/governance/${orgId}/architecture`),
+    getProcessSummary: (orgId: string) =>
+      fetchJson<ProcessSummary>(`/api/governance/${orgId}/process-summary`),
+    getCompliance: (orgId: string, days = 30) =>
+      fetchJson<ComplianceSummary>(`/api/governance/${orgId}/compliance?days=${days}`),
+    getCapacity: (orgId: string) =>
+      fetchJson<CapacitySummary>(`/api/governance/${orgId}/capacity`),
+    getVendor: (orgId: string, days = 30) =>
+      fetchJson<VendorSummary>(`/api/governance/${orgId}/vendor?days=${days}`),
   },
 };
