@@ -3,18 +3,16 @@
 # =============================================================================
 #
 # 架构与 trial 一致，区别仅在域名和端口:
-#   trial: sso.forge.local:8180 + forge.local:19000
-#   haier: forge-sso.haier.net:9100 + forge.haier.net:9000
-#         （外层 nginx 80 → 主机 9000/9100）
+#   trial: sso.forge.local:8180 + forge.local:19000（端口内外一致，SSO_URL 统一）
+#   haier: forge-sso.haier.net + forge.haier.net（外层 nginx 80 → 主机 9000/9100）
+#
+# 因为有外层 nginx，浏览器 URL 无端口，容器内用 Docker 服务名+端口:
+#   浏览器: http://forge-sso.haier.net/auth （SSO_URL）
+#   容器内: http://keycloak:9100/auth       （SSO_INTERNAL_URL, Docker 服务名）
 #
 # 前置条件:
 #   1. 启动 SSO: cd ../sso && docker compose up -d
-#      （SSO .env 需配置 haier 域名，见 deploy.sh）
-#   2. DNS: forge.haier.net / forge-sso.haier.net → 本机 IP
-#
-# 使用方式:
-#   ./deploy.sh          # 一键构建 + 启动
-#   docker compose up -d # 仅启动（已有构建产物）
+#   2. DNS: forge.haier.net / forge-sso.haier.net → 本机 IP（外层 nginx 转发）
 
 # 加入 SSO 共享网络（SSO 独立部署，与 trial 一致）
 networks:
@@ -128,9 +126,11 @@ services:
       FORGE_SECURITY_ENABLED: "true"
       FORGE_CORS_ALLOWED_ORIGINS: "${APP_URL:-http://forge.haier.net}"
       FORGE_FRONTEND_URL: "${APP_URL:-http://forge.haier.net}"
-      # --- SSO (统一 URL，浏览器 + 容器可达) ---
-      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: "${SSO_URL:-http://forge-sso.haier.net:9100/auth}/realms/forge"
-      FORGE_SECURITY_JWK_SET_URI: "${SSO_URL:-http://forge-sso.haier.net:9100/auth}/realms/forge/protocol/openid-connect/certs"
+      # --- SSO ---
+      # issuer 匹配 token（浏览器 URL，无端口）
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: "${SSO_URL:-http://forge-sso.haier.net/auth}/realms/forge"
+      # JWK 走容器内网（Docker 服务名 keycloak:8180，通过 sso-net 可达）
+      FORGE_SECURITY_JWK_SET_URI: "${SSO_INTERNAL_URL:-http://keycloak:8180/auth}/realms/forge/protocol/openid-connect/certs"
       # --- Database ---
       SPRING_JPA_HIBERNATE_DDL_AUTO: update
       FORGE_PLUGINS_PATH: /plugins
@@ -203,8 +203,10 @@ services:
       BACKEND_URL: http://backend:8080
       KEYCLOAK_CLIENT_ID: forge-enterprise
       KEYCLOAK_CLIENT_SECRET: ${KC_ENTERPRISE_SECRET:-enterprise-secret}
-      # SSO 统一 URL — 浏览器和容器都用同一个地址
-      KEYCLOAK_ISSUER: "${SSO_URL:-http://forge-sso.haier.net:9100/auth}/realms/forge"
+      # KEYCLOAK_ISSUER: 浏览器 URL（RFC 9207 issuer 校验，匹配 token）
+      KEYCLOAK_ISSUER: "${SSO_URL:-http://forge-sso.haier.net/auth}/realms/forge"
+      # KEYCLOAK_INTERNAL_URL: 容器内网（token/userinfo/JWKS 端点，keycloak 默认 8180）
+      KEYCLOAK_INTERNAL_URL: "${SSO_INTERNAL_URL:-http://keycloak:8180/auth}/realms/forge"
       NEXTAUTH_URL: "${APP_URL:-http://forge.haier.net}"
       AUTH_TRUST_HOST: "true"
       NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:-forge-enterprise-nextauth-secret-32c}
@@ -221,8 +223,12 @@ services:
     restart: unless-stopped
     cpus: 0.25
     mem_limit: 128m
+    networks:
+      - default
+      - sso-net
     ports:
       - "9000:9000"
+      - "9100:9100"
     volumes:
       - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
     depends_on:
