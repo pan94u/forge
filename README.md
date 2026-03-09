@@ -144,6 +144,12 @@ An independently deployed enterprise governance interface covering:
 
 ## Architecture
 
+<div align="center">
+
+![Forge Full Architecture](assets/images/11-forge-full-architecture.jpg)
+
+</div>
+
 ### System Architecture Diagram
 
 ```
@@ -397,6 +403,18 @@ curl -s http://localhost:19000/api/models | python3 -m json.tool
 ![Forge 5 Competitive Advantages](assets/images/04-forge-5-competitive-advantages.jpg)
 
 </div>
+
+---
+
+## Ecosystem Vision: Forge × Synapse AI
+
+<div align="center">
+
+![Forge x Synapse AI Same Mission](assets/images/10-forge-synapse-ai-same-mission.jpg)
+
+</div>
+
+Same mission, different battlefields: Forge serves the IT organization domain (execution + governance), [Synapse AI](https://github.com/pan94u/Synapse-AI) covers the business organization domain (RaaS · key minority priority · industry brain), connected via MCP bridging protocol for IT data → business decisions.
 
 ---
 

@@ -144,6 +144,12 @@ Forge 是一个 **AI-Native IT 基础设施**，双层协同架构：
 
 ## 技术架构
 
+<div align="center">
+
+![Forge Full Architecture](assets/images/11-forge-full-architecture.jpg)
+
+</div>
+
 ### 系统架构图
 
 ```
@@ -397,6 +403,18 @@ curl -s http://localhost:19000/api/models | python3 -m json.tool
 ![Forge 5 Competitive Advantages](assets/images/04-forge-5-competitive-advantages.jpg)
 
 </div>
+
+---
+
+## 生态愿景：Forge × Synapse AI
+
+<div align="center">
+
+![Forge x Synapse AI Same Mission](assets/images/10-forge-synapse-ai-same-mission.jpg)
+
+</div>
+
+同一使命，不同战场：Forge 深耕 IT 组织域（执行+治理），[Synapse AI](https://github.com/pan94u/Synapse-AI) 覆盖商业组织域（RaaS·关键少数·产业大脑），通过 MCP 桥接协议实现 IT 数据 → 商业决策的闭环。
 
 ---
 
