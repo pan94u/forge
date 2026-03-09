@@ -246,9 +246,9 @@ services:
       retries: 5
       start_period: 30s
     ports:
-      # Workspace 端口映射
-      - "19100-19105:3000-3005"
-      - "19200-19205:8000-8005"
+      # Workspace 端口映射（避开 19100 node_exporter）
+      - "19110-19115:3000-3005"
+      - "19210-19215:8000-8005"
     depends_on:
       forge-postgres:
         condition: service_healthy
