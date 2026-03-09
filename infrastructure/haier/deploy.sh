@@ -1,22 +1,30 @@
 #!/usr/bin/env bash
 # =============================================================================
 # Forge 海尔内部部署 — 一键构建 + 启动
+# 架构与 trial 一致: SSO 独立 + App 通过 sso-net 连接
 # =============================================================================
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+SSO_DIR="$PROJECT_ROOT/infrastructure/sso"
 
 echo "========================================="
 echo " Forge 海尔内部部署"
-echo " App:  http://forge.haier.net (主机:9000)"
-echo " SSO:  http://forge-sso.haier.net (主机:9100)"
+echo " App: http://forge.haier.net (主机:9000)"
+echo " SSO: http://forge-sso.haier.net (主机:9100)"
 echo "========================================="
 
 # --- 检查 .env ---
 if [ ! -f "$SCRIPT_DIR/.env" ]; then
-    echo "[ERROR] 未找到 .env 文件"
+    echo "[ERROR] 未找到 App .env"
     echo "  cp .env.example .env && vim .env"
+    exit 1
+fi
+
+if [ ! -f "$SSO_DIR/.env" ]; then
+    echo "[ERROR] 未找到 SSO .env"
+    echo "  cp $SCRIPT_DIR/sso.env.example $SSO_DIR/.env && vim $SSO_DIR/.env"
     exit 1
 fi
 
@@ -74,10 +82,18 @@ else
 fi
 echo "[OK] Enterprise Console 构建完成"
 
-# --- Docker Compose 启动 ---
+# --- 启动 SSO（独立部署，与 trial 架构一致）---
 echo ""
 echo "========================================="
-echo " 启动 Docker 容器（9 个）"
+echo " 启动 SSO（2 容器: keycloak + postgres）"
+echo "========================================="
+cd "$SSO_DIR"
+docker compose up -d
+
+# --- 启动 App ---
+echo ""
+echo "========================================="
+echo " 启动 App（7 容器）"
 echo "========================================="
 cd "$SCRIPT_DIR"
 docker compose up --build -d
@@ -97,3 +113,4 @@ echo "========================================="
 echo ""
 echo "查看日志: docker compose logs -f"
 echo "查看状态: docker compose ps"
+echo "SSO 日志: cd ../sso && docker compose logs -f"

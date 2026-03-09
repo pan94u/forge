@@ -67,8 +67,12 @@ services:
   #
   # 统一域名机制:
   #   KC_HOSTNAME_URL 决定 Keycloak 签发的所有 URL（OIDC Discovery、token iss）。
-  #   本地开发时，Docker 网络别名 sso.forge.local 让容器也能解析该域名，
-  #   加上 KC_HTTP_PORT=8180 = 宿主机映射端口，实现浏览器 + 容器同一 URL。
+  #   Docker 网络别名（SSO_HOSTNAME）让容器也能解析该域名，
+  #   加上 KC_HTTP_PORT = 宿主机映射端口，实现浏览器 + 容器同一 URL。
+  #
+  # 配置示例:
+  #   本地开发（默认）: SSO_HOSTNAME=sso.forge.local, KC_HTTP_PORT=8180
+  #   海尔内部: SSO_HOSTNAME=forge-sso.haier.net, KC_HTTP_PORT=9100
   # ---------------------------------------------------------------------------
   keycloak:
     image: quay.io/keycloak/keycloak:24.0
@@ -80,15 +84,15 @@ services:
     networks:
       sso-net:
         aliases:
-          - sso.forge.local
+          - ${SSO_HOSTNAME:-sso.forge.local}
     ports:
-      - "${KC_PORT:-8180}:8180"
+      - "${KC_PORT:-8180}:${KC_HTTP_PORT:-8180}"
     environment:
       # --- Admin ---
       KEYCLOAK_ADMIN: ${KC_ADMIN:-admin}
       KEYCLOAK_ADMIN_PASSWORD: ${KC_ADMIN_PASSWORD}
       # --- HTTP ---
-      KC_HTTP_PORT: "8180"
+      KC_HTTP_PORT: "${KC_HTTP_PORT:-8180}"
       KC_HTTP_ENABLED: "true"
       KC_HTTP_RELATIVE_PATH: "/auth"
       # --- Hostname ---
@@ -104,12 +108,12 @@ services:
       KC_DB_USERNAME: keycloak
       KC_DB_PASSWORD: ${KC_DB_PASSWORD:-keycloak}
     volumes:
-      - ./realm-export.json:/opt/keycloak/data/import/realm-export.json:ro
+      - ${KC_REALM_FILE:-./realm-export.json}:/opt/keycloak/data/import/realm-export.json:ro
     depends_on:
       sso-postgres:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "exec 3<>/dev/tcp/localhost/8180 && echo -e 'GET /auth/health/ready HTTP/1.0\\r\\nHost: localhost\\r\\n\\r\\n' >&3 && grep -q 'UP' <&3 || exit 1"]
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/localhost/${KC_HTTP_PORT:-8180} && echo -e 'GET /auth/health/ready HTTP/1.0\\r\\nHost: localhost\\r\\n\\r\\n' >&3 && grep -q 'UP' <&3 || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 20
