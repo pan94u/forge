@@ -18,7 +18,7 @@
 - **行动优先**：用户说"执行"/"继续"/"全部"时直接做，不要反问
 - **简洁回复**：少说多做。避免冗长解释，给结果和关键数据
 - **遵循四大开发纪律**（见下方"开发纪律"章节）
-- **Git 提交署名**：以 zhao55 和 Claude 的名义提交。commit 末尾必须包含 `Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>`，Git author 使用 zhao55 身份（`zhao55 <18565667766@163.com>`）
+- **Git 提交署名**：commit 末尾必须包含 `Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>`
 
 ## Quick Start
 
