@@ -11,8 +11,8 @@ SSO_DIR="$PROJECT_ROOT/infrastructure/sso"
 
 echo "========================================="
 echo " Forge 海尔内部部署"
-echo " App: http://forge.haier.net (主机:9000)"
-echo " SSO: http://forge-sso.haier.net (主机:9100)"
+echo " App: https://forge.haier.net (主机:9000)"
+echo " SSO: https://forge-sso.haier.net (主机:9100)"
 echo "========================================="
 
 # --- 检查 .env ---
@@ -73,6 +73,8 @@ echo "[OK] 前端构建完成"
 echo ""
 echo "[4/4] 构建 Enterprise Console..."
 cd "$PROJECT_ROOT/enterprise-console"
+# NEXT_PUBLIC_* 是构建时变量，必须在 build 前确保 .env 存在
+cp -n .env.example .env 2>/dev/null || true
 if command -v pnpm &>/dev/null; then
     pnpm install --frozen-lockfile 2>/dev/null || pnpm install
     pnpm run build
@@ -102,9 +104,9 @@ echo ""
 echo "========================================="
 echo " 部署完成！"
 echo ""
-echo " Web IDE:    http://forge.haier.net"
-echo " Console:    http://forge.haier.net/console"
-echo " SSO Admin:  http://forge-sso.haier.net/auth/admin"
+echo " Web IDE:    https://forge.haier.net"
+echo " Console:    https://forge.haier.net/console"
+echo " SSO Admin:  https://forge-sso.haier.net/auth/admin"
 echo ""
 echo " 默认账号:"
 echo "   admin / admin (管理员)"
