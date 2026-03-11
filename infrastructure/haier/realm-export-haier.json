@@ -96,18 +96,20 @@
       "publicClient": true,
       "standardFlowEnabled": true,
       "directAccessGrantsEnabled": true,
-      "rootUrl": "http://forge.haier.net",
+      "rootUrl": "https://forge.haier.net",
       "baseUrl": "/",
       "redirectUris": [
+        "https://forge.haier.net/*",
         "http://forge.haier.net/*"
       ],
       "webOrigins": [
+        "https://forge.haier.net",
         "http://forge.haier.net"
       ],
       "protocol": "openid-connect",
       "attributes": {
         "pkce.code.challenge.method": "S256",
-        "post.logout.redirect.uris": "http://forge.haier.net/*"
+        "post.logout.redirect.uris": "https://forge.haier.net/*##http://forge.haier.net/*"
       },
       "defaultClientScopes": [
         "openid",
@@ -124,18 +126,21 @@
       "secret": "enterprise-secret",
       "standardFlowEnabled": true,
       "directAccessGrantsEnabled": false,
-      "rootUrl": "http://forge.haier.net/console",
+      "rootUrl": "https://forge.haier.net/console",
       "baseUrl": "/",
       "redirectUris": [
+        "https://forge.haier.net/console/*",
+        "https://forge.haier.net/api/auth/*",
         "http://forge.haier.net/console/*",
         "http://forge.haier.net/api/auth/*"
       ],
       "webOrigins": [
+        "https://forge.haier.net",
         "http://forge.haier.net"
       ],
       "protocol": "openid-connect",
       "attributes": {
-        "post.logout.redirect.uris": "http://forge.haier.net/console/*"
+        "post.logout.redirect.uris": "https://forge.haier.net/console/*##http://forge.haier.net/console/*"
       },
       "defaultClientScopes": [
         "openid",
