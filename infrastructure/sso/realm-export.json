@@ -166,6 +166,24 @@
       ]
     },
     {
+      "clientId": "invest-platform",
+      "name": "Invest Platform",
+      "enabled": true,
+      "publicClient": true,
+      "protocol": "openid-connect",
+      "redirectUris": ["http://localhost:5173/*"],
+      "webOrigins": ["http://localhost:5173"],
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "attributes": { "pkce.code.challenge.method": "S256" },
+      "defaultClientScopes": [
+        "openid",
+        "profile",
+        "email",
+        "roles"
+      ]
+    },
+    {
       "clientId": "forge-synapse",
       "name": "Synapse AI Platform",
       "enabled": true,
