@@ -8,6 +8,7 @@ import com.forge.eval.engine.EvalEngine
 import com.forge.eval.engine.EvalRunResult
 import com.forge.eval.engine.ReportGenerator
 import com.forge.eval.engine.TrialOutput
+import com.forge.eval.engine.stats.RegressionDetector
 import com.forge.eval.protocol.*
 import org.slf4j.LoggerFactory
 import org.springframework.data.domain.Page
@@ -216,6 +217,100 @@ class EvalService(
         } else {
             report
         }
+    }
+
+    // ── Transcript ───────────────────────────────────────────────────
+
+    @Transactional
+    fun submitTranscript(request: SubmitTranscriptRequest): Map<String, Any> {
+        // Verify suite and task exist
+        suiteRepo.findById(request.suiteId)
+            .orElseThrow { NotFoundException("Suite not found: ${request.suiteId}") }
+        val taskEntity = taskRepo.findById(request.taskId)
+            .orElseThrow { NotFoundException("Task not found: ${request.taskId}") }
+
+        val task = toEvalTask(taskEntity)
+
+        // Build transcript
+        val toolCalls = request.turns.flatMap { it.toolCalls }
+        val transcript = EvalTranscript(
+            source = request.source,
+            turns = request.turns,
+            toolCallSummary = toolCalls,
+            metadata = request.metadata
+        )
+
+        // Grade the transcript output
+        val output = request.turns
+            .filter { it.role == "assistant" }
+            .joinToString("\n") { it.content }
+
+        val grades = evalEngine.gradeOutput(task, output, transcript)
+
+        // Persist transcript
+        val transcriptEntity = EvalTranscriptEntity(
+            id = transcript.id,
+            source = TranscriptSourceEnum.valueOf(request.source.name),
+            turns = objectMapper.writeValueAsString(request.turns),
+            toolCallSummary = objectMapper.writeValueAsString(toolCalls),
+            metadata = objectMapper.writeValueAsString(request.metadata)
+        )
+        transcriptRepo.save(transcriptEntity)
+
+        // Persist grades
+        for (grade in grades) {
+            val gradeEntity = EvalGradeEntity(
+                id = grade.id,
+                trialId = grade.trialId,
+                graderType = GraderTypeEnum.valueOf(grade.graderType.name),
+                score = grade.score,
+                passed = grade.passed,
+                assertionResults = objectMapper.writeValueAsString(grade.assertionResults),
+                explanation = grade.explanation,
+                confidence = grade.confidence
+            )
+            gradeRepo.save(gradeEntity)
+        }
+
+        return mapOf(
+            "transcriptId" to transcript.id,
+            "grades" to grades.map { mapOf("score" to it.score, "passed" to it.passed, "explanation" to it.explanation) }
+        )
+    }
+
+    fun getTranscript(transcriptId: UUID): EvalTranscript {
+        val entity = transcriptRepo.findById(transcriptId)
+            .orElseThrow { NotFoundException("Transcript not found: $transcriptId") }
+        return EvalTranscript(
+            id = entity.id,
+            trialId = entity.trialId,
+            source = TranscriptSource.valueOf(entity.source.name),
+            turns = objectMapper.readValue(entity.turns),
+            toolCallSummary = objectMapper.readValue(entity.toolCallSummary),
+            metadata = objectMapper.readValue(entity.metadata),
+            createdAt = entity.createdAt
+        )
+    }
+
+    // ── Regression Detection ────────────────────────────────────────
+
+    fun detectRegressions(suiteId: UUID, currentRunId: UUID, baselineRunId: UUID): Any {
+        val currentTrials = trialRepo.findByRunId(currentRunId)
+        val baselineTrials = trialRepo.findByRunId(baselineRunId)
+
+        if (currentTrials.isEmpty() || baselineTrials.isEmpty()) {
+            throw IllegalStateException("Both runs must have trials")
+        }
+
+        val taskNames = taskRepo.findBySuiteId(suiteId).associate { it.id to it.name }
+
+        val currentByTask = currentTrials.groupBy { it.taskId }
+            .mapValues { (_, trials) -> trials.map { TrialOutcome.valueOf(it.outcome.name) } }
+        val baselineByTask = baselineTrials.groupBy { it.taskId }
+            .mapValues { (_, trials) -> trials.map { TrialOutcome.valueOf(it.outcome.name) } }
+
+        val detector = RegressionDetector()
+        return detector.detectRegressions(currentByTask, baselineByTask, taskNames)
     }
 
     // ── Persistence helpers ─────────────────────────────────────────

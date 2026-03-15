@@ -74,6 +74,30 @@ class EvalController(
         return evalService.getRunReport(runId, format)
     }
 
+    // ── Transcript endpoints ────────────────────────────────────────
+
+    @PostMapping("/transcripts")
+    fun submitTranscript(@RequestBody request: SubmitTranscriptRequest): ResponseEntity<Map<String, Any>> {
+        val result = evalService.submitTranscript(request)
+        return ResponseEntity.status(HttpStatus.CREATED).body(result)
+    }
+
+    @GetMapping("/transcripts/{transcriptId}")
+    fun getTranscript(@PathVariable transcriptId: UUID): EvalTranscript {
+        return evalService.getTranscript(transcriptId)
+    }
+
+    // ── Regression endpoints ────────────────────────────────────────
+
+    @GetMapping("/regressions")
+    fun detectRegressions(
+        @RequestParam suiteId: UUID,
+        @RequestParam currentRunId: UUID,
+        @RequestParam baselineRunId: UUID
+    ): Any {
+        return evalService.detectRegressions(suiteId, currentRunId, baselineRunId)
+    }
+
     // ── Error handling ──────────────────────────────────────────────
 
     @ExceptionHandler(NotFoundException::class)

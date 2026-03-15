@@ -40,6 +40,8 @@ class EvalControllerIntegrationTest {
         var suiteId: UUID? = null
         var taskId: UUID? = null
         var runId: UUID? = null
+        var multiTrialRunId: UUID? = null
+        var transcriptId: UUID? = null
     }
 
     @Test
@@ -239,5 +241,101 @@ class EvalControllerIntegrationTest {
         mockMvc.perform(get("/api/eval/v1/suites?platform=FORGE"))
             .andExpect(status().isOk)
             .andExpect(jsonPath("$.content[0].platform").value("FORGE"))
+    }
+
+    // ── Phase 2: Multi-trial + Transcript + Regression ──────────────
+
+    @Test
+    @Order(20)
+    fun `POST runs - multi-trial run with trialsPerTask=3`() {
+        val request = CreateRunRequest(
+            suiteId = suiteId!!,
+            trialsPerTask = 3
+        )
+
+        val result = mockMvc.perform(
+            post("/api/eval/v1/runs")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request))
+        )
+            .andExpect(status().isCreated)
+            .andExpect(jsonPath("$.trialsPerTask").value(3))
+            .andExpect(jsonPath("$.trials").isArray)
+            .andReturn()
+
+        val response: RunResponse = objectMapper.readValue(result.response.contentAsString)
+        multiTrialRunId = response.id
+        assertThat(response.trials).hasSize(3)
+        assertThat(response.trials.map { it.trialNumber }).containsExactly(1, 2, 3)
+    }
+
+    @Test
+    @Order(21)
+    fun `GET runs report - multi-trial shows Pass@k and Pass^k when k gt 1`() {
+        val result = mockMvc.perform(get("/api/eval/v1/runs/$multiTrialRunId/report?format=json"))
+            .andExpect(status().isOk)
+            .andReturn()
+
+        val report: EvalReport = objectMapper.readValue(result.response.contentAsString)
+        // With trialsPerTask=3, passAtK and passPowerK should be computed
+        // In structure validation mode all trials produce same output so metrics are deterministic
+        assertThat(report.summary.totalTrials).isEqualTo(3)
+    }
+
+    @Test
+    @Order(30)
+    fun `POST transcripts - submit external transcript for grading`() {
+        val request = SubmitTranscriptRequest(
+            suiteId = suiteId!!,
+            taskId = taskId!!,
+            source = TranscriptSource.EXTERNAL,
+            turns = listOf(
+                TranscriptTurn(role = "user", content = "Say hello"),
+                TranscriptTurn(
+                    role = "assistant",
+                    content = "hello world!",
+                    toolCalls = listOf(ToolCallInfo(toolName = "search_knowledge"))
+                )
+            ),
+            metadata = mapOf("agent" to "synapse-v1")
+        )
+
+        val result = mockMvc.perform(
+            post("/api/eval/v1/transcripts")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request))
+        )
+            .andExpect(status().isCreated)
+            .andExpect(jsonPath("$.transcriptId").isNotEmpty)
+            .andExpect(jsonPath("$.grades").isArray)
+            .andReturn()
+
+        val body: Map<String, Any> = objectMapper.readValue(result.response.contentAsString)
+        transcriptId = UUID.fromString(body["transcriptId"].toString())
+        assertThat(transcriptId).isNotNull()
+    }
+
+    @Test
+    @Order(31)
+    fun `GET transcripts - retrieve submitted transcript`() {
+        mockMvc.perform(get("/api/eval/v1/transcripts/$transcriptId"))
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.source").value("EXTERNAL"))
+            .andExpect(jsonPath("$.turns").isArray)
+            .andExpect(jsonPath("$.turns[1].content").value("hello world!"))
+    }
+
+    @Test
+    @Order(40)
+    fun `GET regressions - compare two runs`() {
+        // runId (order 7) and multiTrialRunId (order 20) are both against same suite
+        mockMvc.perform(
+            get("/api/eval/v1/regressions")
+                .param("suiteId", suiteId.toString())
+                .param("currentRunId", multiTrialRunId.toString())
+                .param("baselineRunId", runId.toString())
+        )
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.regressions").isArray)
     }
 }

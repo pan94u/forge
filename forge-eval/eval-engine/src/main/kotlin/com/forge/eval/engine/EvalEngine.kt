@@ -1,6 +1,7 @@
 package com.forge.eval.engine
 
 import com.forge.eval.engine.grader.CodeBasedGrader
+import com.forge.eval.engine.stats.PassMetrics
 import com.forge.eval.protocol.*
 import org.slf4j.LoggerFactory
 import java.time.Instant
@@ -147,7 +148,6 @@ class EvalEngine(
     }
 
     private fun buildSummary(trials: List<EvalTrialResult>, trialsPerTask: Int): RunSummary {
-        val taskIds = trials.map { it.trial.taskId }.distinct()
         val totalTrials = trials.size
         val passedTrials = trials.count { it.trial.outcome == TrialOutcome.PASS }
         val failedTrials = trials.count { it.trial.outcome == TrialOutcome.FAIL }
@@ -156,15 +156,33 @@ class EvalEngine(
         val averageScore = if (trials.isNotEmpty()) trials.map { it.trial.score }.average() else 0.0
         val totalDurationMs = trials.sumOf { it.trial.durationMs }
 
+        // Compute Pass@k and Pass^k per task, then average across tasks
+        val trialsByTask = trials.groupBy { it.trial.taskId }
+        val (passAtK, passPowerK) = if (trialsPerTask > 1 && trialsByTask.isNotEmpty()) {
+            val taskPassAtK = trialsByTask.values.map { taskTrials ->
+                val outcomes = taskTrials.map { it.trial.outcome }
+                PassMetrics.passAtK(outcomes, trialsPerTask)
+            }
+            val taskPassPowerK = trialsByTask.values.map { taskTrials ->
+                val outcomes = taskTrials.map { it.trial.outcome }
+                PassMetrics.passPowerK(outcomes, trialsPerTask)
+            }
+            Pair(taskPassAtK.average(), taskPassPowerK.average())
+        } else {
+            Pair(null, null)
+        }
+
         return RunSummary(
-            totalTasks = taskIds.size,
+            totalTasks = trialsByTask.size,
             totalTrials = totalTrials,
             passedTrials = passedTrials,
             failedTrials = failedTrials,
             errorTrials = errorTrials,
             overallPassRate = overallPassRate,
             averageScore = averageScore,
-            totalDurationMs = totalDurationMs
+            totalDurationMs = totalDurationMs,
+            passAtK = passAtK,
+            passPowerK = passPowerK
         )
     }
 }
