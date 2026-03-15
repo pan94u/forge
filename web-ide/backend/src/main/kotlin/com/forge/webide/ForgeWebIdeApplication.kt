@@ -1,10 +1,14 @@
 package com.forge.webide
 
 import org.springframework.boot.autoconfigure.SpringBootApplication
+import org.springframework.boot.autoconfigure.domain.EntityScan
 import org.springframework.boot.runApplication
+import org.springframework.data.jpa.repository.config.EnableJpaRepositories
 import org.springframework.scheduling.annotation.EnableScheduling
 
-@SpringBootApplication
+@SpringBootApplication(scanBasePackages = ["com.forge.webide", "com.forge.eval.api"])
+@EntityScan(basePackages = ["com.forge.webide", "com.forge.eval.api.entity"])
+@EnableJpaRepositories(basePackages = ["com.forge.webide", "com.forge.eval.api.repository"])
 @EnableScheduling
 class ForgeWebIdeApplication
 

@@ -26,8 +26,8 @@ class EvalService(
     private val gradeRepo: EvalGradeRepository,
     private val transcriptRepo: EvalTranscriptRepository,
     private val objectMapper: ObjectMapper,
-    private val evalEngine: EvalEngine = EvalEngine(),
-    private val reportGenerator: ReportGenerator = ReportGenerator()
+    private val evalEngine: EvalEngine,
+    private val reportGenerator: ReportGenerator
 ) {
     private val logger = LoggerFactory.getLogger(EvalService::class.java)
 
