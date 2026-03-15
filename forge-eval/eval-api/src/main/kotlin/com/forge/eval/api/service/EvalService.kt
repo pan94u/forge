@@ -1,0 +1,380 @@
+package com.forge.eval.api.service
+
+import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.module.kotlin.readValue
+import com.forge.eval.api.entity.*
+import com.forge.eval.api.repository.*
+import com.forge.eval.engine.EvalEngine
+import com.forge.eval.engine.EvalRunResult
+import com.forge.eval.engine.ReportGenerator
+import com.forge.eval.engine.TrialOutput
+import com.forge.eval.protocol.*
+import org.slf4j.LoggerFactory
+import org.springframework.data.domain.Page
+import org.springframework.data.domain.PageRequest
+import org.springframework.stereotype.Service
+import org.springframework.transaction.annotation.Transactional
+import java.time.Instant
+import java.util.UUID
+
+@Service
+class EvalService(
+    private val suiteRepo: EvalSuiteRepository,
+    private val taskRepo: EvalTaskRepository,
+    private val runRepo: EvalRunRepository,
+    private val trialRepo: EvalTrialRepository,
+    private val gradeRepo: EvalGradeRepository,
+    private val transcriptRepo: EvalTranscriptRepository,
+    private val objectMapper: ObjectMapper,
+    private val evalEngine: EvalEngine = EvalEngine(),
+    private val reportGenerator: ReportGenerator = ReportGenerator()
+) {
+    private val logger = LoggerFactory.getLogger(EvalService::class.java)
+
+    // ── Suite CRUD ──────────────────────────────────────────────────
+
+    @Transactional
+    fun createSuite(request: CreateSuiteRequest): SuiteResponse {
+        val entity = EvalSuiteEntity(
+            name = request.name,
+            description = request.description,
+            platform = PlatformEnum.valueOf(request.platform.name),
+            agentType = AgentTypeEnum.valueOf(request.agentType.name),
+            lifecycle = LifecycleEnum.valueOf(request.lifecycle.name),
+            tags = objectMapper.writeValueAsString(request.tags)
+        )
+        val saved = suiteRepo.save(entity)
+        return toSuiteResponse(saved)
+    }
+
+    fun listSuites(
+        platform: String?,
+        agentType: String?,
+        page: Int,
+        size: Int
+    ): PageResponse<SuiteResponse> {
+        val pageable = PageRequest.of(page, size)
+        val result: Page<EvalSuiteEntity> = when {
+            platform != null && agentType != null ->
+                suiteRepo.findByPlatformAndAgentType(
+                    PlatformEnum.valueOf(platform.uppercase()),
+                    AgentTypeEnum.valueOf(agentType.uppercase()),
+                    pageable
+                )
+            platform != null ->
+                suiteRepo.findByPlatform(PlatformEnum.valueOf(platform.uppercase()), pageable)
+            else ->
+                suiteRepo.findAll(pageable)
+        }
+
+        return PageResponse(
+            content = result.content.map { toSuiteResponse(it) },
+            page = result.number,
+            size = result.size,
+            totalElements = result.totalElements,
+            totalPages = result.totalPages
+        )
+    }
+
+    fun getSuite(suiteId: UUID): SuiteResponse {
+        val entity = suiteRepo.findById(suiteId)
+            .orElseThrow { NotFoundException("Suite not found: $suiteId") }
+        return toSuiteResponse(entity)
+    }
+
+    // ── Task CRUD ───────────────────────────────────────────────────
+
+    @Transactional
+    fun createTask(suiteId: UUID, request: CreateTaskRequest): EvalTask {
+        suiteRepo.findById(suiteId)
+            .orElseThrow { NotFoundException("Suite not found: $suiteId") }
+
+        val entity = EvalTaskEntity(
+            suiteId = suiteId,
+            name = request.name,
+            description = request.description,
+            prompt = request.prompt,
+            context = objectMapper.writeValueAsString(request.context),
+            referenceAnswer = request.referenceAnswer,
+            graderConfigs = objectMapper.writeValueAsString(request.graderConfigs),
+            difficulty = DifficultyEnum.valueOf(request.difficulty.name),
+            tags = objectMapper.writeValueAsString(request.tags),
+            baselinePassRate = request.baselinePassRate
+        )
+        val saved = taskRepo.save(entity)
+        return toEvalTask(saved)
+    }
+
+    fun getTasksForSuite(suiteId: UUID): List<EvalTask> {
+        return taskRepo.findBySuiteId(suiteId).map { toEvalTask(it) }
+    }
+
+    // ── Run Execution ───────────────────────────────────────────────
+
+    @Transactional
+    fun createRun(request: CreateRunRequest): RunResponse {
+        val suite = suiteRepo.findById(request.suiteId)
+            .orElseThrow { NotFoundException("Suite not found: ${request.suiteId}") }
+
+        val tasks = taskRepo.findBySuiteId(request.suiteId)
+        if (tasks.isEmpty()) {
+            throw IllegalStateException("Suite has no tasks")
+        }
+
+        val evalTasks = tasks.map { toEvalTask(it) }
+        val evalSuite = toEvalSuite(suite)
+
+        // Execute evaluation (Phase 1: structure validation mode — no model calls)
+        val runResult = evalEngine.executeRun(
+            suite = evalSuite,
+            tasks = if (request.taskFilter != null) {
+                evalTasks.filter { it.id in request.taskFilter!! }
+            } else {
+                evalTasks
+            },
+            trialsPerTask = request.trialsPerTask
+        ) { task ->
+            // Phase 1: structure validation — empty output
+            // Future phases will integrate actual model calls
+            TrialOutput(output = "(structure validation mode — no model output)")
+        }
+
+        // Persist results
+        val savedRun = persistRunResult(runResult, request)
+        return buildRunResponse(savedRun, suite.name)
+    }
+
+    fun getRun(runId: UUID): RunResponse {
+        val run = runRepo.findById(runId)
+            .orElseThrow { NotFoundException("Run not found: $runId") }
+        val suite = suiteRepo.findById(run.suiteId)
+            .orElseThrow { NotFoundException("Suite not found: ${run.suiteId}") }
+        return buildRunResponse(run, suite.name)
+    }
+
+    fun getRunReport(runId: UUID, format: String?): Any {
+        val run = runRepo.findById(runId)
+            .orElseThrow { NotFoundException("Run not found: $runId") }
+        val suite = suiteRepo.findById(run.suiteId)
+            .orElseThrow { NotFoundException("Suite not found: ${run.suiteId}") }
+        val tasks = taskRepo.findBySuiteId(run.suiteId)
+
+        val evalSuite = toEvalSuite(suite)
+        val evalTasks = tasks.map { toEvalTask(it) }
+
+        // Reconstruct run result from persisted data
+        val trials = trialRepo.findByRunId(runId)
+        val gradesByTrial = gradeRepo.findByTrialIdIn(trials.map { it.id })
+            .groupBy { it.trialId }
+
+        val trialResults = trials.map { trial ->
+            com.forge.eval.engine.EvalTrialResult(
+                trial = EvalTrial(
+                    id = trial.id,
+                    runId = trial.runId,
+                    taskId = trial.taskId,
+                    trialNumber = trial.trialNumber,
+                    outcome = TrialOutcome.valueOf(trial.outcome.name),
+                    score = trial.score,
+                    durationMs = trial.durationMs
+                ),
+                grades = gradesByTrial[trial.id]?.map { grade ->
+                    EvalGrade(
+                        id = grade.id,
+                        trialId = grade.trialId,
+                        graderType = GraderType.valueOf(grade.graderType.name),
+                        score = grade.score,
+                        passed = grade.passed,
+                        assertionResults = objectMapper.readValue(grade.assertionResults),
+                        explanation = grade.explanation,
+                        confidence = grade.confidence
+                    )
+                } ?: emptyList()
+            )
+        }
+
+        val summary: RunSummary = if (run.summary != null) {
+            objectMapper.readValue(run.summary!!)
+        } else {
+            RunSummary(0, 0, 0, 0, 0, 0.0, 0.0, 0)
+        }
+
+        val evalRunResult = EvalRunResult(
+            run = EvalRun(
+                id = run.id,
+                suiteId = run.suiteId,
+                status = RunStatus.valueOf(run.status.name),
+                summary = summary
+            ),
+            trials = trialResults
+        )
+
+        val report = reportGenerator.generateReport(evalSuite, evalTasks, evalRunResult)
+
+        return if (format == "markdown") {
+            reportGenerator.toMarkdown(report)
+        } else {
+            report
+        }
+    }
+
+    // ── Persistence helpers ─────────────────────────────────────────
+
+    private fun persistRunResult(result: EvalRunResult, request: CreateRunRequest): EvalRunEntity {
+        val runEntity = EvalRunEntity(
+            id = result.run.id,
+            suiteId = request.suiteId,
+            status = RunStatusEnum.COMPLETED,
+            trialsPerTask = request.trialsPerTask,
+            model = request.model,
+            summary = objectMapper.writeValueAsString(result.run.summary),
+            startedAt = result.run.startedAt,
+            completedAt = result.run.completedAt
+        )
+        val savedRun = runRepo.save(runEntity)
+
+        for (trialResult in result.trials) {
+            val trialEntity = EvalTrialEntity(
+                id = trialResult.trial.id,
+                runId = result.run.id,
+                taskId = trialResult.trial.taskId,
+                trialNumber = trialResult.trial.trialNumber,
+                outcome = OutcomeEnum.valueOf(trialResult.trial.outcome.name),
+                score = trialResult.trial.score,
+                durationMs = trialResult.trial.durationMs,
+                tokenUsage = trialResult.trial.tokenUsage?.let { objectMapper.writeValueAsString(it) },
+                output = trialResult.trial.output,
+                errorMessage = trialResult.trial.errorMessage
+            )
+            trialRepo.save(trialEntity)
+
+            for (grade in trialResult.grades) {
+                val gradeEntity = EvalGradeEntity(
+                    id = grade.id,
+                    trialId = trialResult.trial.id,
+                    graderType = GraderTypeEnum.valueOf(grade.graderType.name),
+                    score = grade.score,
+                    passed = grade.passed,
+                    assertionResults = objectMapper.writeValueAsString(grade.assertionResults),
+                    rubricScores = objectMapper.writeValueAsString(grade.rubricScores),
+                    explanation = grade.explanation,
+                    confidence = grade.confidence
+                )
+                gradeRepo.save(gradeEntity)
+            }
+
+            if (trialResult.transcript != null) {
+                val transcriptEntity = EvalTranscriptEntity(
+                    trialId = trialResult.trial.id,
+                    source = TranscriptSourceEnum.valueOf(trialResult.transcript!!.source.name),
+                    turns = objectMapper.writeValueAsString(trialResult.transcript!!.turns),
+                    toolCallSummary = objectMapper.writeValueAsString(trialResult.transcript!!.toolCallSummary),
+                    metadata = objectMapper.writeValueAsString(trialResult.transcript!!.metadata)
+                )
+                transcriptRepo.save(transcriptEntity)
+            }
+        }
+
+        return savedRun
+    }
+
+    private fun buildRunResponse(run: EvalRunEntity, suiteName: String): RunResponse {
+        val trials = trialRepo.findByRunId(run.id)
+        val gradesByTrial = if (trials.isNotEmpty()) {
+            gradeRepo.findByTrialIdIn(trials.map { it.id }).groupBy { it.trialId }
+        } else {
+            emptyMap()
+        }
+
+        val taskIds = trials.map { it.taskId }.distinct()
+        val taskNames = if (taskIds.isNotEmpty()) {
+            taskRepo.findAllById(taskIds).associate { it.id to it.name }
+        } else {
+            emptyMap()
+        }
+
+        return RunResponse(
+            id = run.id,
+            suiteId = run.suiteId,
+            suiteName = suiteName,
+            status = RunStatus.valueOf(run.status.name),
+            trialsPerTask = run.trialsPerTask,
+            model = run.model,
+            summary = run.summary?.let { objectMapper.readValue(it) },
+            trials = trials.map { trial ->
+                TrialResponse(
+                    id = trial.id,
+                    taskId = trial.taskId,
+                    taskName = taskNames[trial.taskId] ?: "unknown",
+                    trialNumber = trial.trialNumber,
+                    outcome = TrialOutcome.valueOf(trial.outcome.name),
+                    score = trial.score,
+                    durationMs = trial.durationMs,
+                    grades = gradesByTrial[trial.id]?.map { grade ->
+                        GradeResponse(
+                            id = grade.id,
+                            graderType = GraderType.valueOf(grade.graderType.name),
+                            score = grade.score,
+                            passed = grade.passed,
+                            assertionResults = objectMapper.readValue(grade.assertionResults),
+                            explanation = grade.explanation,
+                            confidence = grade.confidence
+                        )
+                    } ?: emptyList()
+                )
+            },
+            startedAt = run.startedAt,
+            completedAt = run.completedAt,
+            createdAt = run.createdAt
+        )
+    }
+
+    // ── Conversion helpers ──────────────────────────────────────────
+
+    private fun toSuiteResponse(entity: EvalSuiteEntity): SuiteResponse {
+        val taskCount = taskRepo.countBySuiteId(entity.id)
+        return SuiteResponse(
+            id = entity.id,
+            name = entity.name,
+            description = entity.description,
+            platform = Platform.valueOf(entity.platform.name),
+            agentType = AgentType.valueOf(entity.agentType.name),
+            lifecycle = Lifecycle.valueOf(entity.lifecycle.name),
+            tags = objectMapper.readValue(entity.tags),
+            taskCount = taskCount.toInt(),
+            createdAt = entity.createdAt,
+            updatedAt = entity.updatedAt
+        )
+    }
+
+    private fun toEvalSuite(entity: EvalSuiteEntity): EvalSuite {
+        return EvalSuite(
+            id = entity.id,
+            name = entity.name,
+            description = entity.description,
+            platform = Platform.valueOf(entity.platform.name),
+            agentType = AgentType.valueOf(entity.agentType.name),
+            lifecycle = Lifecycle.valueOf(entity.lifecycle.name),
+            tags = objectMapper.readValue(entity.tags)
+        )
+    }
+
+    private fun toEvalTask(entity: EvalTaskEntity): EvalTask {
+        return EvalTask(
+            id = entity.id,
+            suiteId = entity.suiteId,
+            name = entity.name,
+            description = entity.description,
+            prompt = entity.prompt,
+            context = objectMapper.readValue(entity.context),
+            referenceAnswer = entity.referenceAnswer,
+            graderConfigs = objectMapper.readValue(entity.graderConfigs),
+            difficulty = Difficulty.valueOf(entity.difficulty.name),
+            tags = objectMapper.readValue(entity.tags),
+            baselinePassRate = entity.baselinePassRate,
+            saturationCount = entity.saturationCount
+        )
+    }
+}
+
+class NotFoundException(message: String) : RuntimeException(message)
