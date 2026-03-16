@@ -1,7 +1,10 @@
 package com.forge.webide.controller
 
+import com.forge.webide.repository.EvalTaskRepository
 import com.forge.webide.service.RbacHelper
 import com.forge.webide.service.eval.EvalTaskService
+import com.forge.webide.service.eval.GradeResult
+import com.forge.webide.service.eval.GraderOrchestrator
 import org.springframework.http.ResponseEntity
 import org.springframework.security.core.annotation.AuthenticationPrincipal
 import org.springframework.security.oauth2.jwt.Jwt
@@ -11,7 +14,9 @@ import org.springframework.web.bind.annotation.*
 @RequestMapping("/api/eval")
 class EvalPlatformController(
     private val evalTaskService: EvalTaskService,
-    private val rbacHelper: RbacHelper
+    private val rbacHelper: RbacHelper,
+    private val graderOrchestrator: GraderOrchestrator,
+    private val evalTaskRepository: EvalTaskRepository
 ) {
 
     @GetMapping("/tasks")
@@ -82,8 +87,47 @@ class EvalPlatformController(
         return ResponseEntity.ok(result)
     }
 
+    @PostMapping("/grade")
+    fun gradeOutput(
+        @RequestBody request: GradeRequest,
+        @AuthenticationPrincipal jwt: Jwt? = null
+    ): ResponseEntity<GradeResponse> {
+        val task = evalTaskRepository.findById(request.taskId).orElse(null)
+            ?: return ResponseEntity.notFound().build()
+        val result = graderOrchestrator.grade(task, request.actualOutput)
+        return ResponseEntity.ok(GradeResponse.from(result))
+    }
+
     data class YamlImportRequest(
         val yamlContents: List<String>,
         val orgId: String? = null
     )
+
+    data class GradeRequest(
+        val taskId: String,
+        val actualOutput: String
+    )
+
+    data class GradeResponse(
+        val totalScore: Double,
+        val passed: Boolean,
+        val codeGrade: CodeGradeInfo?,
+        val modelGrade: ModelGradeInfo?
+    ) {
+        companion object {
+            fun from(result: GradeResult) = GradeResponse(
+                totalScore = result.totalScore.toDouble(),
+                passed = result.passed,
+                codeGrade = result.codeGrade?.let {
+                    CodeGradeInfo(it.passed, it.passRate, it.assertions.size)
+                },
+                modelGrade = result.modelGrade?.let {
+                    ModelGradeInfo(it.score.toDouble(), it.rationale)
+                }
+            )
+        }
+    }
+
+    data class CodeGradeInfo(val passed: Boolean, val passRate: Double, val assertionCount: Int)
+    data class ModelGradeInfo(val score: Double, val rationale: String)
 }
