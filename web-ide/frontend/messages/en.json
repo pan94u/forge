@@ -7,6 +7,7 @@
     "aiChat": "AI Chat",
     "skills": "Skills",
     "evaluations": "Evaluations",
+    "evalDashboard": "Eval Dashboard",
     "integrations": "Integrations",
     "infrastructure": "Infrastructure",
     "admin": "Admin",
@@ -159,5 +160,28 @@
     "developerTitle": "Developer mode: Full IDE with workflow editor",
     "product": "Product",
     "productTitle": "Product mode: Simplified view focused on knowledge and AI"
+  },
+  "evalDashboard": {
+    "title": "Eval Dashboard",
+    "suites": "Suites",
+    "tasks": "Tasks",
+    "runs": "Runs",
+    "pendingReviews": "Pending Reviews",
+    "createSuite": "Create Suite",
+    "platform": "Platform",
+    "agentType": "Agent Type",
+    "lifecycle": "Lifecycle",
+    "taskCount": "Tasks",
+    "allPlatforms": "All Platforms",
+    "allAgentTypes": "All Types",
+    "name": "Name",
+    "description": "Description",
+    "tags": "Tags",
+    "cancel": "Cancel",
+    "create": "Create",
+    "creating": "Creating...",
+    "noSuites": "No evaluation suites yet",
+    "noSuitesHint": "Create your first suite to get started",
+    "loading": "Loading..."
   }
 }

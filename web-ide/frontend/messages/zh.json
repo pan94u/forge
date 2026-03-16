@@ -7,6 +7,7 @@
     "aiChat": "AI 对话",
     "skills": "技能",
     "evaluations": "评估",
+    "evalDashboard": "Eval Dashboard",
     "integrations": "集成",
     "infrastructure": "基础设施",
     "admin": "管理",
@@ -159,5 +160,28 @@
     "developerTitle": "开发者模式：完整 IDE + 工作流编辑器",
     "product": "产品",
     "productTitle": "产品模式：简化视图，聚焦知识库与 AI"
+  },
+  "evalDashboard": {
+    "title": "Eval Dashboard",
+    "suites": "评估套件",
+    "tasks": "任务",
+    "runs": "运行",
+    "pendingReviews": "待审查",
+    "createSuite": "创建套件",
+    "platform": "平台",
+    "agentType": "Agent 类型",
+    "lifecycle": "生命周期",
+    "taskCount": "任务数",
+    "allPlatforms": "全部平台",
+    "allAgentTypes": "全部类型",
+    "name": "名称",
+    "description": "描述",
+    "tags": "标签",
+    "cancel": "取消",
+    "create": "创建",
+    "creating": "创建中...",
+    "noSuites": "暂无评估套件",
+    "noSuitesHint": "创建第一个评估套件开始评估之旅",
+    "loading": "加载中..."
   }
 }
