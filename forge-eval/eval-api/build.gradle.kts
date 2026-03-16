@@ -14,6 +14,7 @@ dependencyManagement {
 dependencies {
     implementation(project(":forge-eval:eval-protocol"))
     implementation(project(":forge-eval:eval-engine"))
+    implementation(project(":adapters:model-adapter"))
 
     implementation("org.springframework.boot:spring-boot-starter-web")
     implementation("org.springframework.boot:spring-boot-starter-data-jpa")

@@ -1,8 +1,12 @@
 package com.forge.eval.engine
 
+import com.forge.adapter.model.ModelAdapter
 import com.forge.eval.engine.grader.CodeBasedGrader
+import com.forge.eval.engine.grader.CompositeGrader
+import com.forge.eval.engine.grader.ModelBasedGrader
 import com.forge.eval.engine.stats.PassMetrics
 import com.forge.eval.protocol.*
+import kotlinx.coroutines.runBlocking
 import org.slf4j.LoggerFactory
 import java.time.Instant
 import java.util.UUID
@@ -11,12 +15,15 @@ import java.util.UUID
  * Core evaluation orchestrator.
  *
  * Takes an EvalRun definition, executes trials against tasks in the suite,
- * applies graders, and produces results. In Phase 1, only CodeBasedGrader
- * is supported and model calls are handled externally (or via passthrough).
+ * applies graders, and produces results. Supports CODE_BASED (deterministic)
+ * and MODEL_BASED (LLM-as-Judge) graders via CompositeGrader.
  */
 class EvalEngine(
-    private val codeGrader: CodeBasedGrader = CodeBasedGrader()
+    private val codeGrader: CodeBasedGrader = CodeBasedGrader(),
+    modelAdapter: ModelAdapter? = null
 ) {
+    private val modelGrader: ModelBasedGrader? = modelAdapter?.let { ModelBasedGrader(it) }
+    private val compositeGrader = CompositeGrader(codeGrader, modelGrader)
 
     private val logger = LoggerFactory.getLogger(EvalEngine::class.java)
 
@@ -76,6 +83,7 @@ class EvalEngine(
     /**
      * Grade a single output against a task's grader configs.
      * Useful for external transcript grading (Synapse/App integration).
+     * Supports all grader types via CompositeGrader.
      */
     fun gradeOutput(
         task: EvalTask,
@@ -83,11 +91,9 @@ class EvalEngine(
         transcript: EvalTranscript? = null
     ): List<EvalGrade> {
         val trialId = UUID.randomUUID()
-        return task.graderConfigs
-            .filter { it.type == GraderType.CODE_BASED }
-            .map { config ->
-                codeGrader.grade(trialId, output, config.assertions, transcript)
-            }
+        return runBlocking {
+            compositeGrader.gradeAll(trialId, output, task.graderConfigs, transcript)
+        }
     }
 
     private fun executeTrial(
@@ -111,12 +117,10 @@ class EvalEngine(
 
         val durationMs = System.currentTimeMillis() - startTime
 
-        // Apply code-based graders
-        val grades = task.graderConfigs
-            .filter { it.type == GraderType.CODE_BASED }
-            .map { config ->
-                codeGrader.grade(trialId, trialOutput.output, config.assertions, trialOutput.transcript)
-            }
+        // Apply all graders via CompositeGrader
+        val grades = runBlocking {
+            compositeGrader.gradeAll(trialId, trialOutput.output, task.graderConfigs, trialOutput.transcript)
+        }
 
         // Determine outcome from grades
         val outcome = when {
