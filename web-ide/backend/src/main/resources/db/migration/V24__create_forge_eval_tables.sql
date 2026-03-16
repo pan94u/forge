@@ -4,7 +4,7 @@
 
 -- ── Eval Suites ──────────────────────────────────────────────────────
 CREATE TABLE eval_suites (
-    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id          UUID PRIMARY KEY,
     name        VARCHAR(255) NOT NULL,
     description TEXT DEFAULT '',
     platform    VARCHAR(50) NOT NULL DEFAULT 'FORGE',
@@ -20,7 +20,7 @@ CREATE INDEX idx_eval_suites_lifecycle ON eval_suites(lifecycle);
 
 -- ── Eval Tasks ───────────────────────────────────────────────────────
 CREATE TABLE eval_tasks (
-    id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                UUID PRIMARY KEY,
     suite_id          UUID NOT NULL REFERENCES eval_suites(id) ON DELETE CASCADE,
     name              VARCHAR(255) NOT NULL,
     description       TEXT DEFAULT '',
@@ -40,7 +40,7 @@ CREATE INDEX idx_eval_tasks_suite_id ON eval_tasks(suite_id);
 
 -- ── Eval Runs ────────────────────────────────────────────────────────
 CREATE TABLE eval_runs (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id              UUID PRIMARY KEY,
     suite_id        UUID NOT NULL REFERENCES eval_suites(id) ON DELETE CASCADE,
     status          VARCHAR(50) NOT NULL DEFAULT 'PENDING',
     trials_per_task INTEGER DEFAULT 1,
@@ -56,7 +56,7 @@ CREATE INDEX idx_eval_runs_status ON eval_runs(status);
 
 -- ── Eval Trials ──────────────────────────────────────────────────────
 CREATE TABLE eval_trials (
-    id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id            UUID PRIMARY KEY,
     run_id        UUID NOT NULL REFERENCES eval_runs(id) ON DELETE CASCADE,
     task_id       UUID NOT NULL REFERENCES eval_tasks(id) ON DELETE CASCADE,
     trial_number  INTEGER NOT NULL,
@@ -74,7 +74,7 @@ CREATE INDEX idx_eval_trials_task_id ON eval_trials(task_id);
 
 -- ── Eval Transcripts ─────────────────────────────────────────────────
 CREATE TABLE eval_transcripts (
-    id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                UUID PRIMARY KEY,
     trial_id          UUID REFERENCES eval_trials(id) ON DELETE SET NULL,
     source            VARCHAR(50) DEFAULT 'FORGE',
     turns             TEXT DEFAULT '[]',
@@ -87,7 +87,7 @@ CREATE INDEX idx_eval_transcripts_trial_id ON eval_transcripts(trial_id);
 
 -- ── Eval Grades ──────────────────────────────────────────────────────
 CREATE TABLE eval_grades (
-    id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                UUID PRIMARY KEY,
     trial_id          UUID NOT NULL REFERENCES eval_trials(id) ON DELETE CASCADE,
     grader_type       VARCHAR(50) NOT NULL,
     score             DOUBLE PRECISION NOT NULL DEFAULT 0.0,

@@ -343,11 +343,11 @@ class EvalControllerIntegrationTest {
 
     @Test
     @Order(50)
-    fun `GET reviews queue - returns empty queue initially`() {
+    fun `GET reviews queue - returns bootstrap-triggered reviews`() {
         mockMvc.perform(get("/api/eval/v1/reviews/queue"))
             .andExpect(status().isOk)
             .andExpect(jsonPath("$.content").isArray)
-            .andExpect(jsonPath("$.totalElements").value(0))
+            .andExpect(jsonPath("$.totalElements").value(org.hamcrest.Matchers.greaterThan(0)))
     }
 
     @Test

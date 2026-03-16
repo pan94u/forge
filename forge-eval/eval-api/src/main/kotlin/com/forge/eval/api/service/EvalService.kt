@@ -9,6 +9,7 @@ import com.forge.eval.engine.EvalRunResult
 import com.forge.eval.engine.ReportGenerator
 import com.forge.eval.engine.TrialOutput
 import com.forge.eval.engine.lifecycle.LifecycleManager
+import com.forge.eval.engine.review.ReviewTriggerRules
 import com.forge.eval.engine.stats.RegressionDetector
 import com.forge.eval.protocol.*
 import org.slf4j.LoggerFactory
@@ -29,7 +30,9 @@ class EvalService(
     private val transcriptRepo: EvalTranscriptRepository,
     private val objectMapper: ObjectMapper,
     private val evalEngine: EvalEngine,
-    private val reportGenerator: ReportGenerator
+    private val reportGenerator: ReportGenerator,
+    private val reviewTriggerRules: ReviewTriggerRules,
+    private val reviewService: ReviewService
 ) {
     private val logger = LoggerFactory.getLogger(EvalService::class.java)
 
@@ -248,7 +251,7 @@ class EvalService(
 
         val grades = evalEngine.gradeOutput(task, output, transcript)
 
-        // Persist transcript
+        // Persist transcript (no trial association for external transcripts)
         val transcriptEntity = EvalTranscriptEntity(
             id = transcript.id,
             source = TranscriptSourceEnum.valueOf(request.source.name),
@@ -258,26 +261,24 @@ class EvalService(
         )
         transcriptRepo.save(transcriptEntity)
 
-        // Persist grades
-        for (grade in grades) {
-            val gradeEntity = EvalGradeEntity(
-                id = grade.id,
-                trialId = grade.trialId,
-                graderType = GraderTypeEnum.valueOf(grade.graderType.name),
-                score = grade.score,
-                passed = grade.passed,
-                assertionResults = objectMapper.writeValueAsString(grade.assertionResults),
-                explanation = grade.explanation,
-                confidence = grade.confidence
-            )
-            gradeRepo.save(gradeEntity)
-        }
+        // Note: grades for external transcripts are returned inline, not persisted
+        // to eval_grades table (which requires a trial FK). This is by design —
+        // external transcript evaluation is stateless and immediate.
+        // For persisted grades, use POST /runs which creates proper trial records.
 
         return mapOf(
             "transcriptId" to transcript.id,
-            "grades" to grades.map { mapOf("score" to it.score, "passed" to it.passed, "explanation" to it.explanation) }
+            "grades" to grades.map {
+                mapOf(
+                    "score" to it.score,
+                    "passed" to it.passed,
+                    "explanation" to it.explanation,
+                    "assertionResults" to it.assertionResults
+                )
+            }
         )
     }
+
 
     fun getTranscript(transcriptId: UUID): EvalTranscript {
         val entity = transcriptRepo.findById(transcriptId)
@@ -469,6 +470,22 @@ class EvalService(
                     metadata = objectMapper.writeValueAsString(trialResult.transcript!!.metadata)
                 )
                 transcriptRepo.save(transcriptEntity)
+            }
+
+            // Auto-trigger human review based on ReviewTriggerRules
+            val taskRunCount = trialRepo.findByTaskId(trialResult.trial.taskId).size
+            val decision = reviewTriggerRules.shouldReview(trialResult.grades, taskRunCount)
+            if (decision.shouldReview) {
+                for (grade in trialResult.grades) {
+                    reviewService.createReview(
+                        gradeId = grade.id,
+                        trialId = trialResult.trial.id,
+                        taskId = trialResult.trial.taskId,
+                        autoScore = grade.score,
+                        autoConfidence = grade.confidence,
+                        reasons = decision.reasons.map { it.description }
+                    )
+                }
             }
         }
 
