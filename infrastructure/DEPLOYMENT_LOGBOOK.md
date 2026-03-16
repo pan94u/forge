@@ -143,7 +143,7 @@ docker compose -f docker-compose.production-single.yml up -d --build frontend
        → synapse-server 容器 (3001)
 
 认证流:
-synapse.gold → 307 → /api/auth/signin → 302 → sso.forge.delivery/auth/realms/forge/...
+synapse.gold → 307 → /api/auth/signin → 302 → sso.synapse.gold/auth/realms/forge/...
 → 用户登录 → callback → session cookie → synapse.gold/chat
 ```
 
@@ -164,7 +164,7 @@ synapse.gold → 307 → /api/auth/signin → 302 → sso.forge.delivery/auth/re
 ### 访问地址
 
 - Synapse AI: https://synapse.gold
-- SSO 登录: https://sso.forge.delivery/auth/realms/forge
+- SSO 登录: https://sso.synapse.gold/auth/realms/forge
 
 ### 命令
 
@@ -183,4 +183,40 @@ docker compose -f docker-compose.production.yml up -d
 
 # 重载 nginx（修改 nginx-production.conf 后需 restart 而非 reload）
 docker restart forge-nginx
+```
+
+---
+
+## SSO 迁移：sso.forge.delivery → sso.synapse.gold
+
+- 日期: 2026-03-16
+- 原因: SSO 独立部署到 sso.synapse.gold，弃用 sso.forge.delivery
+
+### 修改内容
+
+| 应用 | 文件 | 改动 |
+|------|------|------|
+| Forge | infrastructure/docker/.env.production | `SSO_URL` 改为 `https://sso.synapse.gold/auth` |
+| Synapse-AI | .env.production | KEYCLOAK_ISSUER / KEYCLOAK_INTERNAL_URL / KEYCLOAK_JWKS_URI 全部改为 sso.synapse.gold |
+| Synapse-AI | docker-compose.production.yml | environment 中 4 处 sso.forge.delivery → sso.synapse.gold |
+
+### 影响的容器
+
+- **forge-backend**: `JWT_ISSUER_URI` + `JWK_SET_URI` （通过 `${SSO_URL}` 变量）
+- **forge-enterprise-console**: `KEYCLOAK_ISSUER` （通过 `${SSO_URL}` 变量）
+- **synapse-web**: `KEYCLOAK_ISSUER` + `KEYCLOAK_INTERNAL_URL`
+- **synapse-server**: `KEYCLOAK_ISSUER` + `KEYCLOAK_JWKS_URI`
+
+### 操作
+
+```bash
+# Forge — 只改 .env.production 一处，compose 通过 ${SSO_URL} 引用
+cd /opt/forge/infrastructure/docker
+docker compose -f docker-compose.production.yml --env-file .env.production up -d
+
+# Synapse — 改 .env.production + docker-compose.production.yml
+cd /home/deploy/Synapse-AI
+export NEXTAUTH_SECRET=$(grep NEXTAUTH_SECRET .env.production | cut -d= -f2-)
+docker compose -f docker-compose.production.yml down
+docker compose -f docker-compose.production.yml up -d
 ```
