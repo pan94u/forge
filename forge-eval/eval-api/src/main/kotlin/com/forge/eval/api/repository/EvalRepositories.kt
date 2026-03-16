@@ -27,6 +27,7 @@ interface EvalTaskRepository : JpaRepository<EvalTaskEntity, UUID> {
 @Repository
 interface EvalRunRepository : JpaRepository<EvalRunEntity, UUID> {
     fun findBySuiteId(suiteId: UUID, pageable: Pageable): Page<EvalRunEntity>
+    fun findBySuiteIdOrderByCreatedAtAsc(suiteId: UUID): List<EvalRunEntity>
 }
 
 @Repository
@@ -44,4 +45,12 @@ interface EvalTranscriptRepository : JpaRepository<EvalTranscriptEntity, UUID> {
 interface EvalGradeRepository : JpaRepository<EvalGradeEntity, UUID> {
     fun findByTrialId(trialId: UUID): List<EvalGradeEntity>
     fun findByTrialIdIn(trialIds: List<UUID>): List<EvalGradeEntity>
+}
+
+@Repository
+interface EvalReviewRepository : JpaRepository<EvalReviewEntity, UUID> {
+    fun findByStatus(status: ReviewStatusEnum, pageable: Pageable): Page<EvalReviewEntity>
+    fun findByGradeId(gradeId: UUID): EvalReviewEntity?
+    fun findByTaskId(taskId: UUID): List<EvalReviewEntity>
+    fun findByStatusIn(statuses: List<ReviewStatusEnum>): List<EvalReviewEntity>
 }

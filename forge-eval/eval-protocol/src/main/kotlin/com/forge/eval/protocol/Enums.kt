@@ -60,3 +60,11 @@ enum class RunStatus {
     FAILED,
     CANCELLED
 }
+
+/** Status of a human review */
+enum class ReviewStatus {
+    PENDING,
+    IN_PROGRESS,
+    COMPLETED,
+    SKIPPED
+}

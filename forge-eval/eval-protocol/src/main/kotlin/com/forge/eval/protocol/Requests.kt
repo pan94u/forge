@@ -47,3 +47,18 @@ data class GradeRequest(
     val trialId: UUID,
     val graderConfigs: List<GraderConfig>? = null
 )
+
+/** Request to submit a human review */
+data class SubmitReviewRequest(
+    val score: Double,
+    val passed: Boolean,
+    val explanation: String = "",
+    val rubricScores: Map<String, Double> = emptyMap(),
+    val reviewer: String = "anonymous"
+)
+
+/** Request to update task lifecycle */
+data class UpdateLifecycleRequest(
+    val lifecycle: Lifecycle,
+    val reason: String = ""
+)

@@ -217,6 +217,53 @@ class EvalGradeEntity(
     val createdAt: Instant = Instant.now()
 )
 
+@Entity
+@Table(name = "eval_reviews")
+class EvalReviewEntity(
+    @Id
+    val id: UUID = UUID.randomUUID(),
+
+    @Column(name = "grade_id", nullable = false)
+    val gradeId: UUID = UUID.randomUUID(),
+
+    @Column(name = "trial_id", nullable = false)
+    val trialId: UUID = UUID.randomUUID(),
+
+    @Column(name = "task_id", nullable = false)
+    val taskId: UUID = UUID.randomUUID(),
+
+    @Column(nullable = false)
+    @Enumerated(EnumType.STRING)
+    var status: ReviewStatusEnum = ReviewStatusEnum.PENDING,
+
+    @Column(name = "review_reasons", columnDefinition = "TEXT")
+    var reviewReasons: String = "[]",
+
+    @Column(name = "auto_score")
+    var autoScore: Double = 0.0,
+
+    @Column(name = "auto_confidence")
+    var autoConfidence: Double = 1.0,
+
+    @Column(name = "human_score")
+    var humanScore: Double? = null,
+
+    @Column(name = "human_passed")
+    var humanPassed: Boolean? = null,
+
+    @Column(columnDefinition = "TEXT")
+    var explanation: String = "",
+
+    @Column
+    var reviewer: String? = null,
+
+    @Column(name = "created_at")
+    val createdAt: Instant = Instant.now(),
+
+    @Column(name = "completed_at")
+    var completedAt: Instant? = null
+)
+
 // ── Enums with @JsonValue for lowercase serialization ────────────────
 
 enum class PlatformEnum(@get:JsonValue val value: String) {
@@ -251,4 +298,8 @@ enum class TranscriptSourceEnum(@get:JsonValue val value: String) {
 
 enum class DifficultyEnum(@get:JsonValue val value: String) {
     EASY("easy"), MEDIUM("medium"), HARD("hard"), EXPERT("expert")
+}
+
+enum class ReviewStatusEnum(@get:JsonValue val value: String) {
+    PENDING("pending"), IN_PROGRESS("in_progress"), COMPLETED("completed"), SKIPPED("skipped")
 }

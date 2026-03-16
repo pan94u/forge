@@ -338,4 +338,76 @@ class EvalControllerIntegrationTest {
             .andExpect(status().isOk)
             .andExpect(jsonPath("$.regressions").isArray)
     }
+
+    // ── Phase 4: Review + Lifecycle + Trends ──────────────────────
+
+    @Test
+    @Order(50)
+    fun `GET reviews queue - returns empty queue initially`() {
+        mockMvc.perform(get("/api/eval/v1/reviews/queue"))
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.content").isArray)
+            .andExpect(jsonPath("$.totalElements").value(0))
+    }
+
+    @Test
+    @Order(51)
+    fun `GET reviews calibration - returns empty metrics initially`() {
+        mockMvc.perform(get("/api/eval/v1/reviews/calibration"))
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.totalReviews").value(0))
+    }
+
+    @Test
+    @Order(52)
+    fun `GET trends - returns suite trend data`() {
+        mockMvc.perform(get("/api/eval/v1/trends/$suiteId"))
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.suiteId").value(suiteId.toString()))
+            .andExpect(jsonPath("$.suiteName").value("Integration Test Suite"))
+            .andExpect(jsonPath("$.dataPoints").isArray)
+    }
+
+    @Test
+    @Order(53)
+    fun `GET trends - has data points from previous runs`() {
+        val result = mockMvc.perform(get("/api/eval/v1/trends/$suiteId"))
+            .andExpect(status().isOk)
+            .andReturn()
+
+        val response: TrendResponse = objectMapper.readValue(result.response.contentAsString)
+        // We created 2 runs: single-trial (order 7) and multi-trial (order 20)
+        assertThat(response.dataPoints.size).isGreaterThanOrEqualTo(2)
+    }
+
+    @Test
+    @Order(54)
+    fun `GET lifecycle - evaluate task lifecycle status`() {
+        mockMvc.perform(get("/api/eval/v1/suites/$suiteId/tasks/$taskId/lifecycle"))
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.taskId").value(taskId.toString()))
+            .andExpect(jsonPath("$.taskName").value("Hello World Eval"))
+            .andExpect(jsonPath("$.currentLifecycle").exists())
+            .andExpect(jsonPath("$.recommendedLifecycle").exists())
+            .andExpect(jsonPath("$.shouldTransition").isBoolean)
+            .andExpect(jsonPath("$.reason").isString)
+    }
+
+    @Test
+    @Order(55)
+    fun `PUT lifecycle - update task lifecycle`() {
+        val request = UpdateLifecycleRequest(
+            lifecycle = Lifecycle.REGRESSION,
+            reason = "手动毕业到回归守护"
+        )
+
+        mockMvc.perform(
+            put("/api/eval/v1/suites/$suiteId/tasks/$taskId/lifecycle")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request))
+        )
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.newLifecycle").value("REGRESSION"))
+            .andExpect(jsonPath("$.previousLifecycle").value("CAPABILITY"))
+    }
 }

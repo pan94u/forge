@@ -8,6 +8,7 @@ import com.forge.eval.engine.EvalEngine
 import com.forge.eval.engine.EvalRunResult
 import com.forge.eval.engine.ReportGenerator
 import com.forge.eval.engine.TrialOutput
+import com.forge.eval.engine.lifecycle.LifecycleManager
 import com.forge.eval.engine.stats.RegressionDetector
 import com.forge.eval.protocol.*
 import org.slf4j.LoggerFactory
@@ -311,6 +312,107 @@ class EvalService(
 
         val detector = RegressionDetector()
         return detector.detectRegressions(currentByTask, baselineByTask, taskNames)
+    }
+
+    // ── Trends ──────────────────────────────────────────────────────
+
+    fun getSuiteTrends(suiteId: UUID): TrendResponse {
+        val suite = suiteRepo.findById(suiteId)
+            .orElseThrow { NotFoundException("Suite not found: $suiteId") }
+
+        val runs = runRepo.findBySuiteIdOrderByCreatedAtAsc(suiteId)
+
+        val dataPoints = runs.mapNotNull { run ->
+            val summary: RunSummary? = run.summary?.let { objectMapper.readValue(it) }
+            summary?.let {
+                TrendDataPoint(
+                    runId = run.id,
+                    timestamp = run.createdAt,
+                    passRate = it.overallPassRate,
+                    averageScore = it.averageScore,
+                    passAtK = it.passAtK,
+                    passPowerK = it.passPowerK,
+                    totalTrials = it.totalTrials,
+                    lifecycle = suite.lifecycle.name
+                )
+            }
+        }
+
+        return TrendResponse(
+            suiteId = suiteId,
+            suiteName = suite.name,
+            dataPoints = dataPoints
+        )
+    }
+
+    // ── Lifecycle ──────────────────────────────────────────────────
+
+    fun evaluateTaskLifecycle(suiteId: UUID, taskId: UUID): LifecycleEvalResponse {
+        val suite = suiteRepo.findById(suiteId)
+            .orElseThrow { NotFoundException("Suite not found: $suiteId") }
+        val task = taskRepo.findById(taskId)
+            .orElseThrow { NotFoundException("Task not found: $taskId") }
+
+        // Get all runs for this suite, ordered by time
+        val runs = runRepo.findBySuiteIdOrderByCreatedAtAsc(suiteId)
+
+        // Compute pass rates per run for this specific task
+        val runHistory = mutableListOf<Double>()
+        val passPowerKHistory = mutableListOf<Double>()
+
+        for (run in runs) {
+            val trials = trialRepo.findByRunId(run.id).filter { it.taskId == taskId }
+            if (trials.isEmpty()) continue
+
+            val passRate = trials.count { it.outcome == OutcomeEnum.PASS }.toDouble() / trials.size
+            runHistory.add(passRate)
+
+            // Pass^k: all trials pass
+            val allPass = if (trials.size > 1) {
+                if (trials.all { it.outcome == OutcomeEnum.PASS }) 1.0 else 0.0
+            } else {
+                passRate
+            }
+            passPowerKHistory.add(allPass)
+        }
+
+        val lifecycleManager = LifecycleManager()
+        val currentLifecycle = Lifecycle.valueOf(suite.lifecycle.name)
+        val decision = lifecycleManager.evaluate(currentLifecycle, runHistory, passPowerKHistory)
+
+        return LifecycleEvalResponse(
+            taskId = taskId,
+            taskName = task.name,
+            currentLifecycle = decision.currentLifecycle.name,
+            recommendedLifecycle = decision.recommendedLifecycle.name,
+            shouldTransition = decision.shouldTransition,
+            reason = decision.reason,
+            consecutivePassingRuns = decision.metrics.consecutivePassingRuns,
+            recentPassRate = decision.metrics.recentPassRate,
+            recentPassPowerK = decision.metrics.recentPassPowerK
+        )
+    }
+
+    @Transactional
+    fun updateTaskLifecycle(suiteId: UUID, taskId: UUID, request: UpdateLifecycleRequest): Map<String, Any> {
+        val suite = suiteRepo.findById(suiteId)
+            .orElseThrow { NotFoundException("Suite not found: $suiteId") }
+
+        val oldLifecycle = suite.lifecycle.name
+        suite.lifecycle = LifecycleEnum.valueOf(request.lifecycle.name)
+        suite.updatedAt = Instant.now()
+        suiteRepo.save(suite)
+
+        logger.info("Lifecycle transition: suite {} ({}) {} → {} — {}",
+            suiteId, suite.name, oldLifecycle, request.lifecycle.name, request.reason)
+
+        return mapOf(
+            "suiteId" to suiteId,
+            "previousLifecycle" to oldLifecycle,
+            "newLifecycle" to request.lifecycle.name,
+            "reason" to request.reason,
+            "updatedAt" to Instant.now().toString()
+        )
     }
 
     // ── Persistence helpers ─────────────────────────────────────────

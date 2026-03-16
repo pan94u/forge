@@ -2,6 +2,7 @@ package com.forge.eval.api.controller
 
 import com.forge.eval.api.service.EvalService
 import com.forge.eval.api.service.NotFoundException
+import com.forge.eval.api.service.ReviewService
 import com.forge.eval.protocol.*
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
@@ -11,7 +12,8 @@ import java.util.UUID
 @RestController
 @RequestMapping("/api/eval/v1")
 class EvalController(
-    private val evalService: EvalService
+    private val evalService: EvalService,
+    private val reviewService: ReviewService
 ) {
 
     // ── Suite endpoints ─────────────────────────────────────────────
@@ -96,6 +98,57 @@ class EvalController(
         @RequestParam baselineRunId: UUID
     ): Any {
         return evalService.detectRegressions(suiteId, currentRunId, baselineRunId)
+    }
+
+    // ── Review endpoints ────────────────────────────────────────────
+
+    @GetMapping("/reviews/queue")
+    fun getReviewQueue(
+        @RequestParam(defaultValue = "0") page: Int,
+        @RequestParam(defaultValue = "20") size: Int
+    ): PageResponse<ReviewQueueItem> {
+        return reviewService.getReviewQueue(page, size)
+    }
+
+    @PostMapping("/reviews/{gradeId}/submit")
+    fun submitReview(
+        @PathVariable gradeId: UUID,
+        @RequestBody request: SubmitReviewRequest
+    ): ResponseEntity<ReviewResponse> {
+        val review = reviewService.submitReview(gradeId, request)
+        return ResponseEntity.ok(review)
+    }
+
+    @GetMapping("/reviews/calibration")
+    fun getCalibrationMetrics(): CalibrationMetrics {
+        return reviewService.getCalibrationMetrics()
+    }
+
+    // ── Trend endpoints ────────────────────────────────────────────
+
+    @GetMapping("/trends/{suiteId}")
+    fun getSuiteTrends(@PathVariable suiteId: UUID): TrendResponse {
+        return evalService.getSuiteTrends(suiteId)
+    }
+
+    // ── Lifecycle endpoints ────────────────────────────────────────
+
+    @GetMapping("/suites/{suiteId}/tasks/{taskId}/lifecycle")
+    fun evaluateTaskLifecycle(
+        @PathVariable suiteId: UUID,
+        @PathVariable taskId: UUID
+    ): LifecycleEvalResponse {
+        return evalService.evaluateTaskLifecycle(suiteId, taskId)
+    }
+
+    @PutMapping("/suites/{suiteId}/tasks/{taskId}/lifecycle")
+    fun updateTaskLifecycle(
+        @PathVariable suiteId: UUID,
+        @PathVariable taskId: UUID,
+        @RequestBody request: UpdateLifecycleRequest
+    ): ResponseEntity<Map<String, Any>> {
+        val result = evalService.updateTaskLifecycle(suiteId, taskId, request)
+        return ResponseEntity.ok(result)
     }
 
     // ── Error handling ──────────────────────────────────────────────

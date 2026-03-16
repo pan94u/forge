@@ -104,3 +104,78 @@ data class ProfileBaselineReport(
     val passed: Boolean,
     val evalCount: Int
 )
+
+/** Response for a human review queue item */
+data class ReviewQueueItem(
+    val gradeId: UUID,
+    val trialId: UUID,
+    val taskId: UUID,
+    val taskName: String,
+    val graderType: GraderType,
+    val autoScore: Double,
+    val confidence: Double,
+    val reviewReasons: List<String>,
+    val status: ReviewStatus,
+    val createdAt: Instant
+)
+
+/** Response for a completed human review */
+data class ReviewResponse(
+    val gradeId: UUID,
+    val humanScore: Double,
+    val humanPassed: Boolean,
+    val reviewer: String,
+    val explanation: String,
+    val calibrationDelta: Double,
+    val completedAt: Instant
+)
+
+/** Calibration metrics between auto and human grading */
+data class CalibrationMetrics(
+    val totalReviews: Int,
+    val averageAutoScore: Double,
+    val averageHumanScore: Double,
+    val scoreDelta: Double,
+    val agreementRate: Double,
+    val cohensKappa: Double,
+    val byGraderType: Map<GraderType, GraderCalibration>
+)
+
+data class GraderCalibration(
+    val graderType: GraderType,
+    val reviewCount: Int,
+    val averageAutoScore: Double,
+    val averageHumanScore: Double,
+    val agreementRate: Double
+)
+
+/** Trend data for a suite over time */
+data class TrendResponse(
+    val suiteId: UUID,
+    val suiteName: String,
+    val dataPoints: List<TrendDataPoint>
+)
+
+data class TrendDataPoint(
+    val runId: UUID,
+    val timestamp: Instant,
+    val passRate: Double,
+    val averageScore: Double,
+    val passAtK: Double?,
+    val passPowerK: Double?,
+    val totalTrials: Int,
+    val lifecycle: String
+)
+
+/** Lifecycle evaluation response */
+data class LifecycleEvalResponse(
+    val taskId: UUID,
+    val taskName: String,
+    val currentLifecycle: String,
+    val recommendedLifecycle: String,
+    val shouldTransition: Boolean,
+    val reason: String,
+    val consecutivePassingRuns: Int,
+    val recentPassRate: Double,
+    val recentPassPowerK: Double?
+)
