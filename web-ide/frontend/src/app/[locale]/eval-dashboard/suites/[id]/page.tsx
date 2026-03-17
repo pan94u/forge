@@ -10,6 +10,7 @@ import {
   type RunResponse,
   type Difficulty,
   type GraderConfig,
+  type TranscriptTurn,
 } from "@/lib/eval-api";
 
 const DIFFICULTIES: Difficulty[] = ["EASY", "MEDIUM", "HARD", "EXPERT"];
@@ -92,6 +93,7 @@ export default function SuiteDetailPage() {
   const [loading, setLoading] = useState(true);
   const [showCreateTask, setShowCreateTask] = useState(false);
   const [showCreateRun, setShowCreateRun] = useState(false);
+  const [showSubmitTranscript, setShowSubmitTranscript] = useState(false);
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
@@ -262,7 +264,32 @@ export default function SuiteDetailPage() {
         )}
       </section>
 
+      {/* Transcript submission section */}
+      <section className="space-y-3">
+        <div className="flex items-center justify-between">
+          <h2 className="text-base font-semibold">Transcript Evaluation</h2>
+          <button
+            onClick={() => setShowSubmitTranscript(true)}
+            className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90"
+            disabled={tasks.length === 0}
+          >
+            + Submit Transcript
+          </button>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Submit an Agent&apos;s conversation transcript to evaluate against a task&apos;s grading criteria. This is the core evaluation path — paste what the Agent actually said and did, and see how it scores.
+        </p>
+      </section>
+
       {/* Modals */}
+      {showSubmitTranscript && (
+        <SubmitTranscriptModal
+          suiteId={suiteId}
+          tasks={tasks}
+          onClose={() => setShowSubmitTranscript(false)}
+        />
+      )}
+
       {showCreateTask && (
         <CreateTaskModal
           suiteId={suiteId}
@@ -501,6 +528,194 @@ function CreateRunModal({
           </button>
         </div>
       </form>
+    </div>
+  );
+}
+
+// ── Submit Transcript Modal ─────────────────────────────────────
+
+interface GradeResult {
+  score: number;
+  passed: boolean;
+  explanation: string;
+  assertionResults?: { description: string; passed: boolean; expected: string; actual: string }[];
+}
+
+function SubmitTranscriptModal({
+  suiteId,
+  tasks,
+  onClose,
+}: {
+  suiteId: string;
+  tasks: EvalTask[];
+  onClose: () => void;
+}) {
+  const [selectedTaskId, setSelectedTaskId] = useState(tasks[0]?.id ?? "");
+  const [transcriptJson, setTranscriptJson] = useState(
+    JSON.stringify(
+      [
+        { role: "user", content: "（用户请求）" },
+        {
+          role: "assistant",
+          content: "（Agent 回复）",
+          toolCalls: [
+            { toolName: "tool_name", arguments: {} },
+          ],
+        },
+      ] satisfies TranscriptTurn[],
+      null,
+      2
+    )
+  );
+  const [jsonError, setJsonError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [result, setResult] = useState<GradeResult[] | null>(null);
+
+  const selectedTask = tasks.find(t => t.id === selectedTaskId);
+
+  const handleJsonChange = (val: string) => {
+    setTranscriptJson(val);
+    try {
+      JSON.parse(val);
+      setJsonError("");
+    } catch {
+      setJsonError("Invalid JSON");
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedTaskId || jsonError) return;
+    let turns: TranscriptTurn[];
+    try {
+      turns = JSON.parse(transcriptJson) as TranscriptTurn[];
+    } catch {
+      setJsonError("Invalid JSON");
+      return;
+    }
+    setSubmitting(true);
+    setResult(null);
+    try {
+      const res = await evalApi.submitTranscript({
+        suiteId,
+        taskId: selectedTaskId,
+        source: "EXTERNAL",
+        turns,
+        metadata: { evaluatedVia: "dashboard" },
+      });
+      const grades = (res as Record<string, unknown>).grades as GradeResult[];
+      setResult(grades);
+    } catch {
+      setResult([{ score: -1, passed: false, explanation: "Submission failed", assertionResults: [] }]);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
+      <div
+        onClick={e => e.stopPropagation()}
+        className="w-full max-w-2xl rounded-lg border border-border bg-card p-6 space-y-4 shadow-lg max-h-[90vh] overflow-y-auto"
+      >
+        <h2 className="text-lg font-semibold">Submit Transcript for Evaluation</h2>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Task selector */}
+          <div>
+            <label className="block text-xs text-muted-foreground mb-1">Evaluate against task</label>
+            <select
+              value={selectedTaskId}
+              onChange={e => { setSelectedTaskId(e.target.value); setResult(null); }}
+              className="w-full rounded border border-input bg-background px-2 py-1.5 text-sm"
+            >
+              {tasks.map(t => (
+                <option key={t.id} value={t.id}>{t.name} ({t.difficulty})</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Show task criteria */}
+          {selectedTask && (
+            <div className="rounded border border-border bg-muted/20 p-3 space-y-1">
+              <div className="text-xs font-medium text-muted-foreground">Grading criteria ({selectedTask.graderConfigs.reduce((s, g) => s + (g.assertions?.length ?? 0), 0)} assertions):</div>
+              {selectedTask.graderConfigs.map((g, gi) =>
+                g.assertions?.map((a, ai) => (
+                  <div key={`${gi}-${ai}`} className="text-xs text-muted-foreground flex gap-2">
+                    <span className="text-muted-foreground/50 font-mono">{a.type}</span>
+                    <span>{a.description}</span>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
+
+          {/* Transcript JSON */}
+          <div>
+            <label className="block text-xs text-muted-foreground mb-1">
+              Agent transcript (JSON array of turns)
+              {jsonError && <span className="ml-2 text-red-400">{jsonError}</span>}
+            </label>
+            <textarea
+              value={transcriptJson}
+              onChange={e => handleJsonChange(e.target.value)}
+              rows={12}
+              className={`w-full rounded border bg-background px-3 py-1.5 text-xs font-mono resize-y ${jsonError ? "border-red-500" : "border-input"}`}
+            />
+          </div>
+
+          <div className="flex justify-end gap-2">
+            <button type="button" onClick={onClose} className="rounded px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted">
+              Close
+            </button>
+            <button
+              type="submit"
+              disabled={submitting || !!jsonError || !selectedTaskId}
+              className="rounded bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+            >
+              {submitting ? "Evaluating..." : "Evaluate"}
+            </button>
+          </div>
+        </form>
+
+        {/* Results */}
+        {result && (
+          <div className="border-t border-border pt-4 space-y-3">
+            <h3 className="text-sm font-semibold">Evaluation Result</h3>
+            {result.map((grade, i) => (
+              <div key={i} className="space-y-2">
+                <div className="flex items-center gap-3">
+                  <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-bold ${grade.passed ? "bg-green-500/15 text-green-400" : "bg-red-500/15 text-red-400"}`}>
+                    {grade.passed ? "PASS" : "FAIL"}
+                  </span>
+                  <span className="text-2xl font-bold font-mono">{grade.score >= 0 ? `${(grade.score * 100).toFixed(0)}%` : "Error"}</span>
+                  <span className="text-xs text-muted-foreground">{grade.explanation}</span>
+                </div>
+
+                {grade.assertionResults && grade.assertionResults.length > 0 && (
+                  <div className="space-y-1.5 pl-2">
+                    {grade.assertionResults.map((a, j) => (
+                      <div key={j} className="flex items-start gap-2 text-xs">
+                        <span className={`mt-0.5 font-mono flex-shrink-0 ${a.passed ? "text-green-400" : "text-red-400"}`}>
+                          {a.passed ? "[x]" : "[ ]"}
+                        </span>
+                        <div>
+                          <span className={a.passed ? "text-green-400" : "text-red-400"}>{a.description}</span>
+                          {!a.passed && a.expected && (
+                            <div className="text-muted-foreground mt-0.5">
+                              expected: <span className="font-mono">{a.expected}</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
