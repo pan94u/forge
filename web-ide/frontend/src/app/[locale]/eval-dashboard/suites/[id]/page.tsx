@@ -10,6 +10,9 @@ import {
   type RunResponse,
   type Difficulty,
   type GraderConfig,
+  type GraderType,
+  type AssertionConfig,
+  type RubricCriterion,
   type TranscriptTurn,
 } from "@/lib/eval-api";
 
@@ -309,6 +312,193 @@ export default function SuiteDetailPage() {
 
 // ── Create Task Modal ────────────────────────────────────────────
 
+const ASSERTION_TYPES = [
+  "contains",
+  "not_contains",
+  "matches_pattern",
+  "json_schema",
+  "json_path",
+  "tool_used",
+  "tool_not_used",
+  "tool_call_count",
+  "tool_call_order",
+  "turn_count_max",
+] as const;
+
+interface GraderDraft {
+  id: number;
+  type: GraderType;
+  // CODE_BASED
+  assertions: (AssertionConfig & { _id: number })[];
+  // MODEL_BASED
+  model: string;
+  rubric: (RubricCriterion & { _id: number })[];
+}
+
+let _nextId = 1;
+function nextId() { return _nextId++; }
+
+function makeDefaultAssertion(): AssertionConfig & { _id: number } {
+  return { _id: nextId(), type: "contains", expected: "", description: "" };
+}
+
+function makeDefaultCriterion(): RubricCriterion & { _id: number } {
+  return { _id: nextId(), criterion: "", weight: 1, description: "" };
+}
+
+function makeGrader(type: GraderType): GraderDraft {
+  return {
+    id: nextId(),
+    type,
+    assertions: type === "CODE_BASED" ? [makeDefaultAssertion()] : [],
+    model: "MiniMax-M2.5",
+    rubric: type === "MODEL_BASED" ? [makeDefaultCriterion()] : [],
+  };
+}
+
+function GraderEditor({
+  grader,
+  onChange,
+  onRemove,
+}: {
+  grader: GraderDraft;
+  onChange: (g: GraderDraft) => void;
+  onRemove: () => void;
+}) {
+  const inputCls = "rounded border border-input bg-background px-2 py-1 text-xs";
+
+  if (grader.type === "CODE_BASED") {
+    return (
+      <div className="rounded-lg border border-border bg-muted/10 p-3 space-y-2">
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-medium text-cyan-400">CODE-BASED</span>
+          <button type="button" onClick={onRemove} className="text-xs text-muted-foreground hover:text-destructive">Remove</button>
+        </div>
+        <div className="space-y-1.5">
+          {grader.assertions.map((a, idx) => (
+            <div key={a._id} className="flex gap-1.5 items-start">
+              <select
+                value={a.type}
+                onChange={e => {
+                  const updated = [...grader.assertions];
+                  updated[idx] = { ...a, type: e.target.value };
+                  onChange({ ...grader, assertions: updated });
+                }}
+                className={`${inputCls} w-40 flex-shrink-0`}
+              >
+                {ASSERTION_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+              </select>
+              <input
+                placeholder="expected"
+                value={a.expected}
+                onChange={e => {
+                  const updated = [...grader.assertions];
+                  updated[idx] = { ...a, expected: e.target.value };
+                  onChange({ ...grader, assertions: updated });
+                }}
+                className={`${inputCls} flex-1 min-w-0`}
+              />
+              <input
+                placeholder="description"
+                value={a.description}
+                onChange={e => {
+                  const updated = [...grader.assertions];
+                  updated[idx] = { ...a, description: e.target.value };
+                  onChange({ ...grader, assertions: updated });
+                }}
+                className={`${inputCls} flex-1 min-w-0`}
+              />
+              <button
+                type="button"
+                onClick={() => onChange({ ...grader, assertions: grader.assertions.filter((_, i) => i !== idx) })}
+                className="text-xs text-muted-foreground hover:text-destructive flex-shrink-0 mt-0.5"
+              >✕</button>
+            </div>
+          ))}
+        </div>
+        <button
+          type="button"
+          onClick={() => onChange({ ...grader, assertions: [...grader.assertions, makeDefaultAssertion()] })}
+          className="text-xs text-muted-foreground hover:text-foreground"
+        >
+          + Add Assertion
+        </button>
+      </div>
+    );
+  }
+
+  // MODEL_BASED
+  return (
+    <div className="rounded-lg border border-border bg-muted/10 p-3 space-y-2">
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-medium text-purple-400">MODEL-BASED</span>
+        <button type="button" onClick={onRemove} className="text-xs text-muted-foreground hover:text-destructive">Remove</button>
+      </div>
+      <div>
+        <label className="block text-[10px] text-muted-foreground mb-0.5">Judge Model</label>
+        <input
+          value={grader.model}
+          onChange={e => onChange({ ...grader, model: e.target.value })}
+          className={`${inputCls} w-full`}
+          placeholder="MiniMax-M2.5"
+        />
+      </div>
+      <div className="space-y-1.5">
+        {grader.rubric.map((r, idx) => (
+          <div key={r._id} className="flex gap-1.5 items-start">
+            <input
+              placeholder="criterion"
+              value={r.criterion}
+              onChange={e => {
+                const updated = [...grader.rubric];
+                updated[idx] = { ...r, criterion: e.target.value };
+                onChange({ ...grader, rubric: updated });
+              }}
+              className={`${inputCls} flex-1 min-w-0`}
+            />
+            <input
+              type="number"
+              min={0}
+              max={10}
+              step={0.1}
+              placeholder="weight"
+              value={r.weight}
+              onChange={e => {
+                const updated = [...grader.rubric];
+                updated[idx] = { ...r, weight: Number(e.target.value) };
+                onChange({ ...grader, rubric: updated });
+              }}
+              className={`${inputCls} w-16 flex-shrink-0`}
+            />
+            <input
+              placeholder="description"
+              value={r.description}
+              onChange={e => {
+                const updated = [...grader.rubric];
+                updated[idx] = { ...r, description: e.target.value };
+                onChange({ ...grader, rubric: updated });
+              }}
+              className={`${inputCls} flex-1 min-w-0`}
+            />
+            <button
+              type="button"
+              onClick={() => onChange({ ...grader, rubric: grader.rubric.filter((_, i) => i !== idx) })}
+              className="text-xs text-muted-foreground hover:text-destructive flex-shrink-0 mt-0.5"
+            >✕</button>
+          </div>
+        ))}
+      </div>
+      <button
+        type="button"
+        onClick={() => onChange({ ...grader, rubric: [...grader.rubric, makeDefaultCriterion()] })}
+        className="text-xs text-muted-foreground hover:text-foreground"
+      >
+        + Add Criterion
+      </button>
+    </div>
+  );
+}
+
 function CreateTaskModal({
   suiteId,
   onClose,
@@ -322,50 +512,49 @@ function CreateTaskModal({
   const [name, setName] = useState("");
   const [prompt, setPrompt] = useState("");
   const [difficulty, setDifficulty] = useState<Difficulty>("MEDIUM");
-  const [graderJson, setGraderJson] = useState(
-    JSON.stringify(
-      [
-        {
-          type: "CODE_BASED",
-          assertions: [
-            {
-              type: "CONTAINS",
-              expected: "",
-              description: "Output contains expected value",
-            },
-          ],
-        },
-      ] satisfies GraderConfig[],
-      null,
-      2
-    )
-  );
-  const [jsonError, setJsonError] = useState("");
+  const [graders, setGraders] = useState<GraderDraft[]>([makeGrader("CODE_BASED")]);
   const [submitting, setSubmitting] = useState(false);
+  const [showAddMenu, setShowAddMenu] = useState(false);
 
-  const handleJsonChange = (val: string) => {
-    setGraderJson(val);
-    try {
-      JSON.parse(val);
-      setJsonError("");
-    } catch {
-      setJsonError("Invalid JSON");
-    }
+  const updateGrader = (id: number, updated: GraderDraft) => {
+    setGraders(prev => prev.map(g => (g.id === id ? updated : g)));
   };
+
+  const removeGrader = (id: number) => {
+    setGraders(prev => prev.filter(g => g.id !== id));
+  };
+
+  const addGrader = (type: GraderType) => {
+    setGraders(prev => [...prev, makeGrader(type)]);
+    setShowAddMenu(false);
+  };
+
+  const buildGraderConfigs = (): GraderConfig[] =>
+    graders.map(g => {
+      if (g.type === "CODE_BASED") {
+        return {
+          type: "CODE_BASED" as GraderType,
+          assertions: g.assertions.map(({ _id: _a, ...rest }) => rest),
+        };
+      }
+      return {
+        type: "MODEL_BASED" as GraderType,
+        model: g.model || "MiniMax-M2.5",
+        rubric: g.rubric.map(({ _id: _r, ...rest }) => rest),
+      };
+    });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim() || !prompt.trim() || jsonError) return;
-    let graderConfigs: GraderConfig[];
-    try {
-      graderConfigs = JSON.parse(graderJson) as GraderConfig[];
-    } catch {
-      setJsonError("Invalid JSON");
-      return;
-    }
+    if (!name.trim() || !prompt.trim()) return;
     setSubmitting(true);
     try {
-      await evalApi.createTask(suiteId, { name: name.trim(), prompt: prompt.trim(), difficulty, graderConfigs });
+      await evalApi.createTask(suiteId, {
+        name: name.trim(),
+        prompt: prompt.trim(),
+        difficulty,
+        graderConfigs: buildGraderConfigs(),
+      });
       onCreated();
     } catch {
       // TODO: show error
@@ -379,10 +568,11 @@ function CreateTaskModal({
       <form
         onClick={e => e.stopPropagation()}
         onSubmit={handleSubmit}
-        className="w-full max-w-lg rounded-lg border border-border bg-card p-6 space-y-4 shadow-lg max-h-[90vh] overflow-y-auto"
+        className="w-full max-w-2xl rounded-lg border border-border bg-card p-6 space-y-4 shadow-lg max-h-[90vh] overflow-y-auto"
       >
         <h2 className="text-lg font-semibold">Add Task</h2>
 
+        {/* Basic info */}
         <div>
           <label className="block text-xs text-muted-foreground mb-1">{t("name")} *</label>
           <input
@@ -415,17 +605,49 @@ function CreateTaskModal({
           </select>
         </div>
 
-        <div>
-          <label className="block text-xs text-muted-foreground mb-1">
-            Grader Configs (JSON)
-            {jsonError && <span className="ml-2 text-red-400">{jsonError}</span>}
-          </label>
-          <textarea
-            value={graderJson}
-            onChange={e => handleJsonChange(e.target.value)}
-            rows={8}
-            className={`w-full rounded border bg-background px-3 py-1.5 text-xs font-mono resize-y ${jsonError ? "border-red-500" : "border-input"}`}
-          />
+        {/* Graders */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <label className="text-xs text-muted-foreground">Graders ({graders.length})</label>
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setShowAddMenu(prev => !prev)}
+                className="rounded border border-dashed border-border px-2 py-1 text-xs text-muted-foreground hover:text-foreground hover:border-foreground/30"
+              >
+                + Add Grader
+              </button>
+              {showAddMenu && (
+                <div className="absolute right-0 top-full mt-1 z-10 rounded border border-border bg-card shadow-lg min-w-[160px]">
+                  {(["CODE_BASED", "MODEL_BASED"] as GraderType[]).map(type => (
+                    <button
+                      key={type}
+                      type="button"
+                      onClick={() => addGrader(type)}
+                      className="w-full px-3 py-2 text-left text-xs hover:bg-muted"
+                    >
+                      {type === "CODE_BASED" ? "Code-Based" : "Model-Based"}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {graders.map(g => (
+            <GraderEditor
+              key={g.id}
+              grader={g}
+              onChange={updated => updateGrader(g.id, updated)}
+              onRemove={() => removeGrader(g.id)}
+            />
+          ))}
+
+          {graders.length === 0 && (
+            <div className="rounded border border-dashed border-border py-4 text-center text-xs text-muted-foreground">
+              No graders added. Click &quot;Add Grader&quot; to add evaluation criteria.
+            </div>
+          )}
         </div>
 
         <div className="flex justify-end gap-2 pt-2">
@@ -434,7 +656,7 @@ function CreateTaskModal({
           </button>
           <button
             type="submit"
-            disabled={submitting || !name.trim() || !prompt.trim() || !!jsonError}
+            disabled={submitting || !name.trim() || !prompt.trim()}
             className="rounded bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
           >
             {submitting ? t("creating") : t("create")}

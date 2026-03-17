@@ -109,7 +109,9 @@ function AssertionList({ assertions }: { assertions: AssertionResult[] }) {
 function TrialRow({ trial }: { trial: TrialResponse }) {
   const [expanded, setExpanded] = useState(false);
 
-  const allAssertions: AssertionResult[] = trial.grades.flatMap(g => g.assertionResults ?? []);
+  const codeGrades = trial.grades.filter(g => g.assertionResults && g.assertionResults.length > 0);
+  const modelGrades = trial.grades.filter(g => !g.assertionResults || g.assertionResults.length === 0);
+  const graderCount = (codeGrades.length > 0 ? 1 : 0) + modelGrades.length;
 
   return (
     <>
@@ -121,15 +123,55 @@ function TrialRow({ trial }: { trial: TrialResponse }) {
         <td className="px-4 py-2 text-center font-mono text-xs">{trial.trialNumber}</td>
         <td className="px-4 py-2"><OutcomeBadge outcome={trial.outcome} /></td>
         <td className="px-4 py-2 text-center font-mono text-xs">{trial.score.toFixed(2)}</td>
-        <td className="px-4 py-2 text-center font-mono text-xs">{allAssertions.length}</td>
+        <td className="px-4 py-2 text-center text-xs">
+          <div className="flex items-center justify-center gap-1">
+            {codeGrades.length > 0 && <span className="rounded bg-cyan-500/15 text-cyan-400 px-1.5 py-0.5 text-[10px]">⚙️ Code</span>}
+            {modelGrades.length > 0 && <span className="rounded bg-purple-500/15 text-purple-400 px-1.5 py-0.5 text-[10px]">🧠 Model</span>}
+            {graderCount === 0 && <span className="text-muted-foreground">-</span>}
+          </div>
+        </td>
         <td className="px-4 py-2 text-center text-xs text-muted-foreground">
           <span className="select-none">{expanded ? "▲" : "▼"}</span>
         </td>
       </tr>
       {expanded && (
         <tr className="border-t border-border bg-muted/10">
-          <td colSpan={6} className="py-0">
-            <AssertionList assertions={allAssertions} />
+          <td colSpan={6} className="py-3 px-4 space-y-3">
+            {/* Code-Based grades */}
+            {codeGrades.map((grade, gi) => (
+              <div key={`code-${gi}`} className="rounded-lg border border-border p-3 space-y-2">
+                <div className="flex items-center gap-2">
+                  <span className="rounded bg-cyan-500/15 text-cyan-400 px-2 py-0.5 text-[10px] font-medium">⚙️ CODE-BASED</span>
+                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${grade.passed ? "bg-green-500/15 text-green-400" : "bg-red-500/15 text-red-400"}`}>
+                    {grade.passed ? "PASS" : "FAIL"}
+                  </span>
+                  <span className="font-mono text-sm font-bold">{(grade.score * 100).toFixed(0)}%</span>
+                </div>
+                <AssertionList assertions={grade.assertionResults} />
+              </div>
+            ))}
+            {/* Model-Based grades */}
+            {modelGrades.map((grade, gi) => (
+              <div key={`model-${gi}`} className="rounded-lg border border-border p-3 space-y-2">
+                <div className="flex items-center gap-2">
+                  <span className="rounded bg-purple-500/15 text-purple-400 px-2 py-0.5 text-[10px] font-medium">🧠 MODEL-BASED</span>
+                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${grade.passed ? "bg-green-500/15 text-green-400" : "bg-red-500/15 text-red-400"}`}>
+                    {grade.passed ? "PASS" : "FAIL"}
+                  </span>
+                  <span className="font-mono text-sm font-bold">{(grade.score * 100).toFixed(0)}%</span>
+                  <span className="text-[10px] text-muted-foreground">confidence: {grade.confidence.toFixed(2)}</span>
+                </div>
+                {grade.explanation && (
+                  <div className="rounded bg-muted/20 p-3 text-xs text-muted-foreground leading-relaxed">
+                    <div className="text-[10px] text-purple-400 font-medium mb-1">Judge Assessment:</div>
+                    {grade.explanation}
+                  </div>
+                )}
+              </div>
+            ))}
+            {graderCount === 0 && (
+              <p className="text-xs text-muted-foreground">No grading results recorded.</p>
+            )}
           </td>
         </tr>
       )}
@@ -334,7 +376,7 @@ export default function RunDetailPage() {
                   <th className="px-4 py-2 text-center font-medium">Trial #</th>
                   <th className="px-4 py-2 text-left font-medium">Outcome</th>
                   <th className="px-4 py-2 text-center font-medium">Score</th>
-                  <th className="px-4 py-2 text-center font-medium">Assertions</th>
+                  <th className="px-4 py-2 text-center font-medium">Graders</th>
                   <th className="px-4 py-2 text-center font-medium"></th>
                 </tr>
               </thead>
