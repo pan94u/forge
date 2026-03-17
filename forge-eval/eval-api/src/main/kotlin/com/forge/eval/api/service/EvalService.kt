@@ -114,6 +114,15 @@ class EvalService(
         return taskRepo.findBySuiteId(suiteId).map { toEvalTask(it) }
     }
 
+    // ── Run Listing ──────────────────────────────────────────────────
+
+    fun getRunsForSuite(suiteId: UUID): List<RunResponse> {
+        val suite = suiteRepo.findById(suiteId)
+            .orElseThrow { NotFoundException("Suite not found: $suiteId") }
+        val runs = runRepo.findBySuiteIdOrderByCreatedAtAsc(suiteId)
+        return runs.map { buildRunResponse(it, suite.name) }
+    }
+
     // ── Run Execution ───────────────────────────────────────────────
 
     @Transactional

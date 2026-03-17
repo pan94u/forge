@@ -96,12 +96,14 @@ export default function SuiteDetailPage() {
   const fetchAll = useCallback(async () => {
     setLoading(true);
     try {
-      const [suiteData, tasksData] = await Promise.all([
+      const [suiteData, tasksData, runsData] = await Promise.all([
         evalApi.getSuite(suiteId),
         evalApi.listTasks(suiteId),
+        evalApi.listRuns(suiteId),
       ]);
       setSuite(suiteData);
       setTasks(tasksData);
+      setRuns(runsData);
     } catch {
       // API may not be available
     } finally {

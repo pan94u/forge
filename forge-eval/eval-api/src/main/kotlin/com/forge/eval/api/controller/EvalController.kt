@@ -57,6 +57,11 @@ class EvalController(
 
     // ── Run endpoints ───────────────────────────────────────────────
 
+    @GetMapping("/suites/{suiteId}/runs")
+    fun listRuns(@PathVariable suiteId: UUID): List<RunResponse> {
+        return evalService.getRunsForSuite(suiteId)
+    }
+
     @PostMapping("/runs")
     fun createRun(@RequestBody request: CreateRunRequest): ResponseEntity<RunResponse> {
         val run = evalService.createRun(request)

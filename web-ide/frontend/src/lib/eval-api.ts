@@ -343,6 +343,10 @@ export const evalApi = {
   },
 
   // Run
+  listRuns(suiteId: string) {
+    return fetch(`${BASE}/suites/${suiteId}/runs`, { headers: headers() }).then(r => handleResponse<RunResponse[]>(r));
+  },
+
   createRun(data: CreateRunRequest) {
     return fetch(`${BASE}/runs`, {
       method: "POST",
