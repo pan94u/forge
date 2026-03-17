@@ -348,11 +348,15 @@ export const evalApi = {
   },
 
   createRun(data: CreateRunRequest) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 300_000); // 5 min timeout for model calls
     return fetch(`${BASE}/runs`, {
       method: "POST",
       headers: headers({ "Content-Type": "application/json" }),
       body: JSON.stringify(data),
-    }).then(r => handleResponse<RunResponse>(r));
+      signal: controller.signal,
+    }).then(r => { clearTimeout(timeout); return handleResponse<RunResponse>(r); })
+      .catch(e => { clearTimeout(timeout); throw e; });
   },
 
   getRun(runId: string) {
@@ -383,11 +387,15 @@ export const evalApi = {
 
   // Transcript
   submitTranscript(data: SubmitTranscriptRequest) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 300_000);
     return fetch(`${BASE}/transcripts`, {
       method: "POST",
       headers: headers({ "Content-Type": "application/json" }),
       body: JSON.stringify(data),
-    }).then(r => handleResponse<Record<string, unknown>>(r));
+      signal: controller.signal,
+    }).then(r => { clearTimeout(timeout); return handleResponse<Record<string, unknown>>(r); })
+      .catch(e => { clearTimeout(timeout); throw e; });
   },
 
   getTranscript(transcriptId: string) {

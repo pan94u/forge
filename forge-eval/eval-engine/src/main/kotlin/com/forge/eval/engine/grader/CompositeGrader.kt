@@ -44,8 +44,12 @@ class CompositeGrader(
 
                 GraderType.MODEL_BASED -> {
                     if (modelGrader != null) {
-                        val grade = modelGrader.grade(trialId, output, config, transcript)
-                        grades.add(grade)
+                        try {
+                            val grade = modelGrader.grade(trialId, output, config, transcript)
+                            grades.add(grade)
+                        } catch (e: Exception) {
+                            logger.error("MODEL_BASED grading failed for trial {}: {}", trialId, e.message, e)
+                        }
                     } else {
                         logger.warn(
                             "MODEL_BASED grader requested but no ModelAdapter available — skipping. " +

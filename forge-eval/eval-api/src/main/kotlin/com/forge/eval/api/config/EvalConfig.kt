@@ -8,6 +8,8 @@ import com.forge.eval.engine.grader.ModelBasedGrader
 import com.forge.eval.engine.lifecycle.LifecycleManager
 import com.forge.eval.engine.review.ReviewTriggerRules
 import com.forge.eval.engine.notification.WebhookNotifier
+import org.slf4j.LoggerFactory
+import org.springframework.beans.factory.ObjectProvider
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
@@ -15,22 +17,20 @@ import org.springframework.context.annotation.Configuration
 @Configuration
 class EvalConfig {
 
+    private val logger = LoggerFactory.getLogger(EvalConfig::class.java)
+
     @Bean
     fun codeBasedGrader(): CodeBasedGrader = CodeBasedGrader()
-
-    /**
-     * ModelBasedGrader bean — 仅在 ModelAdapter 可用时创建。
-     * ModelAdapter 由 web-ide 或其他模块注入，eval-api 本身不强依赖。
-     */
-    @Bean
-    fun modelBasedGrader(modelAdapter: ModelAdapter?): ModelBasedGrader? =
-        modelAdapter?.let { ModelBasedGrader(it) }
 
     @Bean
     fun evalEngine(
         codeBasedGrader: CodeBasedGrader,
-        modelAdapter: ModelAdapter?
-    ): EvalEngine = EvalEngine(codeBasedGrader, modelAdapter)
+        modelAdapterProvider: ObjectProvider<ModelAdapter>
+    ): EvalEngine {
+        val adapter = modelAdapterProvider.ifAvailable
+        logger.info("EvalEngine init: ModelAdapter ${if (adapter != null) "available (${adapter::class.simpleName})" else "NOT available — MODEL_BASED grading disabled"}")
+        return EvalEngine(codeBasedGrader, adapter)
+    }
 
     @Bean
     fun reportGenerator(): ReportGenerator = ReportGenerator()

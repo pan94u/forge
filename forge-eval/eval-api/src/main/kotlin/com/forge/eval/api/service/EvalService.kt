@@ -7,6 +7,7 @@ import com.forge.eval.api.repository.*
 import com.forge.adapter.model.CompletionOptions
 import com.forge.adapter.model.ModelAdapter
 import com.forge.eval.engine.EvalEngine
+import org.springframework.beans.factory.ObjectProvider
 import com.forge.eval.engine.EvalRunResult
 import com.forge.eval.engine.ReportGenerator
 import com.forge.eval.engine.TrialOutput
@@ -36,8 +37,9 @@ class EvalService(
     private val reportGenerator: ReportGenerator,
     private val reviewTriggerRules: ReviewTriggerRules,
     private val reviewService: ReviewService,
-    private val modelAdapter: ModelAdapter? = null
+    modelAdapterProvider: ObjectProvider<ModelAdapter>
 ) {
+    private val modelAdapter: ModelAdapter? = modelAdapterProvider.ifAvailable
     private val logger = LoggerFactory.getLogger(EvalService::class.java)
 
     // ── Suite CRUD ──────────────────────────────────────────────────
@@ -129,7 +131,6 @@ class EvalService(
 
     // ── Run Execution ───────────────────────────────────────────────
 
-    @Transactional
     fun createRun(request: CreateRunRequest): RunResponse {
         val suite = suiteRepo.findById(request.suiteId)
             .orElseThrow { NotFoundException("Suite not found: ${request.suiteId}") }
@@ -516,6 +517,7 @@ class EvalService(
             return TrialOutput(output = "(no model adapter configured)")
         }
 
+        logger.info("Calling model '{}' for task '{}'", model ?: "(default)", task.name)
         return try {
             val result = runBlocking {
                 modelAdapter.complete(
