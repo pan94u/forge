@@ -680,39 +680,64 @@ function SubmitTranscriptModal({
 
         {/* Results */}
         {result && (
-          <div className="border-t border-border pt-4 space-y-3">
+          <div className="border-t border-border pt-4 space-y-4">
             <h3 className="text-sm font-semibold">Evaluation Result</h3>
-            {result.map((grade, i) => (
-              <div key={i} className="space-y-2">
-                <div className="flex items-center gap-3">
-                  <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-bold ${grade.passed ? "bg-green-500/15 text-green-400" : "bg-red-500/15 text-red-400"}`}>
-                    {grade.passed ? "PASS" : "FAIL"}
-                  </span>
-                  <span className="text-2xl font-bold font-mono">{grade.score >= 0 ? `${(grade.score * 100).toFixed(0)}%` : "Error"}</span>
-                  <span className="text-xs text-muted-foreground">{grade.explanation}</span>
-                </div>
+            {result.map((grade, i) => {
+              const isModelBased = !grade.assertionResults || grade.assertionResults.length === 0;
+              const graderLabel = isModelBased ? "MODEL-BASED" : "CODE-BASED";
+              const graderColor = isModelBased ? "bg-purple-500/15 text-purple-400" : "bg-cyan-500/15 text-cyan-400";
+              const graderIcon = isModelBased ? "🧠" : "⚙️";
 
-                {grade.assertionResults && grade.assertionResults.length > 0 && (
-                  <div className="space-y-1.5 pl-2">
-                    {grade.assertionResults.map((a, j) => (
-                      <div key={j} className="flex items-start gap-2 text-xs">
-                        <span className={`mt-0.5 font-mono flex-shrink-0 ${a.passed ? "text-green-400" : "text-red-400"}`}>
-                          {a.passed ? "[x]" : "[ ]"}
-                        </span>
-                        <div>
-                          <span className={a.passed ? "text-green-400" : "text-red-400"}>{a.description}</span>
-                          {!a.passed && a.expected && (
-                            <div className="text-muted-foreground mt-0.5">
-                              expected: <span className="font-mono">{a.expected}</span>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    ))}
+              return (
+                <div key={i} className="rounded-lg border border-border p-4 space-y-2">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ${graderColor}`}>
+                      {graderIcon} {graderLabel}
+                    </span>
+                    <span className="text-[10px] text-muted-foreground">
+                      {isModelBased ? "LLM judge evaluates quality, clarity, and reasoning" : "Deterministic rule checks on output and tool usage"}
+                    </span>
                   </div>
-                )}
-              </div>
-            ))}
+
+                  <div className="flex items-center gap-3">
+                    <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-bold ${grade.passed ? "bg-green-500/15 text-green-400" : "bg-red-500/15 text-red-400"}`}>
+                      {grade.passed ? "PASS" : "FAIL"}
+                    </span>
+                    <span className="text-2xl font-bold font-mono">{grade.score >= 0 ? `${(grade.score * 100).toFixed(0)}%` : "Error"}</span>
+                  </div>
+
+                  {/* Model-Based: show explanation as main content */}
+                  {isModelBased && grade.explanation && (
+                    <div className="rounded bg-muted/20 p-3 text-xs text-muted-foreground leading-relaxed">
+                      <div className="text-[10px] text-purple-400 font-medium mb-1">Judge Assessment:</div>
+                      {grade.explanation}
+                    </div>
+                  )}
+
+                  {/* Code-Based: show assertion list */}
+                  {!isModelBased && grade.assertionResults && grade.assertionResults.length > 0 && (
+                    <div className="space-y-1.5">
+                      <div className="text-[10px] text-muted-foreground">{grade.explanation}</div>
+                      {grade.assertionResults.map((a, j) => (
+                        <div key={j} className="flex items-start gap-2 text-xs">
+                          <span className={`mt-0.5 font-mono flex-shrink-0 ${a.passed ? "text-green-400" : "text-red-400"}`}>
+                            {a.passed ? "[x]" : "[ ]"}
+                          </span>
+                          <div>
+                            <span className={a.passed ? "text-green-400" : "text-red-400"}>{a.description}</span>
+                            {!a.passed && a.expected && (
+                              <div className="text-muted-foreground mt-0.5">
+                                expected: <span className="font-mono">{a.expected}</span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
       </div>
