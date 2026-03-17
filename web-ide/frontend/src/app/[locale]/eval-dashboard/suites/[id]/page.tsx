@@ -214,12 +214,22 @@ export default function SuiteDetailPage() {
       <section className="space-y-3">
         <div className="flex items-center justify-between">
           <h2 className="text-base font-semibold">{t("runs")} ({runs.length})</h2>
-          <button
-            onClick={() => setShowCreateRun(true)}
-            className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90"
-          >
-            + Run Eval
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setShowCreateRun(true)}
+              className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90"
+              disabled={tasks.length === 0}
+            >
+              + Run Eval
+            </button>
+            <button
+              onClick={() => setShowSubmitTranscript(true)}
+              className="rounded-md border border-border px-3 py-1.5 text-xs font-medium hover:bg-muted"
+              disabled={tasks.length === 0}
+            >
+              + Manual Trial
+            </button>
+          </div>
         </div>
 
         {runs.length === 0 ? (
@@ -264,29 +274,13 @@ export default function SuiteDetailPage() {
         )}
       </section>
 
-      {/* Transcript submission section */}
-      <section className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h2 className="text-base font-semibold">Transcript Evaluation</h2>
-          <button
-            onClick={() => setShowSubmitTranscript(true)}
-            className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90"
-            disabled={tasks.length === 0}
-          >
-            + Submit Transcript
-          </button>
-        </div>
-        <p className="text-xs text-muted-foreground">
-          Submit an Agent&apos;s conversation transcript to evaluate against a task&apos;s grading criteria. This is the core evaluation path — paste what the Agent actually said and did, and see how it scores.
-        </p>
-      </section>
-
       {/* Modals */}
       {showSubmitTranscript && (
         <SubmitTranscriptModal
           suiteId={suiteId}
           tasks={tasks}
           onClose={() => setShowSubmitTranscript(false)}
+          onCreated={() => { setShowSubmitTranscript(false); fetchAll(); }}
         />
       )}
 
@@ -545,10 +539,12 @@ function SubmitTranscriptModal({
   suiteId,
   tasks,
   onClose,
+  onCreated,
 }: {
   suiteId: string;
   tasks: EvalTask[];
   onClose: () => void;
+  onCreated?: () => void;
 }) {
   const [selectedTaskId, setSelectedTaskId] = useState(tasks[0]?.id ?? "");
   const [transcriptJson, setTranscriptJson] = useState(
@@ -605,6 +601,7 @@ function SubmitTranscriptModal({
       });
       const grades = (res as Record<string, unknown>).grades as GradeResult[];
       setResult(grades);
+      onCreated?.();
     } catch {
       setResult([{ score: -1, passed: false, explanation: "Submission failed", assertionResults: [] }]);
     } finally {
@@ -618,7 +615,8 @@ function SubmitTranscriptModal({
         onClick={e => e.stopPropagation()}
         className="w-full max-w-2xl rounded-lg border border-border bg-card p-6 space-y-4 shadow-lg max-h-[90vh] overflow-y-auto"
       >
-        <h2 className="text-lg font-semibold">Submit Transcript for Evaluation</h2>
+        <h2 className="text-lg font-semibold">Manual Trial — Submit Agent Transcript</h2>
+        <p className="text-xs text-muted-foreground">Paste an Agent&apos;s conversation to create a Trial with grading. The result will appear in the Runs list.</p>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* Task selector */}

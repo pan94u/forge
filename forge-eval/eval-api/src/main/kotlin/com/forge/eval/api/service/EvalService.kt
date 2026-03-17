@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.kotlin.readValue
 import com.forge.eval.api.entity.*
 import com.forge.eval.api.repository.*
+import com.forge.adapter.model.CompletionOptions
+import com.forge.adapter.model.ModelAdapter
 import com.forge.eval.engine.EvalEngine
 import com.forge.eval.engine.EvalRunResult
 import com.forge.eval.engine.ReportGenerator
@@ -12,6 +14,7 @@ import com.forge.eval.engine.lifecycle.LifecycleManager
 import com.forge.eval.engine.review.ReviewTriggerRules
 import com.forge.eval.engine.stats.RegressionDetector
 import com.forge.eval.protocol.*
+import kotlinx.coroutines.runBlocking
 import org.slf4j.LoggerFactory
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.PageRequest
@@ -32,7 +35,8 @@ class EvalService(
     private val evalEngine: EvalEngine,
     private val reportGenerator: ReportGenerator,
     private val reviewTriggerRules: ReviewTriggerRules,
-    private val reviewService: ReviewService
+    private val reviewService: ReviewService,
+    private val modelAdapter: ModelAdapter? = null
 ) {
     private val logger = LoggerFactory.getLogger(EvalService::class.java)
 
@@ -148,9 +152,7 @@ class EvalService(
             },
             trialsPerTask = request.trialsPerTask
         ) { task ->
-            // Phase 1: structure validation — empty output
-            // Future phases will integrate actual model calls
-            TrialOutput(output = "(structure validation mode — no model output)")
+            callModel(task, request.model)
         }
 
         // Persist results
@@ -236,8 +238,7 @@ class EvalService(
 
     @Transactional
     fun submitTranscript(request: SubmitTranscriptRequest): Map<String, Any> {
-        // Verify suite and task exist
-        suiteRepo.findById(request.suiteId)
+        val suite = suiteRepo.findById(request.suiteId)
             .orElseThrow { NotFoundException("Suite not found: ${request.suiteId}") }
         val taskEntity = taskRepo.findById(request.taskId)
             .orElseThrow { NotFoundException("Task not found: ${request.taskId}") }
@@ -253,16 +254,67 @@ class EvalService(
             metadata = request.metadata
         )
 
-        // Grade the transcript output
+        // Extract agent output from assistant turns
         val output = request.turns
             .filter { it.role == "assistant" }
             .joinToString("\n") { it.content }
 
+        // Grade via CompositeGrader (Code-Based + Model-Based)
         val grades = evalEngine.gradeOutput(task, output, transcript)
 
-        // Persist transcript (no trial association for external transcripts)
+        // Create a Manual Run + Trial to persist the evaluation
+        val runId = UUID.randomUUID()
+        val trialId = UUID.randomUUID()
+        val now = Instant.now()
+
+        // Determine outcome
+        val outcome = when {
+            grades.isEmpty() -> TrialOutcome.PASS
+            grades.all { it.passed } -> TrialOutcome.PASS
+            grades.any { it.passed } -> TrialOutcome.PARTIAL
+            else -> TrialOutcome.FAIL
+        }
+        val avgScore = if (grades.isNotEmpty()) grades.map { it.score }.average() else 0.0
+
+        // Persist Run (manual type)
+        val runSummary = RunSummary(
+            totalTasks = 1, totalTrials = 1,
+            passedTrials = if (outcome == TrialOutcome.PASS) 1 else 0,
+            failedTrials = if (outcome == TrialOutcome.FAIL) 1 else 0,
+            errorTrials = 0,
+            overallPassRate = if (outcome == TrialOutcome.PASS) 1.0 else 0.0,
+            averageScore = avgScore,
+            totalDurationMs = 0
+        )
+        val runEntity = EvalRunEntity(
+            id = runId,
+            suiteId = request.suiteId,
+            status = RunStatusEnum.COMPLETED,
+            trialsPerTask = 1,
+            model = (request.metadata["model"] as? String),
+            summary = objectMapper.writeValueAsString(runSummary),
+            startedAt = now,
+            completedAt = now
+        )
+        runRepo.save(runEntity)
+
+        // Persist Trial
+        val trialEntity = EvalTrialEntity(
+            id = trialId,
+            runId = runId,
+            taskId = request.taskId,
+            trialNumber = 1,
+            outcome = OutcomeEnum.valueOf(outcome.name),
+            score = avgScore,
+            durationMs = 0,
+            output = output
+        )
+        trialRepo.save(trialEntity)
+
+        // Persist Transcript (linked to trial)
         val transcriptEntity = EvalTranscriptEntity(
             id = transcript.id,
+            trialId = trialId,
             source = TranscriptSourceEnum.valueOf(request.source.name),
             turns = objectMapper.writeValueAsString(request.turns),
             toolCallSummary = objectMapper.writeValueAsString(toolCalls),
@@ -270,13 +322,44 @@ class EvalService(
         )
         transcriptRepo.save(transcriptEntity)
 
-        // Note: grades for external transcripts are returned inline, not persisted
-        // to eval_grades table (which requires a trial FK). This is by design —
-        // external transcript evaluation is stateless and immediate.
-        // For persisted grades, use POST /runs which creates proper trial records.
+        // Persist Grades
+        for (grade in grades) {
+            val gradeEntity = EvalGradeEntity(
+                id = grade.id,
+                trialId = trialId,
+                graderType = GraderTypeEnum.valueOf(grade.graderType.name),
+                score = grade.score,
+                passed = grade.passed,
+                assertionResults = objectMapper.writeValueAsString(grade.assertionResults),
+                rubricScores = objectMapper.writeValueAsString(grade.rubricScores),
+                explanation = grade.explanation,
+                confidence = grade.confidence
+            )
+            gradeRepo.save(gradeEntity)
+        }
+
+        // Auto-trigger human review
+        val taskRunCount = trialRepo.findByTaskId(request.taskId).size
+        val reviewDecision = reviewTriggerRules.shouldReview(grades, taskRunCount)
+        if (reviewDecision.shouldReview) {
+            for (grade in grades) {
+                reviewService.createReview(
+                    gradeId = grade.id,
+                    trialId = trialId,
+                    taskId = request.taskId,
+                    autoScore = grade.score,
+                    autoConfidence = grade.confidence,
+                    reasons = reviewDecision.reasons.map { it.description }
+                )
+            }
+        }
 
         return mapOf(
+            "runId" to runId,
+            "trialId" to trialId,
             "transcriptId" to transcript.id,
+            "outcome" to outcome.name,
+            "score" to avgScore,
             "grades" to grades.map {
                 mapOf(
                     "score" to it.score,
@@ -423,6 +506,53 @@ class EvalService(
             "reason" to request.reason,
             "updatedAt" to Instant.now().toString()
         )
+    }
+
+    // ── Model calling ─────────────────────────────────────────────
+
+    private fun callModel(task: EvalTask, model: String?): TrialOutput {
+        if (modelAdapter == null) {
+            logger.warn("No ModelAdapter available — returning structure validation output")
+            return TrialOutput(output = "(no model adapter configured)")
+        }
+
+        return try {
+            val result = runBlocking {
+                modelAdapter.complete(
+                    prompt = task.prompt,
+                    options = CompletionOptions(
+                        model = model,
+                        maxTokens = 4096,
+                        temperature = 0.7,
+                        systemPrompt = "You are an AI agent being evaluated. Complete the task described in the prompt."
+                    )
+                )
+            }
+
+            val transcript = EvalTranscript(
+                source = TranscriptSource.FORGE,
+                turns = listOf(
+                    TranscriptTurn(role = "user", content = task.prompt),
+                    TranscriptTurn(role = "assistant", content = result.content)
+                ),
+                metadata = mapOf("model" to result.model, "latencyMs" to result.latencyMs.toString())
+            )
+
+            TrialOutput(
+                output = result.content,
+                transcript = transcript,
+                tokenUsage = TokenUsage(
+                    inputTokens = result.usage.inputTokens,
+                    outputTokens = result.usage.outputTokens
+                )
+            )
+        } catch (e: Exception) {
+            logger.error("Model call failed for task '{}': {}", task.name, e.message)
+            TrialOutput(
+                output = "(model call failed: ${e.message})",
+                error = e.message
+            )
+        }
     }
 
     // ── Persistence helpers ─────────────────────────────────────────
