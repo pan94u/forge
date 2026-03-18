@@ -101,7 +101,13 @@ export default function EvalDashboardPage() {
         <StatCard label={t("suites")} value={totalElements} />
         <StatCard label={t("tasks")} value={totalTasks} />
         <StatCard label={t("runs")} value="-" />
-        <StatCard label={t("pendingReviews")} value={pendingReviews} />
+        <Link href="/eval-dashboard/reviews" className="block">
+          <div className="rounded-lg border border-border bg-card p-4 hover:bg-muted/30 transition-colors">
+            <div className="text-xs text-muted-foreground">{t("pendingReviews")}</div>
+            <div className="mt-1 text-2xl font-semibold">{pendingReviews}</div>
+            {pendingReviews > 0 && <div className="mt-1 text-[10px] text-yellow-400">Click to review →</div>}
+          </div>
+        </Link>
       </div>
 
       {/* Filters */}
