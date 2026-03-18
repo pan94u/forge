@@ -28,6 +28,7 @@ interface EvalTaskRepository : JpaRepository<EvalTaskEntity, UUID> {
 interface EvalRunRepository : JpaRepository<EvalRunEntity, UUID> {
     fun findBySuiteId(suiteId: UUID, pageable: Pageable): Page<EvalRunEntity>
     fun findBySuiteIdOrderByCreatedAtAsc(suiteId: UUID): List<EvalRunEntity>
+    fun countBySuiteId(suiteId: UUID): Long
 }
 
 @Repository

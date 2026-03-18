@@ -172,16 +172,16 @@ export default function SuiteDetailPage() {
                   <th className="px-4 py-2 text-left font-medium">{t("name")}</th>
                   <th className="px-4 py-2 text-left font-medium">Difficulty</th>
                   <th className="px-4 py-2 text-left font-medium">{t("lifecycle")}</th>
-                  <th className="px-4 py-2 text-center font-medium">Assertions</th>
+                  <th className="px-4 py-2 text-center font-medium">Graders</th>
                   <th className="px-4 py-2 text-left font-medium">Tags</th>
                 </tr>
               </thead>
               <tbody>
                 {tasks.map(task => {
-                  const assertionCount = task.graderConfigs.reduce(
-                    (sum, g) => sum + (g.assertions?.length ?? 0),
-                    0
-                  );
+                  const hasCode = task.graderConfigs.some(g => g.type === "CODE_BASED");
+                  const hasModel = task.graderConfigs.some(g => g.type === "MODEL_BASED");
+                  const codeCount = task.graderConfigs.reduce((s, g) => s + (g.type === "CODE_BASED" ? (g.assertions?.length ?? 0) : 0), 0);
+                  const modelCount = task.graderConfigs.reduce((s, g) => s + (g.type === "MODEL_BASED" ? (g.rubric?.length ?? 0) : 0), 0);
                   return (
                     <tr key={task.id} className="border-t border-border hover:bg-muted/30">
                       <td className="px-4 py-2">
@@ -196,7 +196,12 @@ export default function SuiteDetailPage() {
                       <td className="px-4 py-2">
                         <LifecycleBadge lifecycle={task.tags.find(t => ["CAPABILITY","REGRESSION","SATURATED"].includes(t)) ?? "CAPABILITY"} />
                       </td>
-                      <td className="px-4 py-2 text-center font-mono text-xs">{assertionCount}</td>
+                      <td className="px-4 py-2 text-center">
+                        <div className="flex items-center justify-center gap-1">
+                          {hasCode && <span className="rounded bg-cyan-500/15 text-cyan-400 px-1.5 py-0.5 text-[10px]">⚙️ {codeCount}</span>}
+                          {hasModel && <span className="rounded bg-purple-500/15 text-purple-400 px-1.5 py-0.5 text-[10px]">🧠 {modelCount}</span>}
+                        </div>
+                      </td>
                       <td className="px-4 py-2">
                         <div className="flex gap-1 flex-wrap">
                           {task.tags.map(tag => (

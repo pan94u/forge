@@ -13,6 +13,7 @@ data class SuiteResponse(
     val lifecycle: Lifecycle,
     val tags: List<String>,
     val taskCount: Int,
+    val runCount: Int = 0,
     val createdAt: Instant,
     val updatedAt: Instant
 )

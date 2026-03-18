@@ -100,7 +100,7 @@ export default function EvalDashboardPage() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <StatCard label={t("suites")} value={totalElements} />
         <StatCard label={t("tasks")} value={totalTasks} />
-        <StatCard label={t("runs")} value="-" />
+        <StatCard label={t("runs")} value={suites.reduce((s, suite) => s + suite.runCount, 0)} />
         <Link href="/eval-dashboard/reviews" className="block">
           <div className="rounded-lg border border-border bg-card p-4 hover:bg-muted/30 transition-colors">
             <div className="text-xs text-muted-foreground">{t("pendingReviews")}</div>
@@ -148,6 +148,7 @@ export default function EvalDashboardPage() {
                 <th className="px-4 py-2 text-left font-medium">{t("agentType")}</th>
                 <th className="px-4 py-2 text-left font-medium">{t("lifecycle")}</th>
                 <th className="px-4 py-2 text-center font-medium">{t("taskCount")}</th>
+                <th className="px-4 py-2 text-center font-medium">{t("runs")}</th>
                 <th className="px-4 py-2 text-left font-medium">{t("tags")}</th>
               </tr>
             </thead>
@@ -169,6 +170,7 @@ export default function EvalDashboardPage() {
                   <td className="px-4 py-2 text-xs">{suite.agentType}</td>
                   <td className="px-4 py-2"><LifecycleBadge lifecycle={suite.lifecycle} /></td>
                   <td className="px-4 py-2 text-center font-mono text-xs">{suite.taskCount}</td>
+                  <td className="px-4 py-2 text-center font-mono text-xs">{suite.runCount}</td>
                   <td className="px-4 py-2">
                     <div className="flex gap-1 flex-wrap">
                       {suite.tags.map(tag => (

@@ -688,6 +688,7 @@ class EvalService(
 
     private fun toSuiteResponse(entity: EvalSuiteEntity): SuiteResponse {
         val taskCount = taskRepo.countBySuiteId(entity.id)
+        val runCount = runRepo.countBySuiteId(entity.id)
         return SuiteResponse(
             id = entity.id,
             name = entity.name,
@@ -697,6 +698,7 @@ class EvalService(
             lifecycle = Lifecycle.valueOf(entity.lifecycle.name),
             tags = objectMapper.readValue(entity.tags),
             taskCount = taskCount.toInt(),
+            runCount = runCount.toInt(),
             createdAt = entity.createdAt,
             updatedAt = entity.updatedAt
         )

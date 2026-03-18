@@ -30,6 +30,7 @@ export interface SuiteResponse {
   lifecycle: Lifecycle;
   tags: string[];
   taskCount: number;
+  runCount: number;
   createdAt: string;
   updatedAt: string;
 }
