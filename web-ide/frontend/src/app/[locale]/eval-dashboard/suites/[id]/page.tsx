@@ -164,6 +164,114 @@ export default function SuiteDetailPage() {
         <p className="mt-1 text-xs text-muted-foreground font-mono">ID: {suiteId}</p>
       </div>
 
+      {/* Trends section — suite-level overview */}
+      <section className="space-y-3">
+        <h2 className="text-base font-semibold">{t("passRateTrends")}</h2>
+        <TrendChart trends={trends} />
+      </section>
+
+      {/* Regression Detection — suite-level comparison */}
+      <section className="space-y-3">
+        <h2 className="text-base font-semibold">{t("regressionDetection")}</h2>
+        <div className="rounded-lg border border-border p-4 space-y-4">
+          <div className="flex flex-wrap gap-3 items-end">
+            <div>
+              <label className="block text-xs text-muted-foreground mb-1">{t("baselineRun")}</label>
+              <select
+                value={baselineRunId}
+                onChange={e => setBaselineRunId(e.target.value)}
+                className="rounded border border-input bg-background px-2 py-1.5 text-xs min-w-[200px]"
+              >
+                <option value="">{t("selectBaselineRun")}</option>
+                {runs.map((run, idx) => (
+                  <option key={run.id} value={run.id}>
+                    Run #{idx + 1} ({run.model ?? "unknown"})
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs text-muted-foreground mb-1">{t("currentRun")}</label>
+              <select
+                value={currentRunId}
+                onChange={e => setCurrentRunId(e.target.value)}
+                className="rounded border border-input bg-background px-2 py-1.5 text-xs min-w-[200px]"
+              >
+                <option value="">{t("selectCurrentRun")}</option>
+                {runs.map((run, idx) => (
+                  <option key={run.id} value={run.id}>
+                    Run #{idx + 1} ({run.model ?? "unknown"})
+                  </option>
+                ))}
+              </select>
+            </div>
+            <button
+              onClick={async () => {
+                if (!baselineRunId || !currentRunId) return;
+                setRegressionLoading(true);
+                setRegressionResult(null);
+                try {
+                  const result = await evalApi.detectRegressions(suiteId, currentRunId, baselineRunId);
+                  setRegressionResult(result);
+                } catch {
+                  // ignore
+                } finally {
+                  setRegressionLoading(false);
+                }
+              }}
+              disabled={!baselineRunId || !currentRunId || regressionLoading}
+              className="rounded bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+            >
+              {regressionLoading ? t("comparing") : t("compare")}
+            </button>
+          </div>
+
+          {regressionResult && (
+            <div className="mt-2">
+              {!regressionResult.hasRegressions ? (
+                <div className="rounded border border-green-500/30 bg-green-500/10 px-4 py-3 text-sm text-green-400">
+                  {t("noRegressions")}
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <div className="rounded border border-red-500/30 bg-red-500/10 px-4 py-2 text-xs text-red-400 font-medium">
+                    {t("regressionsDetected", { count: regressionResult.regressions.length })}
+                  </div>
+                  <div className="rounded-lg border border-border overflow-hidden">
+                    <table className="w-full text-xs">
+                      <thead className="bg-muted/50">
+                        <tr>
+                          <th className="px-3 py-2 text-left font-medium">{t("task")}</th>
+                          <th className="px-3 py-2 text-center font-medium">{t("baseline")}</th>
+                          <th className="px-3 py-2 text-center font-medium">{t("current")}</th>
+                          <th className="px-3 py-2 text-center font-medium">{t("significant")}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {regressionResult.regressions.map((reg, i) => (
+                          <tr key={i} className="border-t border-border">
+                            <td className="px-3 py-2 font-medium">{reg.taskName}</td>
+                            <td className="px-3 py-2 text-center font-mono">{pct(reg.baselinePassRate)}</td>
+                            <td className="px-3 py-2 text-center font-mono text-red-400">{pct(reg.currentPassRate)}</td>
+                            <td className="px-3 py-2 text-center">
+                              {reg.isStatisticallySignificant ? (
+                                <span className="text-red-400 font-medium">{t("significantYes")}</span>
+                              ) : (
+                                <span className="text-muted-foreground">{t("significantNo")}</span>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </section>
+
       {/* Tasks section */}
       <section className="space-y-3">
         <div className="flex items-center justify-between">
@@ -318,114 +426,6 @@ export default function SuiteDetailPage() {
             </table>
           </div>
         )}
-      </section>
-
-      {/* Trends section */}
-      <section className="space-y-3">
-        <h2 className="text-base font-semibold">{t("passRateTrends")}</h2>
-        <TrendChart trends={trends} />
-      </section>
-
-      {/* Regression Detection section */}
-      <section className="space-y-3">
-        <h2 className="text-base font-semibold">{t("regressionDetection")}</h2>
-        <div className="rounded-lg border border-border p-4 space-y-4">
-          <div className="flex flex-wrap gap-3 items-end">
-            <div>
-              <label className="block text-xs text-muted-foreground mb-1">{t("baselineRun")}</label>
-              <select
-                value={baselineRunId}
-                onChange={e => setBaselineRunId(e.target.value)}
-                className="rounded border border-input bg-background px-2 py-1.5 text-xs min-w-[200px]"
-              >
-                <option value="">{t("selectBaselineRun")}</option>
-                {runs.map((run, idx) => (
-                  <option key={run.id} value={run.id}>
-                    Run #{idx + 1} ({run.model ?? "unknown"})
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs text-muted-foreground mb-1">{t("currentRun")}</label>
-              <select
-                value={currentRunId}
-                onChange={e => setCurrentRunId(e.target.value)}
-                className="rounded border border-input bg-background px-2 py-1.5 text-xs min-w-[200px]"
-              >
-                <option value="">{t("selectCurrentRun")}</option>
-                {runs.map((run, idx) => (
-                  <option key={run.id} value={run.id}>
-                    Run #{idx + 1} ({run.model ?? "unknown"})
-                  </option>
-                ))}
-              </select>
-            </div>
-            <button
-              onClick={async () => {
-                if (!baselineRunId || !currentRunId) return;
-                setRegressionLoading(true);
-                setRegressionResult(null);
-                try {
-                  const result = await evalApi.detectRegressions(suiteId, currentRunId, baselineRunId);
-                  setRegressionResult(result);
-                } catch {
-                  // ignore
-                } finally {
-                  setRegressionLoading(false);
-                }
-              }}
-              disabled={!baselineRunId || !currentRunId || regressionLoading}
-              className="rounded bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-            >
-              {regressionLoading ? t("comparing") : t("compare")}
-            </button>
-          </div>
-
-          {regressionResult && (
-            <div className="mt-2">
-              {!regressionResult.hasRegressions ? (
-                <div className="rounded border border-green-500/30 bg-green-500/10 px-4 py-3 text-sm text-green-400">
-                  {t("noRegressions")}
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  <div className="rounded border border-red-500/30 bg-red-500/10 px-4 py-2 text-xs text-red-400 font-medium">
-                    {t("regressionsDetected", { count: regressionResult.regressions.length })}
-                  </div>
-                  <div className="rounded-lg border border-border overflow-hidden">
-                    <table className="w-full text-xs">
-                      <thead className="bg-muted/50">
-                        <tr>
-                          <th className="px-3 py-2 text-left font-medium">{t("task")}</th>
-                          <th className="px-3 py-2 text-center font-medium">{t("baseline")}</th>
-                          <th className="px-3 py-2 text-center font-medium">{t("current")}</th>
-                          <th className="px-3 py-2 text-center font-medium">{t("significant")}</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {regressionResult.regressions.map((reg, i) => (
-                          <tr key={i} className="border-t border-border">
-                            <td className="px-3 py-2 font-medium">{reg.taskName}</td>
-                            <td className="px-3 py-2 text-center font-mono">{pct(reg.baselinePassRate)}</td>
-                            <td className="px-3 py-2 text-center font-mono text-red-400">{pct(reg.currentPassRate)}</td>
-                            <td className="px-3 py-2 text-center">
-                              {reg.isStatisticallySignificant ? (
-                                <span className="text-red-400 font-medium">{t("significantYes")}</span>
-                              ) : (
-                                <span className="text-muted-foreground">{t("significantNo")}</span>
-                              )}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
       </section>
 
       {/* Modals */}
