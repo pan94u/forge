@@ -14,6 +14,10 @@ import {
   type AssertionConfig,
   type RubricCriterion,
   type TranscriptTurn,
+  type TrendResponse,
+  type RegressionReport,
+  type LifecycleEvalResponse,
+  type Lifecycle,
 } from "@/lib/eval-api";
 
 const DIFFICULTIES: Difficulty[] = ["EASY", "MEDIUM", "HARD", "EXPERT"];
@@ -93,22 +97,34 @@ export default function SuiteDetailPage() {
   const [suite, setSuite] = useState<SuiteResponse | null>(null);
   const [tasks, setTasks] = useState<EvalTask[]>([]);
   const [runs, setRuns] = useState<RunResponse[]>([]);
+  const [trends, setTrends] = useState<TrendResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [showCreateTask, setShowCreateTask] = useState(false);
   const [showCreateRun, setShowCreateRun] = useState(false);
   const [showSubmitTranscript, setShowSubmitTranscript] = useState(false);
 
+  // Regression state
+  const [baselineRunId, setBaselineRunId] = useState("");
+  const [currentRunId, setCurrentRunId] = useState("");
+  const [regressionResult, setRegressionResult] = useState<RegressionReport | null>(null);
+  const [regressionLoading, setRegressionLoading] = useState(false);
+
+  // Task lifecycle expand state
+  const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
+
   const fetchAll = useCallback(async () => {
     setLoading(true);
     try {
-      const [suiteData, tasksData, runsData] = await Promise.all([
+      const [suiteData, tasksData, runsData, trendsData] = await Promise.all([
         evalApi.getSuite(suiteId),
         evalApi.listTasks(suiteId),
         evalApi.listRuns(suiteId),
+        evalApi.getTrends(suiteId).catch(() => null),
       ]);
       setSuite(suiteData);
       setTasks(tasksData);
       setRuns(runsData);
+      setTrends(trendsData);
     } catch {
       // API may not be available
     } finally {
@@ -182,34 +198,56 @@ export default function SuiteDetailPage() {
                   const hasModel = task.graderConfigs.some(g => g.type === "MODEL_BASED");
                   const codeCount = task.graderConfigs.reduce((s, g) => s + (g.type === "CODE_BASED" ? (g.assertions?.length ?? 0) : 0), 0);
                   const modelCount = task.graderConfigs.reduce((s, g) => s + (g.type === "MODEL_BASED" ? (g.rubric?.length ?? 0) : 0), 0);
+                  const isExpanded = expandedTaskId === task.id;
                   return (
-                    <tr key={task.id} className="border-t border-border hover:bg-muted/30">
-                      <td className="px-4 py-2">
-                        <div className="font-medium">{task.name}</div>
-                        {task.description && (
-                          <p className="mt-0.5 text-xs text-muted-foreground truncate max-w-xs">{task.description}</p>
-                        )}
-                      </td>
-                      <td className="px-4 py-2">
-                        <DifficultyBadge difficulty={task.difficulty} />
-                      </td>
-                      <td className="px-4 py-2">
-                        <LifecycleBadge lifecycle={task.tags.find(t => ["CAPABILITY","REGRESSION","SATURATED"].includes(t)) ?? "CAPABILITY"} />
-                      </td>
-                      <td className="px-4 py-2 text-center">
-                        <div className="flex items-center justify-center gap-1">
-                          {hasCode && <span className="rounded bg-cyan-500/15 text-cyan-400 px-1.5 py-0.5 text-[10px]">⚙️ {codeCount}</span>}
-                          {hasModel && <span className="rounded bg-purple-500/15 text-purple-400 px-1.5 py-0.5 text-[10px]">🧠 {modelCount}</span>}
-                        </div>
-                      </td>
-                      <td className="px-4 py-2">
-                        <div className="flex gap-1 flex-wrap">
-                          {task.tags.map(tag => (
-                            <span key={tag} className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">{tag}</span>
-                          ))}
-                        </div>
-                      </td>
-                    </tr>
+                    <React.Fragment key={task.id}>
+                      <tr
+                        className="border-t border-border hover:bg-muted/30 cursor-pointer"
+                        onClick={() => setExpandedTaskId(isExpanded ? null : task.id)}
+                      >
+                        <td className="px-4 py-2">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-muted-foreground text-[10px]">{isExpanded ? "▼" : "▶"}</span>
+                            <div>
+                              <div className="font-medium">{task.name}</div>
+                              {task.description && (
+                                <p className="mt-0.5 text-xs text-muted-foreground truncate max-w-xs">{task.description}</p>
+                              )}
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-4 py-2">
+                          <DifficultyBadge difficulty={task.difficulty} />
+                        </td>
+                        <td className="px-4 py-2">
+                          <LifecycleBadge lifecycle={task.tags.find(tg => ["CAPABILITY","REGRESSION","SATURATED"].includes(tg)) ?? "CAPABILITY"} />
+                        </td>
+                        <td className="px-4 py-2 text-center">
+                          <div className="flex items-center justify-center gap-1">
+                            {hasCode && <span className="rounded bg-cyan-500/15 text-cyan-400 px-1.5 py-0.5 text-[10px]">⚙️ {codeCount}</span>}
+                            {hasModel && <span className="rounded bg-purple-500/15 text-purple-400 px-1.5 py-0.5 text-[10px]">🧠 {modelCount}</span>}
+                          </div>
+                        </td>
+                        <td className="px-4 py-2">
+                          <div className="flex gap-1 flex-wrap">
+                            {task.tags.map(tag => (
+                              <span key={tag} className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">{tag}</span>
+                            ))}
+                          </div>
+                        </td>
+                      </tr>
+                      {isExpanded && (
+                        <tr className="border-t border-border bg-muted/10">
+                          <td colSpan={5} className="px-6 py-4">
+                            <TaskLifecyclePanel
+                              suiteId={suiteId}
+                              task={task}
+                              onUpdated={fetchAll}
+                            />
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
                   );
                 })}
               </tbody>
@@ -280,6 +318,114 @@ export default function SuiteDetailPage() {
             </table>
           </div>
         )}
+      </section>
+
+      {/* Trends section */}
+      <section className="space-y-3">
+        <h2 className="text-base font-semibold">Pass Rate Trends</h2>
+        <TrendChart trends={trends} />
+      </section>
+
+      {/* Regression Detection section */}
+      <section className="space-y-3">
+        <h2 className="text-base font-semibold">Regression Detection</h2>
+        <div className="rounded-lg border border-border p-4 space-y-4">
+          <div className="flex flex-wrap gap-3 items-end">
+            <div>
+              <label className="block text-xs text-muted-foreground mb-1">Baseline Run</label>
+              <select
+                value={baselineRunId}
+                onChange={e => setBaselineRunId(e.target.value)}
+                className="rounded border border-input bg-background px-2 py-1.5 text-xs min-w-[200px]"
+              >
+                <option value="">Select baseline run...</option>
+                {runs.map((run, idx) => (
+                  <option key={run.id} value={run.id}>
+                    Run #{idx + 1} ({run.model ?? "unknown"})
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs text-muted-foreground mb-1">Current Run</label>
+              <select
+                value={currentRunId}
+                onChange={e => setCurrentRunId(e.target.value)}
+                className="rounded border border-input bg-background px-2 py-1.5 text-xs min-w-[200px]"
+              >
+                <option value="">Select current run...</option>
+                {runs.map((run, idx) => (
+                  <option key={run.id} value={run.id}>
+                    Run #{idx + 1} ({run.model ?? "unknown"})
+                  </option>
+                ))}
+              </select>
+            </div>
+            <button
+              onClick={async () => {
+                if (!baselineRunId || !currentRunId) return;
+                setRegressionLoading(true);
+                setRegressionResult(null);
+                try {
+                  const result = await evalApi.detectRegressions(suiteId, currentRunId, baselineRunId);
+                  setRegressionResult(result);
+                } catch {
+                  // ignore
+                } finally {
+                  setRegressionLoading(false);
+                }
+              }}
+              disabled={!baselineRunId || !currentRunId || regressionLoading}
+              className="rounded bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+            >
+              {regressionLoading ? "Comparing..." : "Compare"}
+            </button>
+          </div>
+
+          {regressionResult && (
+            <div className="mt-2">
+              {!regressionResult.hasRegressions ? (
+                <div className="rounded border border-green-500/30 bg-green-500/10 px-4 py-3 text-sm text-green-400">
+                  No regressions detected
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <div className="rounded border border-red-500/30 bg-red-500/10 px-4 py-2 text-xs text-red-400 font-medium">
+                    {regressionResult.regressions.length} regression{regressionResult.regressions.length > 1 ? "s" : ""} detected
+                  </div>
+                  <div className="rounded-lg border border-border overflow-hidden">
+                    <table className="w-full text-xs">
+                      <thead className="bg-muted/50">
+                        <tr>
+                          <th className="px-3 py-2 text-left font-medium">Task</th>
+                          <th className="px-3 py-2 text-center font-medium">Baseline</th>
+                          <th className="px-3 py-2 text-center font-medium">Current</th>
+                          <th className="px-3 py-2 text-center font-medium">Significant?</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {regressionResult.regressions.map((reg, i) => (
+                          <tr key={i} className="border-t border-border">
+                            <td className="px-3 py-2 font-medium">{reg.taskName}</td>
+                            <td className="px-3 py-2 text-center font-mono">{pct(reg.baselinePassRate)}</td>
+                            <td className="px-3 py-2 text-center font-mono text-red-400">{pct(reg.currentPassRate)}</td>
+                            <td className="px-3 py-2 text-center">
+                              {reg.isStatisticallySignificant ? (
+                                <span className="text-red-400 font-medium">Yes</span>
+                              ) : (
+                                <span className="text-muted-foreground">No</span>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       </section>
 
       {/* Modals */}
@@ -966,6 +1112,276 @@ function SubmitTranscriptModal({
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+// ── Trend Chart ───────────────────────────────────────────────────
+
+function TrendChart({ trends }: { trends: TrendResponse | null }) {
+  if (!trends || trends.dataPoints.length < 2) {
+    return (
+      <div className="rounded-lg border border-border py-8 text-center">
+        <p className="text-sm text-muted-foreground">Not enough data for trends</p>
+      </div>
+    );
+  }
+
+  const points = trends.dataPoints;
+  const W = 800;
+  const H = 200;
+  const padL = 40;
+  const padR = 16;
+  const padT = 16;
+  const padB = 28;
+  const chartW = W - padL - padR;
+  const chartH = H - padT - padB;
+  const n = points.length;
+
+  function xOf(i: number) {
+    return padL + (n === 1 ? chartW / 2 : (i / (n - 1)) * chartW);
+  }
+  function yOf(v: number) {
+    return padT + chartH - v * chartH;
+  }
+
+  const passRatePath = points
+    .map((p, i) => `${i === 0 ? "M" : "L"}${xOf(i).toFixed(1)},${yOf(p.passRate).toFixed(1)}`)
+    .join(" ");
+  const avgScorePath = points
+    .map((p, i) => `${i === 0 ? "M" : "L"}${xOf(i).toFixed(1)},${yOf(p.averageScore).toFixed(1)}`)
+    .join(" ");
+
+  const yTicks = [0, 0.25, 0.5, 0.75, 1];
+
+  return (
+    <div className="rounded-lg border border-border p-4">
+      {/* Legend */}
+      <div className="flex gap-4 mb-2 text-xs text-muted-foreground">
+        <div className="flex items-center gap-1.5">
+          <span className="inline-block w-6 h-0.5 bg-green-400 rounded" />
+          Pass Rate
+        </div>
+        <div className="flex items-center gap-1.5">
+          <span className="inline-block w-6 h-0.5 bg-blue-400 rounded" />
+          Avg Score
+        </div>
+      </div>
+      <svg
+        viewBox={`0 0 ${W} ${H}`}
+        className="w-full"
+        style={{ height: 200 }}
+        preserveAspectRatio="xMidYMid meet"
+      >
+        {/* Y grid lines and labels */}
+        {yTicks.map(v => (
+          <g key={v}>
+            <line
+              x1={padL}
+              y1={yOf(v)}
+              x2={W - padR}
+              y2={yOf(v)}
+              stroke="currentColor"
+              strokeOpacity={0.1}
+              strokeWidth={1}
+            />
+            <text
+              x={padL - 4}
+              y={yOf(v) + 3}
+              textAnchor="end"
+              fontSize={9}
+              fill="currentColor"
+              fillOpacity={0.5}
+            >
+              {Math.round(v * 100)}%
+            </text>
+          </g>
+        ))}
+        {/* X axis labels */}
+        {points.map((_, i) => (
+          <text
+            key={i}
+            x={xOf(i)}
+            y={H - 8}
+            textAnchor="middle"
+            fontSize={9}
+            fill="currentColor"
+            fillOpacity={0.5}
+          >
+            {i + 1}
+          </text>
+        ))}
+        {/* Pass Rate line */}
+        <path d={passRatePath} fill="none" stroke="#4ade80" strokeWidth={2} strokeLinejoin="round" />
+        {points.map((p, i) => (
+          <circle key={i} cx={xOf(i)} cy={yOf(p.passRate)} r={3} fill="#4ade80" />
+        ))}
+        {/* Avg Score line */}
+        <path d={avgScorePath} fill="none" stroke="#60a5fa" strokeWidth={2} strokeLinejoin="round" />
+        {points.map((p, i) => (
+          <circle key={i} cx={xOf(i)} cy={yOf(p.averageScore)} r={3} fill="#60a5fa" />
+        ))}
+      </svg>
+    </div>
+  );
+}
+
+// ── Task Lifecycle Panel ─────────────────────────────────────────
+
+function TaskLifecyclePanel({
+  suiteId,
+  task,
+  onUpdated,
+}: {
+  suiteId: string;
+  task: EvalTask;
+  onUpdated: () => void;
+}) {
+  const [data, setData] = useState<LifecycleEvalResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [showGraduate, setShowGraduate] = useState(false);
+  const [targetLifecycle, setTargetLifecycle] = useState<Lifecycle>("SATURATED");
+  const [graduateReason, setGraduateReason] = useState("");
+  const [graduating, setGraduating] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    evalApi.getTaskLifecycle(suiteId, task.id)
+      .then(res => { if (!cancelled) { setData(res); setLoading(false); } })
+      .catch(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [suiteId, task.id]);
+
+  const currentLifecycle = data?.currentLifecycle ?? task.tags.find(tg => ["CAPABILITY","REGRESSION","SATURATED"].includes(tg)) ?? "CAPABILITY";
+  const isSaturated = currentLifecycle === "SATURATED";
+
+  const handleGraduate = async () => {
+    if (!graduateReason.trim()) return;
+    setGraduating(true);
+    try {
+      await evalApi.updateTaskLifecycle(suiteId, task.id, { lifecycle: targetLifecycle, reason: graduateReason });
+      setShowGraduate(false);
+      setGraduateReason("");
+      onUpdated();
+    } catch {
+      // ignore
+    } finally {
+      setGraduating(false);
+    }
+  };
+
+  if (loading) {
+    return <p className="text-xs text-muted-foreground">Loading lifecycle data...</p>;
+  }
+
+  if (isSaturated) {
+    return (
+      <div className="rounded border border-green-500/30 bg-green-500/10 px-4 py-3 text-xs text-green-400">
+        此任务已饱和，建议降低运行频率或创建更难变体
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      {/* Status row */}
+      <div className="flex flex-wrap gap-6 text-xs">
+        <div>
+          <span className="text-muted-foreground">Current Lifecycle: </span>
+          <LifecycleBadge lifecycle={currentLifecycle} />
+        </div>
+        {data && (
+          <div>
+            <span className="text-muted-foreground">Recommended: </span>
+            <LifecycleBadge lifecycle={data.recommendedLifecycle} />
+          </div>
+        )}
+      </div>
+
+      {/* Transition hint */}
+      {data?.shouldTransition && (
+        <div className="rounded border border-green-500/30 bg-green-500/10 px-3 py-2 text-xs text-green-400">
+          Ready to transition — {data.reason}
+        </div>
+      )}
+      {data && !data.shouldTransition && (
+        <p className="text-xs text-muted-foreground">{data.reason}</p>
+      )}
+
+      {/* Metrics */}
+      {data && (
+        <div className="flex gap-6 text-xs">
+          <div>
+            <span className="text-muted-foreground">Consecutive Passing Runs: </span>
+            <span className="font-mono font-medium">{data.consecutivePassingRuns}</span>
+          </div>
+          <div>
+            <span className="text-muted-foreground">Recent Pass Rate: </span>
+            <span className="font-mono font-medium">{pct(data.recentPassRate)}</span>
+          </div>
+          {data.recentPassPowerK != null && (
+            <div>
+              <span className="text-muted-foreground">Pass^k: </span>
+              <span className="font-mono font-medium">{pct(data.recentPassPowerK)}</span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Graduate button */}
+      {!showGraduate && (
+        <button
+          onClick={() => setShowGraduate(true)}
+          className="rounded border border-border px-3 py-1.5 text-xs hover:bg-muted"
+        >
+          Graduate Task...
+        </button>
+      )}
+
+      {/* Graduate confirmation */}
+      {showGraduate && (
+        <div className="rounded-lg border border-border p-4 space-y-3 bg-muted/10">
+          <p className="text-xs font-medium">Confirm Graduation</p>
+          <div className="flex gap-3 flex-wrap">
+            <div>
+              <label className="block text-[10px] text-muted-foreground mb-1">Target Lifecycle</label>
+              <select
+                value={targetLifecycle}
+                onChange={e => setTargetLifecycle(e.target.value as Lifecycle)}
+                className="rounded border border-input bg-background px-2 py-1 text-xs"
+              >
+                <option value="REGRESSION">REGRESSION</option>
+                <option value="SATURATED">SATURATED</option>
+              </select>
+            </div>
+            <div className="flex-1 min-w-[200px]">
+              <label className="block text-[10px] text-muted-foreground mb-1">Reason *</label>
+              <input
+                value={graduateReason}
+                onChange={e => setGraduateReason(e.target.value)}
+                placeholder="Reason for graduation..."
+                className="w-full rounded border border-input bg-background px-2 py-1 text-xs"
+              />
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => { setShowGraduate(false); setGraduateReason(""); }}
+              className="rounded px-3 py-1 text-xs text-muted-foreground hover:bg-muted"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleGraduate}
+              disabled={!graduateReason.trim() || graduating}
+              className="rounded bg-primary px-3 py-1 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+            >
+              {graduating ? "Updating..." : "Confirm Graduate"}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
