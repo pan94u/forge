@@ -274,3 +274,80 @@ export interface VendorSummary {
   diversificationScore: number;
   providerStats: ProviderStat[];
 }
+
+// Phase 21 — Eval Platform types
+
+export interface EvalTask {
+  id: string;
+  name: string;
+  description: string | null;
+  input: string;
+  successCriteria: string;
+  graderConfig: string | null;
+  taskType: string | null;
+  skillTags: string | null;
+  difficulty: string;
+  source: string;
+  orgId: string | null;
+  isActive: boolean;
+  createdAt: string;
+}
+
+export interface EvalRun {
+  id: string;
+  name: string | null;
+  taskIds: string;
+  modelProvider: string | null;
+  modelName: string | null;
+  skillProfile: string | null;
+  passK: number;
+  mode: string;
+  agentAdapter: string;
+  status: string;
+  orgId: string | null;
+  totalTasks: number;
+  completedTasks: number;
+  passCount: number;
+  failCount: number;
+  startedAt: string | null;
+  completedAt: string | null;
+  createdAt: string;
+}
+
+export interface EvalResult {
+  id: string;
+  runId: string;
+  taskId: string;
+  attemptNumber: number;
+  status: string | null;
+  totalScore: number | null;
+  codeGradePassed: boolean | null;
+  modelGradeScore: number | null;
+  durationMs: number | null;
+  errorMessage: string | null;
+  createdAt: string;
+}
+
+export interface CreateEvalTaskRequest {
+  name: string;
+  description?: string;
+  input: string;
+  successCriteria: string;
+  graderConfig?: string;
+  taskType?: string;
+  skillTags?: string;
+  difficulty?: string;
+  orgId?: string;
+}
+
+export interface CreateEvalRunRequest {
+  taskIds: string[];
+  name?: string;
+  modelProvider?: string;
+  modelName?: string;
+  skillProfile?: string;
+  passK?: number;
+  mode?: string;
+  agentAdapter?: string;
+  orgId?: string;
+}

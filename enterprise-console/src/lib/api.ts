@@ -26,6 +26,11 @@ import type {
   ComplianceSummary,
   CapacitySummary,
   VendorSummary,
+  EvalTask,
+  EvalRun,
+  EvalResult,
+  CreateEvalTaskRequest,
+  CreateEvalRunRequest,
 } from "./types";
 
 // Next.js basePath (e.g. "/console") — needed because browser fetch() doesn't
@@ -217,5 +222,48 @@ export const api = {
       fetchJson<CapacitySummary>(`/api/governance/${orgId}/capacity`),
     getVendor: (orgId: string, days = 30) =>
       fetchJson<VendorSummary>(`/api/governance/${orgId}/vendor?days=${days}`),
+  },
+
+  eval: {
+    listTasks: (orgId?: string, type?: string, difficulty?: string) => {
+      const params = new URLSearchParams();
+      if (orgId) params.set("orgId", orgId);
+      if (type) params.set("type", type);
+      if (difficulty) params.set("difficulty", difficulty);
+      const qs = params.toString();
+      return fetchJson<EvalTask[]>(`/api/eval/tasks${qs ? `?${qs}` : ""}`);
+    },
+    getTask: (id: string) => fetchJson<EvalTask>(`/api/eval/tasks/${id}`),
+    createTask: (req: CreateEvalTaskRequest) =>
+      fetchJson<EvalTask>("/api/eval/tasks", {
+        method: "POST",
+        body: JSON.stringify(req),
+      }),
+    updateTask: (id: string, req: CreateEvalTaskRequest) =>
+      fetchJson<EvalTask>(`/api/eval/tasks/${id}`, {
+        method: "PUT",
+        body: JSON.stringify(req),
+      }),
+    deleteTask: (id: string) =>
+      fetchJson<{ deleted: boolean }>(`/api/eval/tasks/${id}`, { method: "DELETE" }),
+    importYaml: (yamlContents: string[], orgId?: string) =>
+      fetchJson<{ imported: number; skipped: number; errors: string[] }>(
+        "/api/eval/tasks/import-yaml",
+        { method: "POST", body: JSON.stringify({ yamlContents, orgId }) }
+      ),
+    listRuns: (orgId?: string) => {
+      const qs = orgId ? `?orgId=${orgId}` : "";
+      return fetchJson<EvalRun[]>(`/api/eval/runs${qs}`);
+    },
+    getRun: (id: string) => fetchJson<EvalRun>(`/api/eval/runs/${id}`),
+    getRunResults: (runId: string) =>
+      fetchJson<EvalResult[]>(`/api/eval/runs/${runId}/results`),
+    createRun: (req: CreateEvalRunRequest) =>
+      fetchJson<EvalRun>("/api/eval/runs", {
+        method: "POST",
+        body: JSON.stringify(req),
+      }),
+    cancelRun: (id: string) =>
+      fetchJson<EvalRun>(`/api/eval/runs/${id}/cancel`, { method: "POST" }),
   },
 };

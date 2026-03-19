@@ -20,6 +20,7 @@ import {
   ClipboardList,
   Gauge,
   ShieldCheck,
+  FlaskConical,
 } from "lucide-react";
 import { Link, useRouter } from "@/navigation";
 import { api } from "@/lib/api";
@@ -219,6 +220,13 @@ export default function OrgDetailPage() {
           >
             <ShieldCheck size={14} />
             Governance
+          </Link>
+          <Link
+            href={`/orgs/${id}/eval`}
+            className="flex items-center gap-1.5 hover:text-primary transition-colors"
+          >
+            <FlaskConical size={14} />
+            Eval
           </Link>
           {isAdmin && (
             <Link
