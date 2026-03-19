@@ -172,13 +172,13 @@ export default function SuiteDetailPage() {
             onClick={() => setShowCreateTask(true)}
             className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90"
           >
-            + Add Task
+            + {t("addTask")}
           </button>
         </div>
 
         {tasks.length === 0 ? (
           <div className="rounded-lg border border-border py-8 text-center">
-            <p className="text-sm text-muted-foreground">No tasks yet. Add the first task to get started.</p>
+            <p className="text-sm text-muted-foreground">{t("noTasksYet")}</p>
           </div>
         ) : (
           <div className="rounded-lg border border-border overflow-hidden">
@@ -186,10 +186,10 @@ export default function SuiteDetailPage() {
               <thead className="bg-muted/50">
                 <tr>
                   <th className="px-4 py-2 text-left font-medium">{t("name")}</th>
-                  <th className="px-4 py-2 text-left font-medium">Difficulty</th>
+                  <th className="px-4 py-2 text-left font-medium">{t("difficulty")}</th>
                   <th className="px-4 py-2 text-left font-medium">{t("lifecycle")}</th>
-                  <th className="px-4 py-2 text-center font-medium">Graders</th>
-                  <th className="px-4 py-2 text-left font-medium">Tags</th>
+                  <th className="px-4 py-2 text-center font-medium">{t("graders")}</th>
+                  <th className="px-4 py-2 text-left font-medium">{t("tags")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -266,21 +266,21 @@ export default function SuiteDetailPage() {
               className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90"
               disabled={tasks.length === 0}
             >
-              + Run Eval
+              + {t("runEval")}
             </button>
             <button
               onClick={() => setShowSubmitTranscript(true)}
               className="rounded-md border border-border px-3 py-1.5 text-xs font-medium hover:bg-muted"
               disabled={tasks.length === 0}
             >
-              + Manual Trial
+              + {t("manualTrial")}
             </button>
           </div>
         </div>
 
         {runs.length === 0 ? (
           <div className="rounded-lg border border-border py-8 text-center">
-            <p className="text-sm text-muted-foreground">No runs yet. Execute a new run to evaluate this suite.</p>
+            <p className="text-sm text-muted-foreground">{t("noRunsYet")}</p>
           </div>
         ) : (
           <div className="rounded-lg border border-border overflow-hidden">
@@ -288,13 +288,13 @@ export default function SuiteDetailPage() {
               <thead className="bg-muted/50">
                 <tr>
                   <th className="px-4 py-2 text-center font-medium">#</th>
-                  <th className="px-4 py-2 text-left font-medium">Status</th>
-                  <th className="px-4 py-2 text-left font-medium">Model</th>
+                  <th className="px-4 py-2 text-left font-medium">{t("status")}</th>
+                  <th className="px-4 py-2 text-left font-medium">{t("model")}</th>
                   <th className="px-4 py-2 text-center font-medium">k</th>
-                  <th className="px-4 py-2 text-center font-medium">Pass Rate</th>
-                  <th className="px-4 py-2 text-center font-medium">Pass@k</th>
-                  <th className="px-4 py-2 text-center font-medium">Pass^k</th>
-                  <th className="px-4 py-2 text-center font-medium">Duration</th>
+                  <th className="px-4 py-2 text-center font-medium">{t("passRate")}</th>
+                  <th className="px-4 py-2 text-center font-medium">{t("passAtK")}</th>
+                  <th className="px-4 py-2 text-center font-medium">{t("passPowerK")}</th>
+                  <th className="px-4 py-2 text-center font-medium">{t("duration")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -322,23 +322,23 @@ export default function SuiteDetailPage() {
 
       {/* Trends section */}
       <section className="space-y-3">
-        <h2 className="text-base font-semibold">Pass Rate Trends</h2>
+        <h2 className="text-base font-semibold">{t("passRateTrends")}</h2>
         <TrendChart trends={trends} />
       </section>
 
       {/* Regression Detection section */}
       <section className="space-y-3">
-        <h2 className="text-base font-semibold">Regression Detection</h2>
+        <h2 className="text-base font-semibold">{t("regressionDetection")}</h2>
         <div className="rounded-lg border border-border p-4 space-y-4">
           <div className="flex flex-wrap gap-3 items-end">
             <div>
-              <label className="block text-xs text-muted-foreground mb-1">Baseline Run</label>
+              <label className="block text-xs text-muted-foreground mb-1">{t("baselineRun")}</label>
               <select
                 value={baselineRunId}
                 onChange={e => setBaselineRunId(e.target.value)}
                 className="rounded border border-input bg-background px-2 py-1.5 text-xs min-w-[200px]"
               >
-                <option value="">Select baseline run...</option>
+                <option value="">{t("selectBaselineRun")}</option>
                 {runs.map((run, idx) => (
                   <option key={run.id} value={run.id}>
                     Run #{idx + 1} ({run.model ?? "unknown"})
@@ -347,13 +347,13 @@ export default function SuiteDetailPage() {
               </select>
             </div>
             <div>
-              <label className="block text-xs text-muted-foreground mb-1">Current Run</label>
+              <label className="block text-xs text-muted-foreground mb-1">{t("currentRun")}</label>
               <select
                 value={currentRunId}
                 onChange={e => setCurrentRunId(e.target.value)}
                 className="rounded border border-input bg-background px-2 py-1.5 text-xs min-w-[200px]"
               >
-                <option value="">Select current run...</option>
+                <option value="">{t("selectCurrentRun")}</option>
                 {runs.map((run, idx) => (
                   <option key={run.id} value={run.id}>
                     Run #{idx + 1} ({run.model ?? "unknown"})
@@ -378,7 +378,7 @@ export default function SuiteDetailPage() {
               disabled={!baselineRunId || !currentRunId || regressionLoading}
               className="rounded bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
             >
-              {regressionLoading ? "Comparing..." : "Compare"}
+              {regressionLoading ? t("comparing") : t("compare")}
             </button>
           </div>
 
@@ -386,21 +386,21 @@ export default function SuiteDetailPage() {
             <div className="mt-2">
               {!regressionResult.hasRegressions ? (
                 <div className="rounded border border-green-500/30 bg-green-500/10 px-4 py-3 text-sm text-green-400">
-                  No regressions detected
+                  {t("noRegressions")}
                 </div>
               ) : (
                 <div className="space-y-2">
                   <div className="rounded border border-red-500/30 bg-red-500/10 px-4 py-2 text-xs text-red-400 font-medium">
-                    {regressionResult.regressions.length} regression{regressionResult.regressions.length > 1 ? "s" : ""} detected
+                    {t("regressionsDetected", { count: regressionResult.regressions.length })}
                   </div>
                   <div className="rounded-lg border border-border overflow-hidden">
                     <table className="w-full text-xs">
                       <thead className="bg-muted/50">
                         <tr>
-                          <th className="px-3 py-2 text-left font-medium">Task</th>
-                          <th className="px-3 py-2 text-center font-medium">Baseline</th>
-                          <th className="px-3 py-2 text-center font-medium">Current</th>
-                          <th className="px-3 py-2 text-center font-medium">Significant?</th>
+                          <th className="px-3 py-2 text-left font-medium">{t("task")}</th>
+                          <th className="px-3 py-2 text-center font-medium">{t("baseline")}</th>
+                          <th className="px-3 py-2 text-center font-medium">{t("current")}</th>
+                          <th className="px-3 py-2 text-center font-medium">{t("significant")}</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -411,9 +411,9 @@ export default function SuiteDetailPage() {
                             <td className="px-3 py-2 text-center font-mono text-red-400">{pct(reg.currentPassRate)}</td>
                             <td className="px-3 py-2 text-center">
                               {reg.isStatisticallySignificant ? (
-                                <span className="text-red-400 font-medium">Yes</span>
+                                <span className="text-red-400 font-medium">{t("significantYes")}</span>
                               ) : (
-                                <span className="text-muted-foreground">No</span>
+                                <span className="text-muted-foreground">{t("significantNo")}</span>
                               )}
                             </td>
                           </tr>
@@ -516,6 +516,7 @@ function GraderEditor({
   onChange: (g: GraderDraft) => void;
   onRemove: () => void;
 }) {
+  const t = useTranslations("evalDashboard");
   const inputCls = "rounded border border-input bg-background px-2 py-1 text-xs";
 
   if (grader.type === "CODE_BASED") {
@@ -523,7 +524,7 @@ function GraderEditor({
       <div className="rounded-lg border border-border bg-muted/10 p-3 space-y-2">
         <div className="flex items-center justify-between">
           <span className="text-xs font-medium text-cyan-400">CODE-BASED</span>
-          <button type="button" onClick={onRemove} className="text-xs text-muted-foreground hover:text-destructive">Remove</button>
+          <button type="button" onClick={onRemove} className="text-xs text-muted-foreground hover:text-destructive">{t("remove")}</button>
         </div>
         <div className="space-y-1.5">
           {grader.assertions.map((a, idx) => (
@@ -572,7 +573,7 @@ function GraderEditor({
           onClick={() => onChange({ ...grader, assertions: [...grader.assertions, makeDefaultAssertion()] })}
           className="text-xs text-muted-foreground hover:text-foreground"
         >
-          + Add Assertion
+          + {t("addAssertion")}
         </button>
       </div>
     );
@@ -583,10 +584,10 @@ function GraderEditor({
     <div className="rounded-lg border border-border bg-muted/10 p-3 space-y-2">
       <div className="flex items-center justify-between">
         <span className="text-xs font-medium text-purple-400">MODEL-BASED</span>
-        <button type="button" onClick={onRemove} className="text-xs text-muted-foreground hover:text-destructive">Remove</button>
+        <button type="button" onClick={onRemove} className="text-xs text-muted-foreground hover:text-destructive">{t("remove")}</button>
       </div>
       <div>
-        <label className="block text-[10px] text-muted-foreground mb-0.5">Judge Model</label>
+        <label className="block text-[10px] text-muted-foreground mb-0.5">{t("judgeModel")}</label>
         <input
           value={grader.model}
           onChange={e => onChange({ ...grader, model: e.target.value })}
@@ -644,7 +645,7 @@ function GraderEditor({
         onClick={() => onChange({ ...grader, rubric: [...grader.rubric, makeDefaultCriterion()] })}
         className="text-xs text-muted-foreground hover:text-foreground"
       >
-        + Add Criterion
+        + {t("addCriterion")}
       </button>
     </div>
   );
@@ -721,7 +722,7 @@ function CreateTaskModal({
         onSubmit={handleSubmit}
         className="w-full max-w-2xl rounded-lg border border-border bg-card p-6 space-y-4 shadow-lg max-h-[90vh] overflow-y-auto"
       >
-        <h2 className="text-lg font-semibold">Add Task</h2>
+        <h2 className="text-lg font-semibold">{t("addTask")}</h2>
 
         {/* Basic info */}
         <div>
@@ -735,7 +736,7 @@ function CreateTaskModal({
         </div>
 
         <div>
-          <label className="block text-xs text-muted-foreground mb-1">Prompt *</label>
+          <label className="block text-xs text-muted-foreground mb-1">{t("prompt")} *</label>
           <textarea
             value={prompt}
             onChange={e => setPrompt(e.target.value)}
@@ -746,7 +747,7 @@ function CreateTaskModal({
         </div>
 
         <div>
-          <label className="block text-xs text-muted-foreground mb-1">Difficulty</label>
+          <label className="block text-xs text-muted-foreground mb-1">{t("difficulty")}</label>
           <select
             value={difficulty}
             onChange={e => setDifficulty(e.target.value as Difficulty)}
@@ -759,14 +760,14 @@ function CreateTaskModal({
         {/* Graders */}
         <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <label className="text-xs text-muted-foreground">Graders ({graders.length})</label>
+            <label className="text-xs text-muted-foreground">{t("graders")} ({graders.length})</label>
             <div className="relative">
               <button
                 type="button"
                 onClick={() => setShowAddMenu(prev => !prev)}
                 className="rounded border border-dashed border-border px-2 py-1 text-xs text-muted-foreground hover:text-foreground hover:border-foreground/30"
               >
-                + Add Grader
+                + {t("addGrader")}
               </button>
               {showAddMenu && (
                 <div className="absolute right-0 top-full mt-1 z-10 rounded border border-border bg-card shadow-lg min-w-[160px]">
@@ -777,7 +778,7 @@ function CreateTaskModal({
                       onClick={() => addGrader(type)}
                       className="w-full px-3 py-2 text-left text-xs hover:bg-muted"
                     >
-                      {type === "CODE_BASED" ? "Code-Based" : "Model-Based"}
+                      {type === "CODE_BASED" ? t("graderCodeBased") : t("graderModelBased")}
                     </button>
                   ))}
                 </div>
@@ -796,7 +797,7 @@ function CreateTaskModal({
 
           {graders.length === 0 && (
             <div className="rounded border border-dashed border-border py-4 text-center text-xs text-muted-foreground">
-              No graders added. Click &quot;Add Grader&quot; to add evaluation criteria.
+              {t("noGradersHint")}
             </div>
           )}
         </div>
@@ -858,10 +859,10 @@ function CreateRunModal({
         onSubmit={handleSubmit}
         className="w-full max-w-sm rounded-lg border border-border bg-card p-6 space-y-4 shadow-lg"
       >
-        <h2 className="text-lg font-semibold">Execute Run</h2>
+        <h2 className="text-lg font-semibold">{t("executeRun")}</h2>
 
         <div>
-          <label className="block text-xs text-muted-foreground mb-1">Trials per Task</label>
+          <label className="block text-xs text-muted-foreground mb-1">{t("trialsPerTask")}</label>
           <input
             type="number"
             min={1}
@@ -873,7 +874,7 @@ function CreateRunModal({
         </div>
 
         <div>
-          <label className="block text-xs text-muted-foreground mb-1">Model</label>
+          <label className="block text-xs text-muted-foreground mb-1">{t("model")}</label>
           <input
             value={model}
             onChange={e => setModel(e.target.value)}
@@ -891,7 +892,7 @@ function CreateRunModal({
             disabled={submitting}
             className="rounded bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
           >
-            {submitting ? "Submitting..." : "Run Eval"}
+            {submitting ? t("submitting") : t("runEval")}
           </button>
         </div>
       </form>
@@ -919,6 +920,7 @@ function SubmitTranscriptModal({
   onClose: () => void;
   onCreated?: () => void;
 }) {
+  const t = useTranslations("evalDashboard");
   const [selectedTaskId, setSelectedTaskId] = useState(tasks[0]?.id ?? "");
   const [transcriptJson, setTranscriptJson] = useState(
     JSON.stringify(
@@ -988,13 +990,13 @@ function SubmitTranscriptModal({
         onClick={e => e.stopPropagation()}
         className="w-full max-w-2xl rounded-lg border border-border bg-card p-6 space-y-4 shadow-lg max-h-[90vh] overflow-y-auto"
       >
-        <h2 className="text-lg font-semibold">Manual Trial — Submit Agent Transcript</h2>
-        <p className="text-xs text-muted-foreground">Paste an Agent&apos;s conversation to create a Trial with grading. The result will appear in the Runs list.</p>
+        <h2 className="text-lg font-semibold">{t("manualTrialTitle")}</h2>
+        <p className="text-xs text-muted-foreground">{t("manualTrialDesc")}</p>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* Task selector */}
           <div>
-            <label className="block text-xs text-muted-foreground mb-1">Evaluate against task</label>
+            <label className="block text-xs text-muted-foreground mb-1">{t("evaluateAgainstTask")}</label>
             <select
               value={selectedTaskId}
               onChange={e => { setSelectedTaskId(e.target.value); setResult(null); }}
@@ -1009,7 +1011,7 @@ function SubmitTranscriptModal({
           {/* Show task criteria */}
           {selectedTask && (
             <div className="rounded border border-border bg-muted/20 p-3 space-y-1">
-              <div className="text-xs font-medium text-muted-foreground">Grading criteria ({selectedTask.graderConfigs.reduce((s, g) => s + (g.assertions?.length ?? 0), 0)} assertions):</div>
+              <div className="text-xs font-medium text-muted-foreground">{t("gradingCriteria", { count: selectedTask.graderConfigs.reduce((s, g) => s + (g.assertions?.length ?? 0), 0) })}</div>
               {selectedTask.graderConfigs.map((g, gi) =>
                 g.assertions?.map((a, ai) => (
                   <div key={`${gi}-${ai}`} className="text-xs text-muted-foreground flex gap-2">
@@ -1024,7 +1026,7 @@ function SubmitTranscriptModal({
           {/* Transcript JSON */}
           <div>
             <label className="block text-xs text-muted-foreground mb-1">
-              Agent transcript (JSON array of turns)
+              {t("transcriptJson")}
               {jsonError && <span className="ml-2 text-red-400">{jsonError}</span>}
             </label>
             <textarea
@@ -1037,14 +1039,14 @@ function SubmitTranscriptModal({
 
           <div className="flex justify-end gap-2">
             <button type="button" onClick={onClose} className="rounded px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted">
-              Close
+              {t("close")}
             </button>
             <button
               type="submit"
               disabled={submitting || !!jsonError || !selectedTaskId}
               className="rounded bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
             >
-              {submitting ? "Evaluating..." : "Evaluate"}
+              {submitting ? t("evaluating") : t("evaluate")}
             </button>
           </div>
         </form>
@@ -1052,7 +1054,7 @@ function SubmitTranscriptModal({
         {/* Results */}
         {result && (
           <div className="border-t border-border pt-4 space-y-4">
-            <h3 className="text-sm font-semibold">Evaluation Result</h3>
+            <h3 className="text-sm font-semibold">{t("evaluationResult")}</h3>
             {result.map((grade, i) => {
               const isModelBased = !grade.assertionResults || grade.assertionResults.length === 0;
               const graderLabel = isModelBased ? "MODEL-BASED" : "CODE-BASED";
@@ -1066,7 +1068,7 @@ function SubmitTranscriptModal({
                       {graderIcon} {graderLabel}
                     </span>
                     <span className="text-[10px] text-muted-foreground">
-                      {isModelBased ? "LLM judge evaluates quality, clarity, and reasoning" : "Deterministic rule checks on output and tool usage"}
+                      {isModelBased ? t("llmJudgeHint") : t("codeRuleHint")}
                     </span>
                   </div>
 
@@ -1080,7 +1082,7 @@ function SubmitTranscriptModal({
                   {/* Model-Based: show explanation as main content */}
                   {isModelBased && grade.explanation && (
                     <div className="rounded bg-muted/20 p-3 text-xs text-muted-foreground leading-relaxed">
-                      <div className="text-[10px] text-purple-400 font-medium mb-1">Judge Assessment:</div>
+                      <div className="text-[10px] text-purple-400 font-medium mb-1">{t("judgeAssessment")}</div>
                       {grade.explanation}
                     </div>
                   )}
@@ -1119,10 +1121,11 @@ function SubmitTranscriptModal({
 // ── Trend Chart ───────────────────────────────────────────────────
 
 function TrendChart({ trends }: { trends: TrendResponse | null }) {
+  const t = useTranslations("evalDashboard");
   if (!trends || trends.dataPoints.length < 2) {
     return (
       <div className="rounded-lg border border-border py-8 text-center">
-        <p className="text-sm text-muted-foreground">Not enough data for trends</p>
+        <p className="text-sm text-muted-foreground">{t("notEnoughData")}</p>
       </div>
     );
   }
@@ -1160,11 +1163,11 @@ function TrendChart({ trends }: { trends: TrendResponse | null }) {
       <div className="flex gap-4 mb-2 text-xs text-muted-foreground">
         <div className="flex items-center gap-1.5">
           <span className="inline-block w-6 h-0.5 bg-green-400 rounded" />
-          Pass Rate
+          {t("passRateLegend")}
         </div>
         <div className="flex items-center gap-1.5">
           <span className="inline-block w-6 h-0.5 bg-blue-400 rounded" />
-          Avg Score
+          {t("avgScoreLegend")}
         </div>
       </div>
       <svg
@@ -1237,6 +1240,7 @@ function TaskLifecyclePanel({
   task: EvalTask;
   onUpdated: () => void;
 }) {
+  const t = useTranslations("evalDashboard");
   const [data, setData] = useState<LifecycleEvalResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [showGraduate, setShowGraduate] = useState(false);
@@ -1272,13 +1276,13 @@ function TaskLifecyclePanel({
   };
 
   if (loading) {
-    return <p className="text-xs text-muted-foreground">Loading lifecycle data...</p>;
+    return <p className="text-xs text-muted-foreground">{t("loadingLifecycle")}</p>;
   }
 
   if (isSaturated) {
     return (
       <div className="rounded border border-green-500/30 bg-green-500/10 px-4 py-3 text-xs text-green-400">
-        此任务已饱和，建议降低运行频率或创建更难变体
+        {t("taskSaturated")}
       </div>
     );
   }
@@ -1288,12 +1292,12 @@ function TaskLifecyclePanel({
       {/* Status row */}
       <div className="flex flex-wrap gap-6 text-xs">
         <div>
-          <span className="text-muted-foreground">Current Lifecycle: </span>
+          <span className="text-muted-foreground">{t("currentLifecycle")}</span>
           <LifecycleBadge lifecycle={currentLifecycle} />
         </div>
         {data && (
           <div>
-            <span className="text-muted-foreground">Recommended: </span>
+            <span className="text-muted-foreground">{t("recommended")}</span>
             <LifecycleBadge lifecycle={data.recommendedLifecycle} />
           </div>
         )}
@@ -1302,7 +1306,7 @@ function TaskLifecyclePanel({
       {/* Transition hint */}
       {data?.shouldTransition && (
         <div className="rounded border border-green-500/30 bg-green-500/10 px-3 py-2 text-xs text-green-400">
-          Ready to transition — {data.reason}
+          {t("readyToTransition")}{data.reason}
         </div>
       )}
       {data && !data.shouldTransition && (
@@ -1313,16 +1317,16 @@ function TaskLifecyclePanel({
       {data && (
         <div className="flex gap-6 text-xs">
           <div>
-            <span className="text-muted-foreground">Consecutive Passing Runs: </span>
+            <span className="text-muted-foreground">{t("consecutivePassingRuns")}</span>
             <span className="font-mono font-medium">{data.consecutivePassingRuns}</span>
           </div>
           <div>
-            <span className="text-muted-foreground">Recent Pass Rate: </span>
+            <span className="text-muted-foreground">{t("recentPassRate")}</span>
             <span className="font-mono font-medium">{pct(data.recentPassRate)}</span>
           </div>
           {data.recentPassPowerK != null && (
             <div>
-              <span className="text-muted-foreground">Pass^k: </span>
+              <span className="text-muted-foreground">{t("passPowerK")}: </span>
               <span className="font-mono font-medium">{pct(data.recentPassPowerK)}</span>
             </div>
           )}
@@ -1335,17 +1339,17 @@ function TaskLifecyclePanel({
           onClick={() => setShowGraduate(true)}
           className="rounded border border-border px-3 py-1.5 text-xs hover:bg-muted"
         >
-          Graduate Task...
+          {t("graduateTask")}
         </button>
       )}
 
       {/* Graduate confirmation */}
       {showGraduate && (
         <div className="rounded-lg border border-border p-4 space-y-3 bg-muted/10">
-          <p className="text-xs font-medium">Confirm Graduation</p>
+          <p className="text-xs font-medium">{t("confirmGraduation")}</p>
           <div className="flex gap-3 flex-wrap">
             <div>
-              <label className="block text-[10px] text-muted-foreground mb-1">Target Lifecycle</label>
+              <label className="block text-[10px] text-muted-foreground mb-1">{t("targetLifecycle")}</label>
               <select
                 value={targetLifecycle}
                 onChange={e => setTargetLifecycle(e.target.value as Lifecycle)}
@@ -1356,11 +1360,11 @@ function TaskLifecyclePanel({
               </select>
             </div>
             <div className="flex-1 min-w-[200px]">
-              <label className="block text-[10px] text-muted-foreground mb-1">Reason *</label>
+              <label className="block text-[10px] text-muted-foreground mb-1">{t("reason")} *</label>
               <input
                 value={graduateReason}
                 onChange={e => setGraduateReason(e.target.value)}
-                placeholder="Reason for graduation..."
+                placeholder={t("reasonPlaceholder")}
                 className="w-full rounded border border-input bg-background px-2 py-1 text-xs"
               />
             </div>
@@ -1370,14 +1374,14 @@ function TaskLifecyclePanel({
               onClick={() => { setShowGraduate(false); setGraduateReason(""); }}
               className="rounded px-3 py-1 text-xs text-muted-foreground hover:bg-muted"
             >
-              Cancel
+              {t("cancel")}
             </button>
             <button
               onClick={handleGraduate}
               disabled={!graduateReason.trim() || graduating}
               className="rounded bg-primary px-3 py-1 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
             >
-              {graduating ? "Updating..." : "Confirm Graduate"}
+              {graduating ? t("updating") : t("confirmGraduate")}
             </button>
           </div>
         </div>

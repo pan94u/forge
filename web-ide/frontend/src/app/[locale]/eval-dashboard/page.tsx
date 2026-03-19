@@ -105,7 +105,7 @@ export default function EvalDashboardPage() {
           <div className="rounded-lg border border-border bg-card p-4 hover:bg-muted/30 transition-colors">
             <div className="text-xs text-muted-foreground">{t("pendingReviews")}</div>
             <div className="mt-1 text-2xl font-semibold">{pendingReviews}</div>
-            {pendingReviews > 0 && <div className="mt-1 text-[10px] text-yellow-400">Click to review →</div>}
+            {pendingReviews > 0 && <div className="mt-1 text-[10px] text-yellow-400">{t("clickToReview")}</div>}
           </div>
         </Link>
       </div>
@@ -278,7 +278,7 @@ function CreateSuiteModal({ onClose, onCreated }: { onClose: () => void; onCreat
         </div>
 
         <div>
-          <label className="block text-xs text-muted-foreground mb-1">{t("tags")} (comma separated)</label>
+          <label className="block text-xs text-muted-foreground mb-1">{t("tags")} ({t("tagsHint")})</label>
           <input
             value={tags}
             onChange={e => setTags(e.target.value)}

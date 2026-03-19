@@ -63,11 +63,11 @@ export default function ReviewsPage() {
   }, [fetchData]);
 
   const kappaLabel = (k: number): string => {
-    if (k >= 0.8) return "almost perfect";
-    if (k >= 0.6) return "substantial";
-    if (k >= 0.4) return "moderate";
-    if (k >= 0.2) return "fair";
-    return "slight/poor";
+    if (k >= 0.8) return t("kappaAlmostPerfect");
+    if (k >= 0.6) return t("kappaSubstantial");
+    if (k >= 0.4) return t("kappaModerate");
+    if (k >= 0.2) return t("kappaFair");
+    return t("kappaSlight");
   };
 
   if (loading) {
@@ -85,45 +85,45 @@ export default function ReviewsPage() {
     <div className="min-h-screen bg-background p-6 space-y-8 max-w-6xl mx-auto">
       {/* Breadcrumb */}
       <div className="flex items-center gap-1 text-xs text-muted-foreground">
-        <Link href="/eval-dashboard" className="hover:underline">Eval Dashboard</Link>
+        <Link href="/eval-dashboard" className="hover:underline">{t("title")}</Link>
         <span>/</span>
-        <span>Human Reviews</span>
+        <span>{t("humanReviews")}</span>
       </div>
 
-      <h1 className="text-xl font-semibold">Human Reviews &amp; Calibration</h1>
+      <h1 className="text-xl font-semibold">{t("humanReviews")}</h1>
       <p className="text-xs text-muted-foreground">
-        Review auto-generated grades, submit your expert assessment, and monitor how well AI scoring aligns with human judgment.
+        {t("humanReviewsDesc")}
       </p>
 
       {/* Calibration Metrics */}
       {calibration && (
         <section className="space-y-3">
-          <h2 className="text-base font-semibold">Calibration Metrics</h2>
+          <h2 className="text-base font-semibold">{t("calibrationMetrics")}</h2>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <MetricCard
-              label="Total Reviews"
+              label={t("totalReviews")}
               value={String(calibration.totalReviews)}
             />
             <MetricCard
-              label="Agreement Rate"
+              label={t("agreementRate")}
               value={calibration.totalReviews > 0 ? `${(calibration.agreementRate * 100).toFixed(0)}%` : "-"}
-              hint="Auto & human both pass or both fail"
+              hint={t("agreementRateHint")}
             />
             <MetricCard
-              label="Cohen's Kappa"
+              label={t("cohensKappa")}
               value={calibration.totalReviews > 0 ? calibration.cohensKappa.toFixed(2) : "-"}
               hint={calibration.totalReviews > 0 ? kappaLabel(calibration.cohensKappa) : undefined}
             />
             <MetricCard
-              label="Score Delta"
+              label={t("scoreDelta")}
               value={calibration.totalReviews > 0 ? `${calibration.scoreDelta >= 0 ? "+" : ""}${calibration.scoreDelta.toFixed(2)}` : "-"}
-              hint="human avg − auto avg"
+              hint={t("scoreDeltaHint")}
             />
           </div>
           {calibration.totalReviews > 0 && (
             <div className="flex gap-6 text-xs text-muted-foreground">
-              <span>Auto avg: <span className="font-mono text-foreground">{calibration.averageAutoScore.toFixed(2)}</span></span>
-              <span>Human avg: <span className="font-mono text-foreground">{calibration.averageHumanScore.toFixed(2)}</span></span>
+              <span>{t("autoAvg")}<span className="font-mono text-foreground">{calibration.averageAutoScore.toFixed(2)}</span></span>
+              <span>{t("humanAvg")}<span className="font-mono text-foreground">{calibration.averageHumanScore.toFixed(2)}</span></span>
             </div>
           )}
         </section>
@@ -131,22 +131,22 @@ export default function ReviewsPage() {
 
       {/* Pending Reviews Queue */}
       <section className="space-y-3">
-        <h2 className="text-base font-semibold">Pending Reviews ({pendingItems.length})</h2>
+        <h2 className="text-base font-semibold">{t("pendingReviewsSection", { count: pendingItems.length })}</h2>
 
         {pendingItems.length === 0 ? (
           <div className="rounded-lg border border-border py-8 text-center">
-            <p className="text-sm text-muted-foreground">No pending reviews. All caught up!</p>
+            <p className="text-sm text-muted-foreground">{t("noPendingReviews")}</p>
           </div>
         ) : (
           <div className="rounded-lg border border-border overflow-hidden">
             <table className="w-full text-sm">
               <thead className="bg-muted/50">
                 <tr>
-                  <th className="px-4 py-2 text-left font-medium">Task</th>
-                  <th className="px-4 py-2 text-center font-medium">Auto Score</th>
-                  <th className="px-4 py-2 text-center font-medium">Confidence</th>
-                  <th className="px-4 py-2 text-left font-medium">Trigger Reason</th>
-                  <th className="px-4 py-2 text-center font-medium">Action</th>
+                  <th className="px-4 py-2 text-left font-medium">{t("colTask")}</th>
+                  <th className="px-4 py-2 text-center font-medium">{t("colAutoScore")}</th>
+                  <th className="px-4 py-2 text-center font-medium">{t("colConfidence")}</th>
+                  <th className="px-4 py-2 text-left font-medium">{t("colTriggerReason")}</th>
+                  <th className="px-4 py-2 text-center font-medium">{t("colAction")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -164,7 +164,7 @@ export default function ReviewsPage() {
                           onClick={() => setReviewingId(reviewingId === item.gradeId ? null : item.gradeId)}
                           className="rounded bg-primary px-2 py-1 text-[10px] font-medium text-primary-foreground hover:bg-primary/90"
                         >
-                          {reviewingId === item.gradeId ? "Cancel" : "Review"}
+                          {reviewingId === item.gradeId ? t("cancelReview") : t("review")}
                         </button>
                       </td>
                     </tr>
@@ -193,14 +193,14 @@ export default function ReviewsPage() {
       {/* Completed Reviews */}
       {completedItems.length > 0 && (
         <section className="space-y-3">
-          <h2 className="text-base font-semibold">Completed Reviews ({completedItems.length})</h2>
+          <h2 className="text-base font-semibold">{t("completedReviews", { count: completedItems.length })}</h2>
           <div className="rounded-lg border border-border overflow-hidden">
             <table className="w-full text-sm">
               <thead className="bg-muted/50">
                 <tr>
-                  <th className="px-4 py-2 text-left font-medium">Task</th>
-                  <th className="px-4 py-2 text-center font-medium">Auto Score</th>
-                  <th className="px-4 py-2 text-center font-medium">Status</th>
+                  <th className="px-4 py-2 text-left font-medium">{t("colTask")}</th>
+                  <th className="px-4 py-2 text-center font-medium">{t("colAutoScore")}</th>
+                  <th className="px-4 py-2 text-center font-medium">{t("colStatus")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -231,6 +231,7 @@ function ReviewForm({
   autoScore: number;
   onSubmitted: () => void;
 }) {
+  const t = useTranslations("evalDashboard");
   const [score, setScore] = useState(String(autoScore.toFixed(2)));
   const [passed, setPassed] = useState(autoScore >= 0.5);
   const [explanation, setExplanation] = useState("");
@@ -259,12 +260,12 @@ function ReviewForm({
   return (
     <form onSubmit={handleSubmit} className="space-y-3 max-w-lg">
       <div className="text-xs text-muted-foreground">
-        Auto score: <span className="font-mono text-foreground">{autoScore.toFixed(2)}</span> — do you agree?
+        {t("autoScoreLabel", { score: autoScore.toFixed(2) })}
       </div>
 
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label className="block text-xs text-muted-foreground mb-1">Your Score (0.0 ~ 1.0)</label>
+          <label className="block text-xs text-muted-foreground mb-1">{t("yourScore")}</label>
           <input
             type="number"
             step="0.01"
@@ -280,7 +281,7 @@ function ReviewForm({
           />
         </div>
         <div>
-          <label className="block text-xs text-muted-foreground mb-1">Passed?</label>
+          <label className="block text-xs text-muted-foreground mb-1">{t("passedQuestion")}</label>
           <select
             value={passed ? "yes" : "no"}
             onChange={e => setPassed(e.target.value === "yes")}
@@ -293,23 +294,23 @@ function ReviewForm({
       </div>
 
       <div>
-        <label className="block text-xs text-muted-foreground mb-1">Explanation *</label>
+        <label className="block text-xs text-muted-foreground mb-1">{t("explanationLabel")}</label>
         <textarea
           value={explanation}
           onChange={e => setExplanation(e.target.value)}
           rows={2}
-          placeholder="Why do you give this score?"
+          placeholder={t("explanationPlaceholder")}
           className="w-full rounded border border-input bg-background px-3 py-1.5 text-sm resize-y"
           required
         />
       </div>
 
       <div>
-        <label className="block text-xs text-muted-foreground mb-1">Reviewer *</label>
+        <label className="block text-xs text-muted-foreground mb-1">{t("reviewerLabel")}</label>
         <input
           value={reviewer}
           onChange={e => setReviewer(e.target.value)}
-          placeholder="your-name"
+          placeholder={t("reviewerPlaceholder")}
           className="w-full rounded border border-input bg-background px-3 py-1.5 text-sm"
           required
         />
@@ -320,7 +321,7 @@ function ReviewForm({
         disabled={submitting || !reviewer.trim() || !explanation.trim()}
         className="rounded bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
       >
-        {submitting ? "Submitting..." : "Submit Review"}
+        {submitting ? t("submittingReview") : t("submitReview")}
       </button>
     </form>
   );

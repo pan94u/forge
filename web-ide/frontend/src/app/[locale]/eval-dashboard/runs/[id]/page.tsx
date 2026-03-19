@@ -67,8 +67,9 @@ function shortId(id: string): string {
 // ── Assertion Results List ───────────────────────────────────────
 
 function AssertionList({ assertions }: { assertions: AssertionResult[] }) {
+  const t = useTranslations("evalDashboard");
   if (assertions.length === 0) {
-    return <p className="text-xs text-muted-foreground px-4 py-2">No assertions recorded.</p>;
+    return <p className="text-xs text-muted-foreground px-4 py-2">{t("noAssertionsRecorded")}</p>;
   }
   return (
     <div className="px-4 py-3 space-y-2">
@@ -107,6 +108,7 @@ function AssertionList({ assertions }: { assertions: AssertionResult[] }) {
 // ── Trial Row ────────────────────────────────────────────────────
 
 function TrialRow({ trial }: { trial: TrialResponse }) {
+  const t = useTranslations("evalDashboard");
   const [expanded, setExpanded] = useState(false);
 
   const codeGrades = trial.grades.filter(g => g.assertionResults && g.assertionResults.length > 0);
@@ -159,18 +161,18 @@ function TrialRow({ trial }: { trial: TrialResponse }) {
                     {grade.passed ? "PASS" : "FAIL"}
                   </span>
                   <span className="font-mono text-sm font-bold">{(grade.score * 100).toFixed(0)}%</span>
-                  <span className="text-[10px] text-muted-foreground">confidence: {grade.confidence.toFixed(2)}</span>
+                  <span className="text-[10px] text-muted-foreground">{t("confidence")}{grade.confidence.toFixed(2)}</span>
                 </div>
                 {grade.explanation && (
                   <div className="rounded bg-muted/20 p-3 text-xs text-muted-foreground leading-relaxed">
-                    <div className="text-[10px] text-purple-400 font-medium mb-1">Judge Assessment:</div>
+                    <div className="text-[10px] text-purple-400 font-medium mb-1">{t("judgeAssessment")}</div>
                     {grade.explanation}
                   </div>
                 )}
               </div>
             ))}
             {graderCount === 0 && (
-              <p className="text-xs text-muted-foreground">No grading results recorded.</p>
+              <p className="text-xs text-muted-foreground">{t("noGradingResults")}</p>
             )}
           </td>
         </tr>
@@ -182,6 +184,7 @@ function TrialRow({ trial }: { trial: TrialResponse }) {
 // ── Report Section ───────────────────────────────────────────────
 
 function ReportSection({ runId }: { runId: string }) {
+  const t = useTranslations("evalDashboard");
   const [showMarkdown, setShowMarkdown] = useState(false);
   const [showJson, setShowJson] = useState(false);
   const [markdown, setMarkdown] = useState<string | null>(null);
@@ -231,21 +234,21 @@ function ReportSection({ runId }: { runId: string }) {
 
   return (
     <section className="space-y-3">
-      <h2 className="text-base font-semibold">Reports</h2>
+      <h2 className="text-base font-semibold">{t("reports")}</h2>
       <div className="flex items-center gap-2">
         <button
           onClick={toggleMarkdown}
           disabled={loadingMd}
           className="rounded border border-border px-3 py-1.5 text-xs hover:bg-muted disabled:opacity-50"
         >
-          {loadingMd ? "Loading..." : showMarkdown ? "Hide Markdown Report" : "Markdown Report"}
+          {loadingMd ? t("loadingReport") : showMarkdown ? t("hideMarkdownReport") : t("markdownReport")}
         </button>
         <button
           onClick={toggleJson}
           disabled={loadingJson}
           className="rounded border border-border px-3 py-1.5 text-xs hover:bg-muted disabled:opacity-50"
         >
-          {loadingJson ? "Loading..." : showJson ? "Hide JSON Report" : "JSON Report"}
+          {loadingJson ? t("loadingReport") : showJson ? t("hideJsonReport") : t("jsonReport")}
         </button>
       </div>
 
@@ -305,9 +308,9 @@ export default function RunDetailPage() {
   if (!run) {
     return (
       <div className="min-h-screen bg-background p-6 max-w-6xl mx-auto">
-        <p className="text-sm text-muted-foreground">Run not found.</p>
+        <p className="text-sm text-muted-foreground">{t("runNotFound")}</p>
         <Link href="/eval-dashboard" className="mt-4 inline-block text-xs text-primary hover:underline">
-          Back to Dashboard
+          {t("backToDashboard")}
         </Link>
       </div>
     );
@@ -319,7 +322,7 @@ export default function RunDetailPage() {
     <div className="min-h-screen bg-background p-6 space-y-8 max-w-6xl mx-auto">
       {/* Breadcrumb */}
       <div className="flex items-center gap-1 text-xs text-muted-foreground">
-        <Link href="/eval-dashboard" className="hover:underline">Eval Dashboard</Link>
+        <Link href="/eval-dashboard" className="hover:underline">{t("title")}</Link>
         <span>/</span>
         <Link href={`/eval-dashboard/suites/${run.suiteId}`} className="hover:underline">{run.suiteName}</Link>
         <span>/</span>
@@ -334,8 +337,8 @@ export default function RunDetailPage() {
             <StatusBadge status={run.status} />
           </div>
           <div className="mt-1 text-xs text-muted-foreground space-x-3">
-            <span>Suite: <span className="text-foreground">{run.suiteName}</span></span>
-            <span>Model: <span className="font-mono text-foreground">{run.model ?? "-"}</span></span>
+            <span>{t("suite")}<span className="text-foreground">{run.suiteName}</span></span>
+            <span>{t("model")}: <span className="font-mono text-foreground">{run.model ?? "-"}</span></span>
             <span>k = <span className="font-mono text-foreground">{run.trialsPerTask}</span></span>
           </div>
         </div>
@@ -343,40 +346,40 @@ export default function RunDetailPage() {
 
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <StatCard label="Pass Rate" value={pct(summary?.overallPassRate)} />
-        <StatCard label="Pass@k" value={pct(summary?.passAtK)} />
-        <StatCard label="Pass^k" value={pct(summary?.passPowerK)} />
-        <StatCard label="Duration" value={summary ? fmt(summary.totalDurationMs) : "-"} />
+        <StatCard label={t("passRate")} value={pct(summary?.overallPassRate)} />
+        <StatCard label={t("passAtK")} value={pct(summary?.passAtK)} />
+        <StatCard label={t("passPowerK")} value={pct(summary?.passPowerK)} />
+        <StatCard label={t("duration")} value={summary ? fmt(summary.totalDurationMs) : "-"} />
       </div>
 
       {summary && (
         <div className="flex items-center gap-6 text-xs text-muted-foreground">
-          <span>Total Trials: <span className="text-foreground font-mono">{summary.totalTrials}</span></span>
-          <span>Passed: <span className="text-green-400 font-mono">{summary.passedTrials}</span></span>
-          <span>Failed: <span className="text-red-400 font-mono">{summary.failedTrials}</span></span>
-          <span>Errors: <span className="text-muted-foreground font-mono">{summary.errorTrials}</span></span>
-          <span>Avg Score: <span className="text-foreground font-mono">{summary.averageScore.toFixed(2)}</span></span>
+          <span>{t("totalTrials")}<span className="text-foreground font-mono">{summary.totalTrials}</span></span>
+          <span>{t("passed")}<span className="text-green-400 font-mono">{summary.passedTrials}</span></span>
+          <span>{t("failed")}<span className="text-red-400 font-mono">{summary.failedTrials}</span></span>
+          <span>{t("errors")}<span className="text-muted-foreground font-mono">{summary.errorTrials}</span></span>
+          <span>{t("avgScore")}<span className="text-foreground font-mono">{summary.averageScore.toFixed(2)}</span></span>
         </div>
       )}
 
       {/* Trials Table */}
       <section className="space-y-3">
-        <h2 className="text-base font-semibold">Trials ({run.trials.length})</h2>
+        <h2 className="text-base font-semibold">{t("trials")} ({run.trials.length})</h2>
 
         {run.trials.length === 0 ? (
           <div className="rounded-lg border border-border py-8 text-center">
-            <p className="text-sm text-muted-foreground">No trials recorded yet.</p>
+            <p className="text-sm text-muted-foreground">{t("noTrialsYet")}</p>
           </div>
         ) : (
           <div className="rounded-lg border border-border overflow-hidden">
             <table className="w-full text-sm">
               <thead className="bg-muted/50">
                 <tr>
-                  <th className="px-4 py-2 text-left font-medium">Task Name</th>
-                  <th className="px-4 py-2 text-center font-medium">Trial #</th>
-                  <th className="px-4 py-2 text-left font-medium">Outcome</th>
-                  <th className="px-4 py-2 text-center font-medium">Score</th>
-                  <th className="px-4 py-2 text-center font-medium">Graders</th>
+                  <th className="px-4 py-2 text-left font-medium">{t("name")}</th>
+                  <th className="px-4 py-2 text-center font-medium">{t("trialNumber")}</th>
+                  <th className="px-4 py-2 text-left font-medium">{t("outcome")}</th>
+                  <th className="px-4 py-2 text-center font-medium">{t("score")}</th>
+                  <th className="px-4 py-2 text-center font-medium">{t("graders")}</th>
                   <th className="px-4 py-2 text-center font-medium"></th>
                 </tr>
               </thead>
