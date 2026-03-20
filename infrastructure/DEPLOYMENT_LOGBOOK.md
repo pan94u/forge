@@ -220,3 +220,86 @@ export NEXTAUTH_SECRET=$(grep NEXTAUTH_SECRET .env.production | cut -d= -f2-)
 docker compose -f docker-compose.production.yml down
 docker compose -f docker-compose.production.yml up -d
 ```
+
+---
+
+## CIMC 灯塔工厂部署
+
+- 日期: 2026-03-20
+- 仓库: git@github.com:Zhao055/CIMC.git (main)
+- 部署路径: /home/deploy/CIMC
+- 访问方式: IP 直接访问（无域名）
+
+### 服务端口
+
+| 服务 | 端口 | 内存限额 | 说明 |
+|------|------|---------|------|
+| web | 3888 | 256M | 前端 (Next.js 15) |
+| server | 3889 | 512M | 后端 (Bun + Hono) |
+| ope | 5888/5889 | 256M | 人效系统 (Next.js + Bun API) |
+
+### 问题汇总
+
+#### 1. OPE Dockerfile 引用不存在的 public 目录
+- **现象**: `COPY --from=builder /app/apps/ope/public` 构建失败
+- **解决**: 删除该 COPY 行
+
+#### 2. Web 容器 Next.js 监听 3000 而非 3888
+- **现象**: 端口映射 3888→3000 不通
+- **解决**: Dockerfile 添加 `ENV PORT=3888 HOSTNAME=0.0.0.0`
+
+#### 3. OPE 容器缺少 hono 依赖 + 端口错误
+- **现象**: bun 报 `Cannot find package 'hono'`，Next.js 监听 3000
+- **解决**: Dockerfile 添加 `bun install` 安装服务端依赖，CMD 中设置 `PORT=5888`
+
+### 依赖关系
+
+CIMC 依赖 Synapse-AI 的 `@synapse/shared` 和 `@synapse/agent-core`，构建前需运行 `docker-build.sh` 从 `../Synapse-AI/` 复制依赖到 `.deps/`。
+
+### 命令
+
+```bash
+cd /home/deploy/CIMC
+bash docker-build.sh              # 复制依赖 + 构建 + 启动
+docker compose logs -f            # 查看日志
+docker compose down               # 停止
+```
+
+### 访问地址
+
+- 前端: http://124.156.192.129:3888
+- 后端: http://124.156.192.129:3889
+- OPE: http://124.156.192.129:5888
+
+---
+
+## Forge 更新 — forge-eval 模块集成修复
+
+- 日期: 2026-03-20
+- 原因: 拉取最新代码后 forge-eval 模块与 webide backend 存在代码冲突
+
+### 问题汇总
+
+#### 1. Bean 定义重名 — EvalTaskRepository
+- **现象**: `Cannot register bean definition 'evalTaskRepository'`，forge-eval 和 webide 各有一份同名 Repository
+- **解决**: `ForgeWebIdeApplication.kt` 的 `@EntityScan` 和 `@EnableJpaRepositories` 缩小为只扫描 `com.forge.webide`
+
+#### 2. Flyway 迁移文件重复 — V24
+- **现象**: `V24__create_forge_eval_tables.sql` 和 `V24__eval_platform.sql` 同版本号
+- **解决**: 删除旧版 `V24__eval_platform.sql`，保留新版；手动创建缺失的 `eval_results` 表
+
+#### 3. Hibernate Schema Validation 失败
+- **现象**: `wrong column type in eval_runs.id: found uuid, expecting varchar`
+- **原因**: forge-eval 迁移用 UUID 类型，webide Entity 用 String；且 `docker-compose.production.yml` 中 `SPRING_JPA_HIBERNATE_DDL_AUTO: "validate"` 环境变量覆盖了 application.yml
+- **解决**: docker-compose 环境变量改为 `"none"`，跳过启动时 schema 验证（Flyway 已保证 schema 正确性）
+
+### 修改的文件
+
+| 文件 | 改动 |
+|------|------|
+| web-ide/backend/src/.../ForgeWebIdeApplication.kt | scan 范围从 `[webide, eval.api]` 缩小为 `[webide]` |
+| web-ide/backend/src/.../application.yml | ddl-auto: validate → none |
+| web-ide/backend/src/.../application-prod.yml | ddl-auto: validate → none |
+| infrastructure/docker/docker-compose.production.yml | SPRING_JPA_HIBERNATE_DDL_AUTO: validate → none |
+| web-ide/backend/.../V24__eval_platform.sql | 删除（与 V24__create_forge_eval_tables.sql 重复） |
+| DB 手动操作 | CREATE TABLE eval_results（webide Entity 需要但迁移未创建） |

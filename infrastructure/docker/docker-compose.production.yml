@@ -157,7 +157,7 @@ services:
         -Djava.security.egd=file:/dev/./urandom
       # --- Spring Profile ---
       SPRING_PROFILES_ACTIVE: "production"
-      SPRING_JPA_HIBERNATE_DDL_AUTO: "validate"
+      SPRING_JPA_HIBERNATE_DDL_AUTO: "none"
       # --- 模型 ---
       MODEL_PROVIDER: ${MODEL_PROVIDER:-minimax}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}

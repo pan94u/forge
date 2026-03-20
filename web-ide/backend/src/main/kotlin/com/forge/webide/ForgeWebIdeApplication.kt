@@ -6,9 +6,9 @@ import org.springframework.boot.runApplication
 import org.springframework.data.jpa.repository.config.EnableJpaRepositories
 import org.springframework.scheduling.annotation.EnableScheduling
 
-@SpringBootApplication(scanBasePackages = ["com.forge.webide", "com.forge.eval.api"])
-@EntityScan(basePackages = ["com.forge.webide", "com.forge.eval.api.entity"])
-@EnableJpaRepositories(basePackages = ["com.forge.webide", "com.forge.eval.api.repository"])
+@SpringBootApplication(scanBasePackages = ["com.forge.webide"])
+@EntityScan(basePackages = ["com.forge.webide"])
+@EnableJpaRepositories(basePackages = ["com.forge.webide"])
 @EnableScheduling
 class ForgeWebIdeApplication
 
