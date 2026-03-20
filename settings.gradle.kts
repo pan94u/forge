@@ -25,6 +25,11 @@ include(":cli")
 include(":adapters:model-adapter")
 include(":adapters:runtime-adapter")
 
-// ── Evaluation & Testing ─────────────────────────────────────────────────────
+// ── Forge Eval (unified evaluation engine) ──────────────────────────────────
+include(":forge-eval:eval-protocol")
+include(":forge-eval:eval-engine")
+include(":forge-eval:eval-api")
+
+// ── Evaluation & Testing (legacy) ────────────────────────────────────────────
 include(":agent-eval")
 include(":skill-tests")

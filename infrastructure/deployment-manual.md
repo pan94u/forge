@@ -514,9 +514,98 @@ docker inspect <container-name> --format '{{json .State.Health.Log}}' | python3 
 | Console 登录循环 | `docker logs forge-enterprise-console` | `NEXTAUTH_SECRET` 未设或 `KEYCLOAK_ISSUER` 错误 |
 | Console 502 Bad Gateway | `docker logs forge-nginx \| grep upstream` | Auth.js header 过大，检查 nginx `proxy_buffer_size` |
 | `/console` 404 | — | nginx 缺少 `location = /console` 精确匹配 |
+| `/console/api/auth/signin` 404 | `docker exec console wget -qO- http://localhost:9001/console/api/auth/providers` | **构建时未设置 NEXT_PUBLIC_BASE_PATH**（见"高频陷阱 1"）|
+| 容器健康检查 `500 Privoxy Error` | `docker exec <container> wget -qO- http://localhost:<port>/health/live` | **~/.docker/config.json 全局代理泄漏到容器**（见"高频陷阱 2"）|
+| `sso-net` 网络 label 错误 | `docker network inspect sso-net` | **手动创建了 sso-net，需由 SSO compose 创建**（见"高频陷阱 3"）|
 | 端口重定向错误 | 检查 nginx `Host` header | Trial: 需用 `$http_host`（保留端口） |
 | 内存 OOM | `docker stats --no-stream` | 检查容器 mem_limit 配置 |
 | 磁盘满 | `df -h /data/forge` | 清理备份和旧镜像：`docker image prune -f` |
+
+### 高频部署陷阱（从实际部署经验总结）
+
+#### 陷阱 1：enterprise-console 构建时缺少 .env → `/console` 路由全部 404
+
+**现象**：访问 `/console` 跳转到 `/console/api/auth/signin` 后返回 Next.js 404。
+
+**根因**：`NEXT_PUBLIC_BASE_PATH` 是 Next.js **构建时变量**，`npm run build` 时烘焙进产物。`.env.example` 不会被 Next.js 自动读取，必须复制为 `.env`。运行时通过 Docker 环境变量设置**无效**。
+
+**修复**：构建前 `cp -n .env.example .env`，验证：`grep basePath .next/required-server-files.json` 应含 `"/console"`。
+
+#### 陷阱 2：~/.docker/config.json 代理泄漏到所有容器
+
+**现象**：容器健康检查返回 `500 Internal Privoxy Error`，所有服务 unhealthy。
+
+**根因**：`~/.docker/config.json` 中的 `proxies.default` 配置会注入到**所有容器**的环境变量，容器内 `wget http://localhost:8081/health` 被路由到代理服务器。
+
+**修复**：拉取完镜像后**立即删除** config.json 中的 proxies 字段，然后重建容器。拉取被墙镜像应使用 skopeo + 代理（宿主机进程，不污染容器）而非 Docker 全局代理。
+
+#### 陷阱 3：sso-net 必须由 SSO Compose 创建，不能手动创建
+
+**现象**：`docker compose up` 报错 `network sso-net has incorrect label com.docker.compose.network`。
+
+**根因**：`docker network create sso-net` 创建的网络缺少 Compose 管理标签。SSO compose 定义了 `sso-net`（非 external），Forge/Synapse 以 `external: true` 引用。
+
+**正确顺序**：SSO compose up → Forge compose up → Synapse compose up。若已手动创建，需先 `docker network rm sso-net` 再让 SSO compose 重建。
+
+---
+
+## 附录 A：macOS 本地开发部署速查
+
+适用于 Apple Silicon Mac（M1/M2/M3/M4），从零开始的完整流程。
+
+### A.1 安装构建工具
+
+```bash
+# OpenJDK 21（Homebrew formula，不需要 sudo）
+brew install openjdk@21
+export JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home
+
+# Node.js
+brew install node
+
+# 验证
+java -version   # 21+
+node -v          # 20+
+```
+
+> **注意**：`brew install --cask temurin@21` 需要 sudo（.pkg 安装器），建议用 `brew install openjdk@21` 替代。使用时需手动设置 `JAVA_HOME`。
+
+### A.2 一键部署脚本
+
+```bash
+cd /path/to/forge
+export JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home
+
+# 1. 配置 hosts（仅首次）
+echo "127.0.0.1 sso.forge.local forge.local" | sudo tee -a /etc/hosts
+
+# 2. 预拉取所有 Docker 镜像（避免构建时网络问题）
+for img in node:20-alpine eclipse-temurin:21-jre-alpine postgres:16-alpine nginx:alpine; do
+  docker pull $img
+done
+# Keycloak 需要特殊处理（见陷阱 3）
+
+# 3. 构建所有产物
+./gradlew :web-ide:backend:bootJar -x test
+./gradlew :mcp-servers:forge-knowledge-mcp:shadowJar :mcp-servers:forge-database-mcp:shadowJar -x test
+cd web-ide/frontend && npm ci && npm run build && cd ../..
+cd enterprise-console && cp -n .env.example .env && npm ci && npm run build && cd ..
+
+# 4. 配置环境变量
+cd infrastructure/sso
+cp .env.example .env
+sed -i '' 's|PG_DATA_PATH=.*|PG_DATA_PATH=/Users/'$USER'/data/sso-postgres|' .env
+sed -i '' 's|COMPOSE_PROFILES=.*|COMPOSE_PROFILES=|' .env
+mkdir -p /Users/$USER/data/sso-postgres
+
+cd ../docker
+cp .env.trial.example .env
+# 编辑 .env 填入 API Key
+
+# 5. 按顺序启动
+cd ../sso && docker compose up -d
+cd ../docker && docker compose -f docker-compose.trial.yml up --build -d
+```
 
 ---
 

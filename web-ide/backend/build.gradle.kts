@@ -39,6 +39,9 @@ dependencies {
     // Model adapter — real Claude API streaming + tool calling
     implementation(project(":adapters:model-adapter"))
 
+    // Forge Eval — unified evaluation engine
+    implementation(project(":forge-eval:eval-api"))
+
     // Database persistence — JPA + Flyway
     implementation("org.springframework.boot:spring-boot-starter-data-jpa")
     runtimeOnly("com.h2database:h2")

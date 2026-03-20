@@ -12,6 +12,7 @@ import {
   PanelLeftOpen,
   Sparkles,
   BarChart3,
+  FlaskConical,
   ChevronRight,
   Building2,
 } from "lucide-react";
@@ -38,6 +39,7 @@ const navItems: NavItem[] = [
   { href: "/workflows", icon: GitBranch, labelKey: "workflows", roles: ["developer"] },
   { href: "/skills", icon: Sparkles, labelKey: "skills", roles: ["developer"] },
   { href: "/evaluations", icon: BarChart3, labelKey: "evaluations", roles: ["developer"] },
+  { href: "/eval-dashboard", icon: FlaskConical, labelKey: "evalDashboard", roles: ["developer"] },
 ];
 
 export function Sidebar({ collapsed, onToggleCollapse, role }: SidebarProps) {

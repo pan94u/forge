@@ -17,6 +17,7 @@ dependencies {
 
     implementation(project(":adapters:model-adapter"))
     implementation(project(":adapters:runtime-adapter"))
+    implementation(project(":forge-eval:eval-engine"))
 
     testImplementation("org.junit.jupiter:junit-jupiter:5.11.3")
     testImplementation("io.mockk:mockk:1.13.13")
