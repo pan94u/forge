@@ -303,3 +303,48 @@ docker compose down               # 停止
 | infrastructure/docker/docker-compose.production.yml | SPRING_JPA_HIBERNATE_DDL_AUTO: validate → none |
 | web-ide/backend/.../V24__eval_platform.sql | 删除（与 V24__create_forge_eval_tables.sql 重复） |
 | DB 手动操作 | CREATE TABLE eval_results（webide Entity 需要但迁移未创建） |
+
+---
+
+## 磁盘迁移 + 全量重部署
+
+- 日期: 2026-03-22
+- 原因: Docker 软链接错误 (`/var/lib/docker/docker → /data/docker` 嵌套)，所有容器/镜像丢失
+
+### 迁移内容
+
+1. **fstab**: 写入 HDD UUID，重启自动挂载 `/data`
+2. **Docker 数据根**: 修复软链接 `/var/lib/docker → /data/docker` (HDD)
+3. **PostgreSQL 数据**: 从旧 volume 备份恢复到 SSD `/ssd-data/forge-postgres/`，密码重置为 `forge123`（trust → scram-sha-256）
+4. **SSO**: 弃用本机 Keycloak，改为独立部署 `sso.synapse.gold`
+5. **Gateway Nginx**: 新建 `/opt/gateway/`，TLS 终止 + 反向代理（手动 SSL 证书）
+
+### 配置变更
+
+| 文件 | 改动 |
+|------|------|
+| `haier/docker-compose.yml` | postgres volume: `${DATA_ROOT}/forge-postgres` → `${PG_DATA_PATH:-/ssd-data/forge-postgres}` |
+| `haier/nginx.conf` | SSO `/auth/` 代理去掉 keycloak upstream，改为 404 |
+| `haier/.env` | 新建: SSO_URL → `sso.synapse.gold`, APP_URL → `https://forge.delivery` |
+
+### 部署架构
+
+```
+Gateway Nginx (:443)
+├── forge.delivery → localhost:9000 (forge-nginx)
+├── synapse.gold → localhost:19300 (synapse-web)
+└── SSL: /opt/gateway/certs/{domain}/
+
+Forge (:9000)
+├── postgres (SSD /ssd-data/forge-postgres)
+├── backend + knowledge-mcp + database-mcp
+├── frontend + enterprise-console
+└── nginx (9000 app / 9100 SSO 已禁用)
+
+SSO: sso.synapse.gold (独立机器)
+```
+
+### 验证
+- `https://forge.delivery` 正常访问，SSO 登录跳转到 `sso.synapse.gold`
+- 7 个容器全部 Running/Healthy
+- PostgreSQL 旧数据恢复成功（Flyway 迁移通过）
