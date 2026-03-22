@@ -31,7 +31,7 @@ services:
       POSTGRES_USER: forge
       POSTGRES_PASSWORD: ${DB_PASSWORD:-forge123}
     volumes:
-      - ${DATA_ROOT:-/data/forge}/forge-postgres:/var/lib/postgresql/data
+      - ${PG_DATA_PATH:-/ssd-data/forge-postgres}:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U forge -d forge"]
       interval: 10s
