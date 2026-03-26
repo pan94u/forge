@@ -126,7 +126,7 @@ jobs:
           distribution: 'temurin'
 
       - name: Build JAR
-        run: ./gradlew :mcp-servers:${{ matrix.server }}:bootJar --no-daemon
+        run: ./gradlew :mcp-servers:${{ matrix.server }}:shadowJar --no-daemon
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
