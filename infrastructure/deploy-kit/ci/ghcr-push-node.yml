@@ -1,0 +1,72 @@
+# GitHub Actions: Node.js 项目构建 + GHCR 推送
+#
+# 使用方法：
+#   1. 复制到 .github/workflows/
+#   2. 修改 on.push.paths 和 working-directory
+#   3. 修改 npm run build 所需的环境变量
+#   4. 修改 docker/build-push-action 的 context
+#
+# 适用于：Next.js / Nuxt / 通用 Node.js 项目
+
+name: CI - Build & Push
+
+on:
+  pull_request:
+    paths: ['src/**', 'package.json']
+  push:
+    branches: [main]
+    paths: ['src/**', 'package.json']
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build:
+    name: Build & TypeCheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run build
+        env:
+          # ---- 修改这里：填入构建时需要的环境变量 ----
+          NEXT_PUBLIC_API_URL: ""
+
+  docker-push:
+    name: Push to GHCR
+    needs: [build]
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run build
+        env:
+          NEXT_PUBLIC_API_URL: ""
+
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # ---- 修改这里：context 指向 Dockerfile 所在目录 ----
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}:${{ github.sha }}
+            ghcr.io/${{ github.repository }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

@@ -9,6 +9,7 @@ on:
 
 permissions:
   contents: read
+  packages: write
 
 jobs:
   build-typecheck:
@@ -35,3 +36,48 @@ jobs:
           KEYCLOAK_CLIENT_SECRET: ci-secret
           KEYCLOAK_ISSUER: http://localhost:8180/realms/forge
           BACKEND_URL: http://localhost:8080
+
+  # ---------------------------------------------------------------------------
+  # Docker 镜像推送（仅 main 分支）
+  # ---------------------------------------------------------------------------
+  docker-push-console:
+    name: Push Console Image
+    needs: [build-typecheck]
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: enterprise-console
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: enterprise-console/package-lock.json
+      - run: npm ci
+      - run: npm run build
+        env:
+          NEXTAUTH_SECRET: ci-secret-placeholder-for-build-only-32c
+          NEXTAUTH_URL: http://localhost:19001
+          KEYCLOAK_CLIENT_ID: forge-enterprise
+          KEYCLOAK_CLIENT_SECRET: ci-secret
+          KEYCLOAK_ISSUER: http://localhost:8180/realms/forge
+          BACKEND_URL: http://localhost:8080
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: enterprise-console
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}/enterprise-console:${{ github.sha }}
+            ghcr.io/${{ github.repository }}/enterprise-console:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

@@ -80,9 +80,7 @@ services:
   # Knowledge MCP — 知识库检索服务
   # ---------------------------------------------------------------------------
   knowledge-mcp:
-    build:
-      context: ../../mcp-servers/forge-knowledge-mcp
-      dockerfile: Dockerfile
+    image: ghcr.io/pan94u/forge/forge-knowledge-mcp:${DEPLOY_TAG:-latest}
     container_name: forge-knowledge-mcp
     restart: unless-stopped
     cpus: 0.25
@@ -109,9 +107,7 @@ services:
   # Database MCP — 数据库查询服务 (只读)
   # ---------------------------------------------------------------------------
   database-mcp:
-    build:
-      context: ../../mcp-servers/forge-database-mcp
-      dockerfile: Dockerfile
+    image: ghcr.io/pan94u/forge/forge-database-mcp:${DEPLOY_TAG:-latest}
     container_name: forge-database-mcp
     restart: unless-stopped
     cpus: 0.25
@@ -141,9 +137,7 @@ services:
   # Backend — Spring Boot 3 + Workspace 运行时
   # ---------------------------------------------------------------------------
   backend:
-    build:
-      context: ../../web-ide/backend
-      dockerfile: Dockerfile
+    image: ghcr.io/pan94u/forge/backend:${DEPLOY_TAG:-latest}
     container_name: forge-backend
     restart: unless-stopped
     cpus: 1.5
@@ -212,9 +206,7 @@ services:
   # Frontend — Web IDE 前端 (Next.js standalone)
   # ---------------------------------------------------------------------------
   frontend:
-    build:
-      context: ../../web-ide/frontend
-      dockerfile: Dockerfile
+    image: ghcr.io/pan94u/forge/frontend:${DEPLOY_TAG:-latest}
     container_name: forge-frontend
     restart: unless-stopped
     cpus: 0.25
@@ -236,9 +228,7 @@ services:
   # Enterprise Console — 企业管理控制台
   # ---------------------------------------------------------------------------
   enterprise-console:
-    build:
-      context: ../../enterprise-console
-      dockerfile: Dockerfile
+    image: ghcr.io/pan94u/forge/enterprise-console:${DEPLOY_TAG:-latest}
     container_name: forge-enterprise-console
     restart: unless-stopped
     cpus: 0.25
