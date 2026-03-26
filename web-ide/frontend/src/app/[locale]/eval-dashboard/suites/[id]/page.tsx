@@ -474,6 +474,7 @@ const ASSERTION_TYPES = [
   "tool_call_count",
   "tool_call_order",
   "turn_count_max",
+  "semantic_similarity",
 ] as const;
 
 interface GraderDraft {
