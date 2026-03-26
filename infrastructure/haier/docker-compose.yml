@@ -43,9 +43,7 @@ services:
       options: { max-size: "50m", max-file: "3" }
 
   knowledge-mcp:
-    build:
-      context: ../../mcp-servers/forge-knowledge-mcp
-      dockerfile: Dockerfile
+    image: ghcr.io/pan94u/forge/forge-knowledge-mcp:${DEPLOY_TAG:-latest}
     container_name: forge-knowledge-mcp
     restart: unless-stopped
     cpus: 0.5
@@ -67,9 +65,7 @@ services:
       options: { max-size: "50m", max-file: "3" }
 
   database-mcp:
-    build:
-      context: ../../mcp-servers/forge-database-mcp
-      dockerfile: Dockerfile
+    image: ghcr.io/pan94u/forge/forge-database-mcp:${DEPLOY_TAG:-latest}
     container_name: forge-database-mcp
     restart: unless-stopped
     cpus: 0.5
@@ -94,9 +90,7 @@ services:
       options: { max-size: "50m", max-file: "3" }
 
   backend:
-    build:
-      context: ../../web-ide/backend
-      dockerfile: Dockerfile
+    image: ghcr.io/pan94u/forge/backend:${DEPLOY_TAG:-latest}
     container_name: forge-backend
     restart: unless-stopped
     cpus: 2
@@ -167,9 +161,7 @@ services:
       options: { max-size: "100m", max-file: "5" }
 
   frontend:
-    build:
-      context: ../../web-ide/frontend
-      dockerfile: Dockerfile
+    image: ghcr.io/pan94u/forge/frontend:${DEPLOY_TAG:-latest}
     container_name: forge-frontend
     restart: unless-stopped
     cpus: 0.5
@@ -185,9 +177,7 @@ services:
       options: { max-size: "50m", max-file: "3" }
 
   enterprise-console:
-    build:
-      context: ../../enterprise-console
-      dockerfile: Dockerfile
+    image: ghcr.io/pan94u/forge/enterprise-console:${DEPLOY_TAG:-latest}
     container_name: forge-enterprise-console
     restart: unless-stopped
     cpus: 0.5

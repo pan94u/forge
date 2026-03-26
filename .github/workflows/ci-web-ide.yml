@@ -1,6 +1,7 @@
 name: CI - Web IDE
 
 on:
+  workflow_dispatch:
   pull_request:
     paths:
       - 'web-ide/**'

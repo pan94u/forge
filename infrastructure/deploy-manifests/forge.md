@@ -5,8 +5,8 @@
 | 项目 | 值 |
 |------|------|
 | 仓库路径 | `/opt/forge` |
-| Compose 文件 | `infrastructure/docker/docker-compose.production.yml` |
-| Env 文件 | `infrastructure/docker/.env.production` |
+| Compose 文件 | `infrastructure/haier/docker-compose.yml`（海尔/当前生产）或 `infrastructure/docker/docker-compose.production.yml`（独立生产）。根据服务器上实际存在的 env 文件判断用哪个。 |
+| Env 文件 | `infrastructure/haier/.env`（海尔）或 `infrastructure/docker/.env.production`（独立生产） |
 | 镜像来源 | GHCR (`ghcr.io/pan94u/forge`) |
 | 日志文件 | `infrastructure/DEPLOYMENT_LOGBOOK.md` |
 

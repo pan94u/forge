@@ -1,6 +1,7 @@
 name: CI - Enterprise Console
 
 on:
+  workflow_dispatch:
   pull_request:
     paths: ['enterprise-console/**']
   push:

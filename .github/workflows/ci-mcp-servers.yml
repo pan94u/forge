@@ -1,6 +1,7 @@
 name: CI - MCP Servers
 
 on:
+  workflow_dispatch:
   pull_request:
     paths:
       - 'mcp-servers/**'
