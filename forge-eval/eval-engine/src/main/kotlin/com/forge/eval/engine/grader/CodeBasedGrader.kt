@@ -12,7 +12,11 @@ import java.util.UUID
  * Supports both legacy assertion types (contains, not_contains, matches_pattern, json_schema)
  * and new transcript-aware assertions (tool_used, tool_call_count, tool_call_order, etc.).
  */
-class CodeBasedGrader {
+class CodeBasedGrader(
+    private val semanticEvaluator: ((expected: String, actual: String) -> SemanticResult)? = null
+) {
+
+    data class SemanticResult(val similar: Boolean, val score: Double, val rationale: String)
 
     private val logger = LoggerFactory.getLogger(CodeBasedGrader::class.java)
     private val gson = Gson()
@@ -68,13 +72,7 @@ class CodeBasedGrader {
                 "tool_call_count" -> evaluateToolCallCount(config, transcript)
                 "tool_call_order" -> evaluateToolCallOrder(config, transcript)
                 "turn_count_max" -> evaluateTurnCountMax(config, transcript)
-                "semantic_similarity" -> AssertionResult(
-                    description = config.description,
-                    passed = true,
-                    expected = config.expected,
-                    actual = "(semantic eval deferred to model-based grader)",
-                    assertionType = config.type
-                )
+                "semantic_similarity" -> evaluateSemanticSimilarity(config, output)
                 // Legacy types from existing eval-sets
                 "profile_routed" -> evaluateContains(config.copy(type = "contains"), output)
                 "structure" -> evaluateStructure(config, output)
@@ -328,6 +326,40 @@ class CodeBasedGrader {
                 expected = structureType,
                 actual = "(structure check: $structureType)",
                 assertionType = "structure"
+            )
+        }
+    }
+
+    private fun evaluateSemanticSimilarity(config: AssertionConfig, output: String): AssertionResult {
+        if (semanticEvaluator == null) {
+            // Fallback: contains check when no semantic evaluator is provided
+            val found = output.lowercase().contains(config.expected.lowercase())
+            return AssertionResult(
+                description = config.description,
+                passed = found,
+                expected = config.expected,
+                actual = if (found) "Contains match (semantic evaluator unavailable)" else "No match (semantic evaluator unavailable)",
+                assertionType = config.type
+            )
+        }
+
+        return try {
+            val result = semanticEvaluator.invoke(config.expected, output)
+            AssertionResult(
+                description = config.description,
+                passed = result.similar,
+                expected = config.expected,
+                actual = "Similarity: %.2f — %s".format(result.score, result.rationale),
+                assertionType = config.type
+            )
+        } catch (e: Exception) {
+            logger.error("Semantic similarity evaluation failed: {}", e.message, e)
+            AssertionResult(
+                description = config.description,
+                passed = false,
+                expected = config.expected,
+                actual = "Semantic eval failed: ${e.message}",
+                assertionType = config.type
             )
         }
     }

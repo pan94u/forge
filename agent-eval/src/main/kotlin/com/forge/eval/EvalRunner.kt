@@ -255,7 +255,11 @@ class EvalRunner(
             "not_contains" -> AssertionResult(description, !actualOutput.contains(expected), expected, truncate(actualOutput))
             "matches_pattern" -> AssertionResult(description, Regex(expected).containsMatchIn(actualOutput), expected, truncate(actualOutput))
             "json_schema" -> evaluateJsonSchema(expected, actualOutput, description)
-            "semantic_similarity" -> AssertionResult(description, true, expected, "(semantic eval pending)")
+            "semantic_similarity" -> {
+                val found = actualOutput.lowercase().contains(expected.lowercase())
+                AssertionResult(description, found, expected,
+                    if (found) "Contains match (semantic eval)" else "No semantic match")
+            }
             else -> AssertionResult(description, false, expected, "Unknown assertion type: $type")
         }
     }

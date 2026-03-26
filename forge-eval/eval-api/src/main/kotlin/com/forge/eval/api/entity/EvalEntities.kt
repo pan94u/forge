@@ -5,7 +5,7 @@ import jakarta.persistence.*
 import java.time.Instant
 import java.util.UUID
 
-@Entity
+@Entity(name = "ForgeSuite")
 @Table(name = "eval_suites")
 class EvalSuiteEntity(
     @Id
@@ -39,7 +39,7 @@ class EvalSuiteEntity(
     var updatedAt: Instant = Instant.now()
 )
 
-@Entity
+@Entity(name = "ForgeTask")
 @Table(name = "eval_tasks")
 class EvalTaskEntity(
     @Id
@@ -86,7 +86,7 @@ class EvalTaskEntity(
     var updatedAt: Instant = Instant.now()
 )
 
-@Entity
+@Entity(name = "ForgeRun")
 @Table(name = "eval_runs")
 class EvalRunEntity(
     @Id
@@ -118,7 +118,7 @@ class EvalRunEntity(
     val createdAt: Instant = Instant.now()
 )
 
-@Entity
+@Entity(name = "ForgeTrial")
 @Table(name = "eval_trials")
 class EvalTrialEntity(
     @Id
@@ -156,7 +156,7 @@ class EvalTrialEntity(
     val createdAt: Instant = Instant.now()
 )
 
-@Entity
+@Entity(name = "ForgeTranscript")
 @Table(name = "eval_transcripts")
 class EvalTranscriptEntity(
     @Id
@@ -182,7 +182,7 @@ class EvalTranscriptEntity(
     val createdAt: Instant = Instant.now()
 )
 
-@Entity
+@Entity(name = "ForgeGrade")
 @Table(name = "eval_grades")
 class EvalGradeEntity(
     @Id
@@ -217,7 +217,7 @@ class EvalGradeEntity(
     val createdAt: Instant = Instant.now()
 )
 
-@Entity
+@Entity(name = "ForgeReview")
 @Table(name = "eval_reviews")
 class EvalReviewEntity(
     @Id

@@ -118,16 +118,29 @@ Done."""
     }
 
     @Test
-    fun `evaluateAssertion semantic_similarity - always passes with pending note`() {
+    fun `evaluateAssertion semantic_similarity - passes when output contains expected`() {
         val runner = EvalRunner(evalSetsDir = evalSetsDir)
         val result = runner.evaluateAssertion(
             "semantic_similarity",
             "expected meaning",
             "Semantic check",
-            "some output"
+            "this has expected meaning in the output"
         )
         assertThat(result.passed).isTrue()
-        assertThat(result.actual).isEqualTo("(semantic eval pending)")
+        assertThat(result.actual).contains("Contains match")
+    }
+
+    @Test
+    fun `evaluateAssertion semantic_similarity - fails when output lacks expected`() {
+        val runner = EvalRunner(evalSetsDir = evalSetsDir)
+        val result = runner.evaluateAssertion(
+            "semantic_similarity",
+            "fibonacci sequence",
+            "Semantic check",
+            "the weather is sunny"
+        )
+        assertThat(result.passed).isFalse()
+        assertThat(result.actual).contains("No semantic match")
     }
 
     @Test

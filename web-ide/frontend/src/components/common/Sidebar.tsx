@@ -11,7 +11,6 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Sparkles,
-  BarChart3,
   FlaskConical,
   ChevronRight,
   Building2,
@@ -38,7 +37,6 @@ const navItems: NavItem[] = [
   { href: "/knowledge", icon: BookOpen, labelKey: "knowledge", roles: ["developer", "product"], expandable: true },
   { href: "/workflows", icon: GitBranch, labelKey: "workflows", roles: ["developer"] },
   { href: "/skills", icon: Sparkles, labelKey: "skills", roles: ["developer"] },
-  { href: "/evaluations", icon: BarChart3, labelKey: "evaluations", roles: ["developer"] },
   { href: "/eval-dashboard", icon: FlaskConical, labelKey: "evalDashboard", roles: ["developer"] },
 ];
 
