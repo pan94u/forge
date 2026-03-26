@@ -12,16 +12,16 @@ import org.springframework.scheduling.annotation.EnableScheduling
 class ForgeWebIdeApplication
 
 /**
- * forge-eval 模块的 JPA 配置。
+ * 全局 JPA 配置。
  * 独立于主类，@WebMvcTest 的 TypeExcludeFilter 会跳过此 @Configuration，
  * 避免在 web 层测试中触发 JPA 初始化。
  *
- * webide 自身的 entity/repository 由 Spring Boot auto-config 自动发现（在主类包下）。
- * eval-api 的 entity/repository 在不同包，需要显式声明。
+ * 注意：@EnableJpaRepositories 会禁用 Spring Boot 自动配置，
+ * 因此必须显式包含所有需要扫描的包（包括 webide 自身）。
  */
 @Configuration
-@EntityScan(basePackages = ["com.forge.eval.api.entity"])
-@EnableJpaRepositories(basePackages = ["com.forge.eval.api.repository"])
+@EntityScan(basePackages = ["com.forge.webide.entity", "com.forge.eval.api.entity"])
+@EnableJpaRepositories(basePackages = ["com.forge.webide.repository", "com.forge.eval.api.repository"])
 class EvalApiJpaConfig
 
 fun main(args: Array<String>) {
