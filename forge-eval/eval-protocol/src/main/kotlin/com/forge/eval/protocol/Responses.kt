@@ -14,6 +14,8 @@ data class SuiteResponse(
     val tags: List<String>,
     val taskCount: Int,
     val runCount: Int = 0,
+    val agentEndpoint: String? = null,
+    val agentConfig: AgentEndpointConfig? = null,
     val createdAt: Instant,
     val updatedAt: Instant
 )

@@ -9,8 +9,31 @@ data class CreateSuiteRequest(
     val platform: Platform,
     val agentType: AgentType,
     val lifecycle: Lifecycle = Lifecycle.CAPABILITY,
-    val tags: List<String> = emptyList()
+    val tags: List<String> = emptyList(),
+    val agentEndpoint: String? = null,
+    val agentConfig: AgentEndpointConfig? = null
 )
+
+/**
+ * 外部 Agent 端点配置。支持 SSE 流式和 REST 同步两种协议。
+ *
+ * - protocol: SSE（流式，如 CIMC Agent）或 REST（同步 JSON）
+ * - headers: 自定义请求头（如 Authorization）
+ * - requestTemplate: 请求体模板，{{prompt}} 会被替换为实际 prompt
+ *   默认 SSE: {"messages":[{"role":"user","content":"{{prompt}}"}],"sessionId":"eval-{{taskId}}"}
+ *   默认 REST: {"prompt":"{{prompt}}"}
+ * - outputJsonPath: 从 REST 响应中提取 output 的 JSON path（如 "output" 或 "data.content"）
+ * - timeoutMs: 超时时间
+ */
+data class AgentEndpointConfig(
+    val protocol: AgentProtocol = AgentProtocol.SSE,
+    val headers: Map<String, String> = emptyMap(),
+    val requestTemplate: String? = null,
+    val outputJsonPath: String = "output",
+    val timeoutMs: Long = 300_000
+)
+
+enum class AgentProtocol { SSE, REST }
 
 /** Request to add a task to a suite */
 data class CreateTaskRequest(

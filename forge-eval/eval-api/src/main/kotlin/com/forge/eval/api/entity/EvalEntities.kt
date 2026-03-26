@@ -32,6 +32,12 @@ class EvalSuiteEntity(
     @Column(columnDefinition = "TEXT")
     var tags: String = "[]",
 
+    @Column(name = "agent_endpoint", length = 500)
+    var agentEndpoint: String? = null,
+
+    @Column(name = "agent_config", columnDefinition = "TEXT")
+    var agentConfig: String? = null,
+
     @Column(name = "created_at")
     val createdAt: Instant = Instant.now(),
 

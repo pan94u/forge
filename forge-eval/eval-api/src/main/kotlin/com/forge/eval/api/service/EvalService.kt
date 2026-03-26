@@ -37,6 +37,7 @@ class EvalService(
     private val reportGenerator: ReportGenerator,
     private val reviewTriggerRules: ReviewTriggerRules,
     private val reviewService: ReviewService,
+    private val externalAgentCaller: ExternalAgentCaller,
     modelAdapterProvider: ObjectProvider<ModelAdapter>
 ) {
     private val modelAdapter: ModelAdapter? = modelAdapterProvider.ifAvailable
@@ -52,7 +53,9 @@ class EvalService(
             platform = PlatformEnum.valueOf(request.platform.name),
             agentType = AgentTypeEnum.valueOf(request.agentType.name),
             lifecycle = LifecycleEnum.valueOf(request.lifecycle.name),
-            tags = objectMapper.writeValueAsString(request.tags)
+            tags = objectMapper.writeValueAsString(request.tags),
+            agentEndpoint = request.agentEndpoint,
+            agentConfig = request.agentConfig?.let { objectMapper.writeValueAsString(it) }
         )
         val saved = suiteRepo.save(entity)
         return toSuiteResponse(saved)
@@ -143,7 +146,16 @@ class EvalService(
         val evalTasks = tasks.map { toEvalTask(it) }
         val evalSuite = toEvalSuite(suite)
 
-        // Execute evaluation (Phase 1: structure validation mode — no model calls)
+        val agentEndpoint = suite.agentEndpoint
+        val agentConfig: AgentEndpointConfig? = suite.agentConfig?.let {
+            try { objectMapper.readValue(it, AgentEndpointConfig::class.java) } catch (_: Exception) { null }
+        }
+        val outputProvider: (EvalTask) -> TrialOutput = if (!agentEndpoint.isNullOrBlank()) {
+            { task -> externalAgentCaller.call(agentEndpoint, agentConfig, task) }
+        } else {
+            { task -> callModel(task, request.model) }
+        }
+
         val runResult = evalEngine.executeRun(
             suite = evalSuite,
             tasks = if (request.taskFilter != null) {
@@ -151,10 +163,9 @@ class EvalService(
             } else {
                 evalTasks
             },
-            trialsPerTask = request.trialsPerTask
-        ) { task ->
-            callModel(task, request.model)
-        }
+            trialsPerTask = request.trialsPerTask,
+            outputProvider = outputProvider
+        )
 
         // Persist results
         val savedRun = persistRunResult(runResult, request)
@@ -699,6 +710,10 @@ class EvalService(
             tags = objectMapper.readValue(entity.tags),
             taskCount = taskCount.toInt(),
             runCount = runCount.toInt(),
+            agentEndpoint = entity.agentEndpoint,
+            agentConfig = entity.agentConfig?.let {
+                try { objectMapper.readValue(it, AgentEndpointConfig::class.java) } catch (_: Exception) { null }
+            },
             createdAt = entity.createdAt,
             updatedAt = entity.updatedAt
         )
