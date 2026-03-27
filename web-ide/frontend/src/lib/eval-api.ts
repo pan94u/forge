@@ -21,6 +21,16 @@ export interface PageResponse<T> {
   totalPages: number;
 }
 
+export type AgentProtocol = "SSE" | "REST";
+
+export interface AgentEndpointConfig {
+  protocol: AgentProtocol;
+  headers?: Record<string, string>;
+  requestTemplate?: string;
+  outputJsonPath?: string;
+  timeoutMs?: number;
+}
+
 export interface SuiteResponse {
   id: string;
   name: string;
@@ -31,6 +41,8 @@ export interface SuiteResponse {
   tags: string[];
   taskCount: number;
   runCount: number;
+  agentEndpoint?: string;
+  agentConfig?: AgentEndpointConfig;
   createdAt: string;
   updatedAt: string;
 }
@@ -230,6 +242,8 @@ export interface CreateSuiteRequest {
   agentType: AgentType;
   lifecycle?: Lifecycle;
   tags?: string[];
+  agentEndpoint?: string;
+  agentConfig?: AgentEndpointConfig;
 }
 
 export interface CreateTaskRequest {
@@ -316,6 +330,14 @@ export const evalApi = {
 
   getSuite(suiteId: string) {
     return fetch(`${BASE}/suites/${suiteId}`, { headers: headers() }).then(r => handleResponse<SuiteResponse>(r));
+  },
+
+  updateSuite(suiteId: string, data: Partial<CreateSuiteRequest>) {
+    return fetch(`${BASE}/suites/${suiteId}`, {
+      method: "PATCH",
+      headers: headers({ "Content-Type": "application/json" }),
+      body: JSON.stringify(data),
+    }).then(r => handleResponse<SuiteResponse>(r));
   },
 
   // Task

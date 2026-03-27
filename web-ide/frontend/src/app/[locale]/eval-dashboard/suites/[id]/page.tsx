@@ -13,6 +13,7 @@ import {
   type GraderType,
   type AssertionConfig,
   type RubricCriterion,
+  type AgentEndpointConfig,
   type TranscriptTurn,
   type TrendResponse,
   type RegressionReport,
@@ -162,6 +163,8 @@ export default function SuiteDetailPage() {
           </div>
         </div>
         <p className="mt-1 text-xs text-muted-foreground font-mono">ID: {suiteId}</p>
+        {/* Agent Endpoint Indicator */}
+        {suite && <AgentEndpointPanel suite={suite} onUpdate={() => fetchAll()} />}
       </div>
 
       {/* Trends section — suite-level overview */}
@@ -1387,6 +1390,156 @@ function TaskLifecyclePanel({
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ── Agent Endpoint Panel ──────────────────────────────────────────
+
+function AgentEndpointPanel({ suite, onUpdate }: { suite: SuiteResponse; onUpdate: () => void }) {
+  const [editing, setEditing] = useState(false);
+  const [endpoint, setEndpoint] = useState(suite.agentEndpoint ?? "");
+  const [protocol, setProtocol] = useState<"SSE" | "REST">(suite.agentConfig?.protocol ?? "SSE");
+  const [template, setTemplate] = useState(suite.agentConfig?.requestTemplate ?? "");
+  const [hdrs, setHdrs] = useState(suite.agentConfig?.headers ? JSON.stringify(suite.agentConfig.headers) : "");
+  const [timeout, setTimeout_] = useState(String(suite.agentConfig?.timeoutMs ?? 120000));
+  const [saving, setSaving] = useState(false);
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      const config: Record<string, unknown> = { protocol };
+      if (template.trim()) config.requestTemplate = template.trim();
+      if (hdrs.trim()) { try { config.headers = JSON.parse(hdrs.trim()); } catch { /* ignore */ } }
+      const ms = parseInt(timeout);
+      if (ms > 0) config.timeoutMs = ms;
+
+      await evalApi.updateSuite(suite.id, {
+        agentEndpoint: endpoint.trim() || undefined,
+        agentConfig: endpoint.trim() ? config as unknown as AgentEndpointConfig : undefined,
+      } as Record<string, unknown>);
+      setEditing(false);
+      onUpdate();
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!editing) {
+    return (
+      <div className="mt-2 flex items-center gap-2 text-xs">
+        {suite.agentEndpoint ? (
+          <>
+            <span className="inline-flex items-center gap-1 rounded-full bg-green-500/15 px-2 py-0.5 text-green-400">
+              <span className="w-1.5 h-1.5 rounded-full bg-green-400" /> Agent Connected
+            </span>
+            <span className="font-mono text-muted-foreground truncate max-w-md">{suite.agentEndpoint}</span>
+            <span className="rounded bg-muted px-1.5 py-0.5 text-[10px]">{suite.agentConfig?.protocol ?? "SSE"}</span>
+          </>
+        ) : (
+          <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-muted-foreground">
+            No Agent — Run Eval uses raw model
+          </span>
+        )}
+        <button onClick={() => setEditing(true)} className="ml-1 text-primary hover:underline">
+          {suite.agentEndpoint ? "Edit" : "Configure"}
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-3 rounded border border-border bg-muted/30 p-4 space-y-3">
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-medium">Agent Endpoint Configuration</h3>
+        <button onClick={() => setEditing(false)} className="text-xs text-muted-foreground hover:text-foreground">Cancel</button>
+      </div>
+
+      <div>
+        <label className="block text-xs text-muted-foreground mb-1">Endpoint URL</label>
+        <input
+          value={endpoint}
+          onChange={e => setEndpoint(e.target.value)}
+          placeholder="http://your-agent:8080/api/chat"
+          className="w-full rounded border border-input bg-background px-3 py-1.5 text-sm font-mono"
+        />
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="block text-xs text-muted-foreground mb-1">Protocol</label>
+          <select
+            value={protocol}
+            onChange={e => setProtocol(e.target.value as "SSE" | "REST")}
+            className="w-full rounded border border-input bg-background px-2 py-1.5 text-sm"
+          >
+            <option value="SSE">SSE (Streaming)</option>
+            <option value="REST">REST (Synchronous)</option>
+          </select>
+        </div>
+        <div>
+          <label className="block text-xs text-muted-foreground mb-1">Timeout (ms)</label>
+          <input
+            value={timeout}
+            onChange={e => setTimeout_(e.target.value)}
+            type="number"
+            className="w-full rounded border border-input bg-background px-3 py-1.5 text-sm"
+          />
+        </div>
+      </div>
+
+      <div>
+        <label className="block text-xs text-muted-foreground mb-1">
+          Request Template <span className="text-[10px]">({`{{prompt}} {{taskId}} {{taskName}}`})</span>
+        </label>
+        <textarea
+          value={template}
+          onChange={e => setTemplate(e.target.value)}
+          placeholder={protocol === "SSE"
+            ? '{"messages":[{"role":"user","content":"{{prompt}}"}],"sessionId":"eval-{{taskId}}"}'
+            : '{"prompt":"{{prompt}}"}'}
+          rows={2}
+          className="w-full rounded border border-input bg-background px-3 py-1.5 text-xs font-mono"
+        />
+      </div>
+
+      <div>
+        <label className="block text-xs text-muted-foreground mb-1">
+          Headers <span className="text-[10px]">(JSON)</span>
+        </label>
+        <input
+          value={hdrs}
+          onChange={e => setHdrs(e.target.value)}
+          placeholder='{"Authorization":"Bearer sk-xxx"}'
+          className="w-full rounded border border-input bg-background px-3 py-1.5 text-xs font-mono"
+        />
+      </div>
+
+      <div className="flex justify-end gap-2">
+        {suite.agentEndpoint && (
+          <button
+            type="button"
+            onClick={async () => {
+              setSaving(true);
+              await evalApi.updateSuite(suite.id, { agentEndpoint: null, agentConfig: null } as Record<string, unknown>);
+              setEndpoint("");
+              setEditing(false);
+              setSaving(false);
+              onUpdate();
+            }}
+            className="rounded px-3 py-1.5 text-xs text-red-400 hover:bg-red-500/10"
+          >
+            Disconnect
+          </button>
+        )}
+        <button
+          onClick={save}
+          disabled={saving}
+          className="rounded bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+        >
+          {saving ? "Saving..." : "Save"}
+        </button>
+      </div>
     </div>
   );
 }

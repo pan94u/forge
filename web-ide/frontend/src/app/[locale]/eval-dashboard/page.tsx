@@ -10,6 +10,7 @@ import {
   type Platform,
   type AgentType,
   type CreateSuiteRequest,
+  type AgentEndpointConfig,
 } from "@/lib/eval-api";
 
 const PLATFORMS: Platform[] = ["FORGE", "SYNAPSE", "APPLICATION"];
@@ -196,6 +197,15 @@ export default function EvalDashboardPage() {
   );
 }
 
+const AGENT_PRESETS: Record<string, { endpoint: string; protocol: "SSE" | "REST"; template?: string; hint: string }> = {
+  custom: { endpoint: "", protocol: "SSE", hint: "Custom agent endpoint" },
+  cimc: { endpoint: "http://cimc-server:3100/api/agent/chat", protocol: "SSE", hint: "CIMC Lighthouse Factory Dispatch Agent (SSE)" },
+  synapse: { endpoint: "", protocol: "SSE", template: '{"messages":[{"role":"user","content":"{{prompt}}"}],"sessionId":"eval-{{taskId}}"}', hint: "Synapse Agent (SSE, Anthropic-compatible)" },
+  openai: { endpoint: "", protocol: "REST", template: '{"model":"gpt-4","messages":[{"role":"user","content":"{{prompt}}"}]}', hint: "OpenAI-compatible API (REST)" },
+  dify: { endpoint: "", protocol: "REST", template: '{"inputs":{},"query":"{{prompt}}","response_mode":"blocking","user":"eval"}', hint: "Dify Workflow/Agent API (REST)" },
+  coze: { endpoint: "", protocol: "REST", template: '{"bot_id":"","user_id":"eval","query":"{{prompt}}","stream":false}', hint: "Coze Bot API (REST)" },
+};
+
 function CreateSuiteModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
   const t = useTranslations("evalDashboard");
   const [name, setName] = useState("");
@@ -203,7 +213,22 @@ function CreateSuiteModal({ onClose, onCreated }: { onClose: () => void; onCreat
   const [platform, setPlatform] = useState<Platform>("FORGE");
   const [agentType, setAgentType] = useState<AgentType>("CODING");
   const [tags, setTags] = useState("");
+  const [showAgent, setShowAgent] = useState(false);
+  const [agentPreset, setAgentPreset] = useState("custom");
+  const [agentEndpoint, setAgentEndpoint] = useState("");
+  const [agentProtocol, setAgentProtocol] = useState<"SSE" | "REST">("SSE");
+  const [agentTemplate, setAgentTemplate] = useState("");
+  const [agentHeaders, setAgentHeaders] = useState("");
+  const [agentTimeout, setAgentTimeout] = useState("120000");
   const [submitting, setSubmitting] = useState(false);
+
+  const applyPreset = (key: string) => {
+    setAgentPreset(key);
+    const p = AGENT_PRESETS[key];
+    if (p.endpoint) setAgentEndpoint(p.endpoint);
+    setAgentProtocol(p.protocol);
+    if (p.template) setAgentTemplate(p.template);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -217,6 +242,17 @@ function CreateSuiteModal({ onClose, onCreated }: { onClose: () => void; onCreat
         agentType,
         tags: tags.trim() ? tags.split(",").map(t => t.trim()).filter(Boolean) : undefined,
       };
+      if (showAgent && agentEndpoint.trim()) {
+        req.agentEndpoint = agentEndpoint.trim();
+        const config: Record<string, unknown> = { protocol: agentProtocol };
+        if (agentTemplate.trim()) config.requestTemplate = agentTemplate.trim();
+        if (agentHeaders.trim()) {
+          try { config.headers = JSON.parse(agentHeaders.trim()); } catch { /* ignore */ }
+        }
+        const ms = parseInt(agentTimeout);
+        if (ms > 0) config.timeoutMs = ms;
+        req.agentConfig = config as unknown as AgentEndpointConfig;
+      }
       await evalApi.createSuite(req);
       onCreated();
     } catch {
@@ -227,11 +263,11 @@ function CreateSuiteModal({ onClose, onCreated }: { onClose: () => void; onCreat
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 overflow-y-auto py-8" onClick={onClose}>
       <form
         onClick={e => e.stopPropagation()}
         onSubmit={handleSubmit}
-        className="w-full max-w-md rounded-lg border border-border bg-card p-6 space-y-4 shadow-lg"
+        className="w-full max-w-lg rounded-lg border border-border bg-card p-6 space-y-4 shadow-lg"
       >
         <h2 className="text-lg font-semibold">{t("createSuite")}</h2>
 
@@ -285,6 +321,100 @@ function CreateSuiteModal({ onClose, onCreated }: { onClose: () => void; onCreat
             placeholder="kotlin, code-gen"
             className="w-full rounded border border-input bg-background px-3 py-1.5 text-sm"
           />
+        </div>
+
+        {/* Agent Endpoint Configuration */}
+        <div className="border-t border-border pt-3">
+          <button
+            type="button"
+            onClick={() => setShowAgent(!showAgent)}
+            className="flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground"
+          >
+            <span className={`transition-transform ${showAgent ? "rotate-90" : ""}`}>&#9654;</span>
+            Agent Endpoint (Run Eval)
+            {agentEndpoint && <span className="ml-1 text-green-500">&#x2713;</span>}
+          </button>
+
+          {showAgent && (
+            <div className="mt-3 space-y-3 rounded border border-border/50 bg-muted/30 p-3">
+              <div>
+                <label className="block text-xs text-muted-foreground mb-1">Preset</label>
+                <select
+                  value={agentPreset}
+                  onChange={e => applyPreset(e.target.value)}
+                  className="w-full rounded border border-input bg-background px-2 py-1.5 text-sm"
+                >
+                  <option value="custom">Custom</option>
+                  <option value="cimc">CIMC Lighthouse Factory</option>
+                  <option value="synapse">Synapse Agent (Anthropic SSE)</option>
+                  <option value="openai">OpenAI-compatible</option>
+                  <option value="dify">Dify Workflow</option>
+                  <option value="coze">Coze Bot</option>
+                </select>
+                <p className="mt-1 text-[10px] text-muted-foreground">{AGENT_PRESETS[agentPreset]?.hint}</p>
+              </div>
+
+              <div>
+                <label className="block text-xs text-muted-foreground mb-1">Endpoint URL *</label>
+                <input
+                  value={agentEndpoint}
+                  onChange={e => setAgentEndpoint(e.target.value)}
+                  placeholder="http://your-agent:8080/api/chat"
+                  className="w-full rounded border border-input bg-background px-3 py-1.5 text-sm font-mono"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs text-muted-foreground mb-1">Protocol</label>
+                  <select
+                    value={agentProtocol}
+                    onChange={e => setAgentProtocol(e.target.value as "SSE" | "REST")}
+                    className="w-full rounded border border-input bg-background px-2 py-1.5 text-sm"
+                  >
+                    <option value="SSE">SSE (Streaming)</option>
+                    <option value="REST">REST (Synchronous)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs text-muted-foreground mb-1">Timeout (ms)</label>
+                  <input
+                    value={agentTimeout}
+                    onChange={e => setAgentTimeout(e.target.value)}
+                    type="number"
+                    className="w-full rounded border border-input bg-background px-3 py-1.5 text-sm"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs text-muted-foreground mb-1">
+                  Request Template <span className="text-[10px]">({"{{prompt}}"} {"{{taskId}}"} {"{{taskName}}"} placeholders)</span>
+                </label>
+                <textarea
+                  value={agentTemplate}
+                  onChange={e => setAgentTemplate(e.target.value)}
+                  placeholder={agentProtocol === "SSE"
+                    ? '{"messages":[{"role":"user","content":"{{prompt}}"}],"sessionId":"eval-{{taskId}}"}'
+                    : '{"prompt":"{{prompt}}"}'}
+                  rows={3}
+                  className="w-full rounded border border-input bg-background px-3 py-1.5 text-xs font-mono"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs text-muted-foreground mb-1">
+                  Headers <span className="text-[10px]">(JSON, e.g. {`{"Authorization":"Bearer xxx"}`})</span>
+                </label>
+                <input
+                  value={agentHeaders}
+                  onChange={e => setAgentHeaders(e.target.value)}
+                  placeholder='{"Authorization":"Bearer sk-xxx"}'
+                  className="w-full rounded border border-input bg-background px-3 py-1.5 text-xs font-mono"
+                />
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="flex justify-end gap-2 pt-2">

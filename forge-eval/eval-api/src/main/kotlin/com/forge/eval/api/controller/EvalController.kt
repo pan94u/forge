@@ -39,6 +39,14 @@ class EvalController(
         return evalService.getSuite(suiteId)
     }
 
+    @PatchMapping("/suites/{suiteId}")
+    fun updateSuite(
+        @PathVariable suiteId: UUID,
+        @RequestBody request: Map<String, Any?>
+    ): SuiteResponse {
+        return evalService.updateSuite(suiteId, request)
+    }
+
     // ── Task endpoints ──────────────────────────────────────────────
 
     @PostMapping("/suites/{suiteId}/tasks")

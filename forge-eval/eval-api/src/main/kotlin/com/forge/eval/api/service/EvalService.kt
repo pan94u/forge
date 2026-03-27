@@ -61,6 +61,25 @@ class EvalService(
         return toSuiteResponse(saved)
     }
 
+    @Transactional
+    fun updateSuite(suiteId: UUID, fields: Map<String, Any?>): SuiteResponse {
+        val entity = suiteRepo.findById(suiteId)
+            .orElseThrow { NotFoundException("Suite not found: $suiteId") }
+
+        fields["name"]?.let { entity.name = it as String }
+        fields["description"]?.let { entity.description = it as String }
+        if (fields.containsKey("agentEndpoint")) {
+            entity.agentEndpoint = fields["agentEndpoint"] as? String
+        }
+        if (fields.containsKey("agentConfig")) {
+            entity.agentConfig = fields["agentConfig"]?.let { objectMapper.writeValueAsString(it) }
+        }
+        entity.updatedAt = Instant.now()
+
+        val saved = suiteRepo.save(entity)
+        return toSuiteResponse(saved)
+    }
+
     fun listSuites(
         platform: String?,
         agentType: String?,
