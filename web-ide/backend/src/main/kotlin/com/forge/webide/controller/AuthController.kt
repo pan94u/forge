@@ -1,63 +1,60 @@
 package com.forge.webide.controller
 
+import jakarta.servlet.http.HttpServletRequest
 import org.springframework.beans.factory.annotation.Value
-import org.springframework.security.core.annotation.AuthenticationPrincipal
-import org.springframework.security.oauth2.jwt.Jwt
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RestController
 
-/**
- * Authentication endpoints for the Web IDE.
- *
- * Uses @AuthenticationPrincipal Jwt? instead of Principal? because Spring
- * Security injects a non-null anonymous Principal for unauthenticated requests,
- * making Principal? checks unreliable. Jwt? is null for anonymous users and
- * non-null only when a valid Bearer token is present.
- */
 @RestController
 @RequestMapping("/api/auth")
 class AuthController {
 
-    @Value("\${spring.security.oauth2.resourceserver.jwt.issuer-uri:http://localhost:8180/realms/forge}")
-    private lateinit var jwtIssuerUri: String
+    @Value("\${forge.security.enabled:false}")
+    private var securityEnabled: Boolean = false
 
     /**
-     * Public SSO configuration for the frontend.
-     * Frontend fetches this at runtime to discover the SSO server URL,
-     * eliminating build-time NEXT_PUBLIC_* env var dependencies.
+     * SSO configuration for the frontend.
+     * When security is disabled (local dev), returns enabled=false so frontend skips auth.
+     * When security is enabled (production), returns Console login URL.
      */
     @GetMapping("/sso-config")
-    fun ssoConfig(): Map<String, String> {
-        val ssoUrl = jwtIssuerUri.substringBefore("/realms/")
-        val realm = jwtIssuerUri.substringAfter("/realms/")
+    fun ssoConfig(): Map<String, Any> {
+        if (!securityEnabled) {
+            return mapOf("enabled" to false)
+        }
         return mapOf(
-            "ssoUrl" to ssoUrl,
-            "realm" to realm,
-            "clientId" to "forge-web-ide"
+            "enabled" to true,
+            "loginUrl" to "https://auth.synapse.gold/login",
+            "provider" to "synapse-console"
         )
     }
 
+    /**
+     * Current user info — reads from X-User-* headers (injected by Gateway).
+     * When no headers present (local dev), returns anonymous.
+     */
     @GetMapping("/me")
-    fun me(@AuthenticationPrincipal jwt: Jwt?): Map<String, Any?> {
-        if (jwt == null) {
+    fun me(request: HttpServletRequest): Map<String, Any?> {
+        val userId = request.getHeader("X-User-Id")
+
+        if (userId.isNullOrBlank()) {
             return mapOf(
-                "authenticated" to false,
-                "username" to "anonymous",
+                "authenticated" to !securityEnabled,  // dev mode = treat as authenticated
+                "username" to "dev",
                 "email" to null,
-                "roles" to emptyList<String>()
+                "roles" to listOf("admin"),
+                "org" to "dev"
             )
         }
 
-        val roles = jwt.getClaimAsStringList("realm_roles") ?: emptyList()
-
         return mapOf(
             "authenticated" to true,
-            "username" to (jwt.getClaimAsString("preferred_username") ?: jwt.subject),
-            "email" to jwt.getClaimAsString("email"),
-            "name" to jwt.getClaimAsString("name"),
-            "roles" to roles,
-            "sub" to jwt.subject
+            "username" to (request.getHeader("X-User-Name") ?: userId),
+            "email" to request.getHeader("X-User-Email"),
+            "roles" to (request.getHeader("X-User-Roles")?.split(",") ?: emptyList()),
+            "org" to request.getHeader("X-User-Org"),
+            "sub" to userId
         )
     }
 }
