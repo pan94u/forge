@@ -313,6 +313,8 @@
     "kappaSubstantial": "高度一致",
     "kappaModerate": "中度一致",
     "kappaFair": "一般",
-    "kappaSlight": "较差"
+    "kappaSlight": "较差",
+    "runInProgress": "评估运行中...",
+    "passedSoFar": "进度"
   }
 }

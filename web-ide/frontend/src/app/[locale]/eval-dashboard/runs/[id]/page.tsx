@@ -297,6 +297,24 @@ export default function RunDetailPage() {
     fetchRun();
   }, [fetchRun]);
 
+  useEffect(() => {
+    if (!run || (run.status !== "RUNNING" && run.status !== "PENDING")) return;
+
+    const interval = setInterval(async () => {
+      try {
+        const updated = await evalApi.getRun(runId);
+        setRun(updated);
+        if (updated.status !== "RUNNING" && updated.status !== "PENDING") {
+          clearInterval(interval);
+        }
+      } catch {
+        // ignore polling errors
+      }
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, [run?.status, runId]);
+
   if (loading) {
     return (
       <div className="min-h-screen bg-background p-6 max-w-6xl mx-auto">
@@ -344,6 +362,45 @@ export default function RunDetailPage() {
         </div>
       </div>
 
+      {/* Progress indicator for running/pending */}
+      {run && (run.status === "RUNNING" || run.status === "PENDING") && (() => {
+        const done = run.trials.length;
+        const total = run.totalExpectedTrials || 1;
+        const passed = run.trials.filter(tr => tr.outcome === "PASS").length;
+        const partial = run.trials.filter(tr => tr.outcome === "PARTIAL").length;
+        const failed = run.trials.filter(tr => tr.outcome === "FAIL").length;
+        const errors = run.trials.filter(tr => tr.outcome === "ERROR").length;
+        const avgScore = done > 0 ? run.trials.reduce((s, tr) => s + tr.score, 0) / done : 0;
+        return (
+          <div className="rounded-lg border border-blue-500/30 bg-blue-500/5 p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="h-2 w-2 rounded-full bg-blue-400 animate-pulse" />
+                <span className="text-sm font-medium">{t("runInProgress")}</span>
+              </div>
+              <span className="text-xs text-muted-foreground font-mono">
+                Trial {done} / {total}
+              </span>
+            </div>
+            <div className="w-full bg-muted rounded-full h-2">
+              <div
+                className="bg-blue-500 h-2 rounded-full transition-all duration-500"
+                style={{ width: `${(done / total) * 100}%` }}
+              />
+            </div>
+            {done > 0 && (
+              <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                <span>{t("passed")}<span className="text-green-400 font-mono">{passed}</span></span>
+                <span>Partial: <span className="text-yellow-400 font-mono">{partial}</span></span>
+                <span>{t("failed")}<span className="text-red-400 font-mono">{failed}</span></span>
+                <span>{t("errors")}<span className="text-muted-foreground font-mono">{errors}</span></span>
+                <span>{t("avgScore")}<span className="text-foreground font-mono">{avgScore.toFixed(2)}</span></span>
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <StatCard label={t("passRate")} value={pct(summary?.overallPassRate)} />
@@ -356,6 +413,7 @@ export default function RunDetailPage() {
         <div className="flex items-center gap-6 text-xs text-muted-foreground">
           <span>{t("totalTrials")}<span className="text-foreground font-mono">{summary.totalTrials}</span></span>
           <span>{t("passed")}<span className="text-green-400 font-mono">{summary.passedTrials}</span></span>
+          <span>Partial: <span className="text-yellow-400 font-mono">{summary.totalTrials - summary.passedTrials - summary.failedTrials - summary.errorTrials}</span></span>
           <span>{t("failed")}<span className="text-red-400 font-mono">{summary.failedTrials}</span></span>
           <span>{t("errors")}<span className="text-muted-foreground font-mono">{summary.errorTrials}</span></span>
           <span>{t("avgScore")}<span className="text-foreground font-mono">{summary.averageScore.toFixed(2)}</span></span>

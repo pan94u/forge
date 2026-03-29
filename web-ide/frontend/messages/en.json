@@ -313,6 +313,8 @@
     "kappaSubstantial": "substantial",
     "kappaModerate": "moderate",
     "kappaFair": "fair",
-    "kappaSlight": "slight/poor"
+    "kappaSlight": "slight/poor",
+    "runInProgress": "Evaluation running...",
+    "passedSoFar": "Progress"
   }
 }

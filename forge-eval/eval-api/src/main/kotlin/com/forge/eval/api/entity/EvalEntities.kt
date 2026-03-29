@@ -111,6 +111,9 @@ class EvalRunEntity(
     @Column
     var model: String? = null,
 
+    @Column(name = "total_tasks", columnDefinition = "INT DEFAULT 0")
+    var totalTasks: Int = 0,
+
     @Column(columnDefinition = "TEXT")
     var summary: String? = null,
 

@@ -27,6 +27,7 @@ data class RunResponse(
     val suiteName: String,
     val status: RunStatus,
     val trialsPerTask: Int,
+    val totalExpectedTrials: Int = 0,
     val model: String?,
     val summary: RunSummary?,
     val trials: List<TrialResponse>,

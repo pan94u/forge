@@ -162,9 +162,27 @@ class EvalService(
             throw IllegalStateException("Suite has no tasks")
         }
 
-        val evalTasks = tasks.map { toEvalTask(it) }
-        val evalSuite = toEvalSuite(suite)
+        val evalTasks = if (request.taskFilter != null) {
+            tasks.filter { it.id in request.taskFilter!! }.map { toEvalTask(it) }
+        } else {
+            tasks.map { toEvalTask(it) }
+        }
 
+        // 1. Create Run entity with RUNNING status
+        val runId = UUID.randomUUID()
+        val now = Instant.now()
+        val runEntity = EvalRunEntity(
+            id = runId,
+            suiteId = request.suiteId,
+            status = RunStatusEnum.RUNNING,
+            trialsPerTask = request.trialsPerTask,
+            model = request.model,
+            totalTasks = evalTasks.size,
+            startedAt = now
+        )
+        runRepo.save(runEntity)
+
+        // 2. Prepare output provider
         val agentEndpoint = suite.agentEndpoint
         val agentConfig: AgentEndpointConfig? = suite.agentConfig?.let {
             try { objectMapper.readValue(it, AgentEndpointConfig::class.java) } catch (_: Exception) { null }
@@ -175,20 +193,237 @@ class EvalService(
             { task -> callModel(task, request.model) }
         }
 
-        val runResult = evalEngine.executeRun(
-            suite = evalSuite,
-            tasks = if (request.taskFilter != null) {
-                evalTasks.filter { it.id in request.taskFilter!! }
-            } else {
-                evalTasks
-            },
-            trialsPerTask = request.trialsPerTask,
-            outputProvider = outputProvider
+        // 3. Launch async execution
+        Thread {
+            try {
+                executeRunAsync(runId, request.suiteId, evalTasks, request.trialsPerTask, outputProvider, suite.name)
+            } catch (e: Exception) {
+                logger.error("Async run {} failed: {}", runId, e.message, e)
+                finalizeRunOnError(runId, request.trialsPerTask)
+            }
+        }.apply { isDaemon = true; name = "eval-run-$runId" }.start()
+
+        // 4. Return immediately
+        return buildRunResponse(runEntity, suite.name)
+    }
+
+    private fun executeRunAsync(
+        runId: UUID,
+        suiteId: UUID,
+        tasks: List<EvalTask>,
+        trialsPerTask: Int,
+        outputProvider: (EvalTask) -> TrialOutput,
+        suiteName: String
+    ) {
+        logger.info("Async run {} started: {} tasks × {} trials", runId, tasks.size, trialsPerTask)
+
+        val allTrialResults = mutableListOf<com.forge.eval.engine.EvalTrialResult>()
+
+        for (task in tasks) {
+            for (trialNum in 1..trialsPerTask) {
+                val trialId = UUID.randomUUID()
+                val startTime = System.currentTimeMillis()
+
+                // Execute
+                val trialOutput = try {
+                    outputProvider(task)
+                } catch (e: Exception) {
+                    logger.error("Trial execution failed for task '{}': {}", task.name, e.message)
+                    TrialOutput(output = "(execution error: ${e.message})", error = e.message)
+                }
+
+                val durationMs = System.currentTimeMillis() - startTime
+
+                // Grade via CompositeGrader
+                val grades = evalEngine.gradeOutput(task, trialOutput.output, trialOutput.transcript)
+
+                // Determine outcome
+                val outcome = when {
+                    trialOutput.error != null -> TrialOutcome.ERROR
+                    grades.isEmpty() -> TrialOutcome.PASS
+                    grades.all { it.passed } -> TrialOutcome.PASS
+                    grades.any { it.passed } -> TrialOutcome.PARTIAL
+                    else -> TrialOutcome.FAIL
+                }
+                val avgScore = if (grades.isNotEmpty()) grades.map { it.score }.average() else 0.0
+
+                val status = outcome
+                logger.info("  Task '{}' trial #{}: {} (score={:.2f})", task.name, trialNum, status, avgScore)
+
+                // Persist trial immediately
+                val trialEntity = EvalTrialEntity(
+                    id = trialId,
+                    runId = runId,
+                    taskId = task.id,
+                    trialNumber = trialNum,
+                    outcome = OutcomeEnum.valueOf(outcome.name),
+                    score = avgScore,
+                    durationMs = durationMs,
+                    tokenUsage = trialOutput.tokenUsage?.let { objectMapper.writeValueAsString(it) },
+                    output = trialOutput.output,
+                    errorMessage = trialOutput.error
+                )
+                trialRepo.save(trialEntity)
+
+                // Persist grades
+                for (grade in grades) {
+                    val gradeEntity = EvalGradeEntity(
+                        id = grade.id,
+                        trialId = trialId,
+                        graderType = GraderTypeEnum.valueOf(grade.graderType.name),
+                        score = grade.score,
+                        passed = grade.passed,
+                        assertionResults = objectMapper.writeValueAsString(grade.assertionResults),
+                        rubricScores = objectMapper.writeValueAsString(grade.rubricScores),
+                        explanation = grade.explanation,
+                        confidence = grade.confidence
+                    )
+                    gradeRepo.save(gradeEntity)
+                }
+
+                // Persist transcript
+                if (trialOutput.transcript != null) {
+                    val transcriptEntity = EvalTranscriptEntity(
+                        trialId = trialId,
+                        source = TranscriptSourceEnum.valueOf(trialOutput.transcript!!.source.name),
+                        turns = objectMapper.writeValueAsString(trialOutput.transcript!!.turns),
+                        toolCallSummary = objectMapper.writeValueAsString(trialOutput.transcript!!.toolCallSummary),
+                        metadata = objectMapper.writeValueAsString(trialOutput.transcript!!.metadata)
+                    )
+                    transcriptRepo.save(transcriptEntity)
+                }
+
+                // Auto-trigger human review
+                val taskRunCount = trialRepo.findByTaskId(task.id).size
+                val decision = reviewTriggerRules.shouldReview(grades, taskRunCount)
+                if (decision.shouldReview) {
+                    for (grade in grades) {
+                        reviewService.createReview(
+                            gradeId = grade.id,
+                            trialId = trialId,
+                            taskId = task.id,
+                            autoScore = grade.score,
+                            autoConfidence = grade.confidence,
+                            reasons = decision.reasons.map { it.description }
+                        )
+                    }
+                }
+
+                // Collect for summary computation
+                allTrialResults.add(com.forge.eval.engine.EvalTrialResult(
+                    trial = EvalTrial(
+                        id = trialId, runId = runId, taskId = task.id,
+                        trialNumber = trialNum, outcome = outcome, score = avgScore,
+                        durationMs = durationMs, tokenUsage = trialOutput.tokenUsage,
+                        output = trialOutput.output, errorMessage = trialOutput.error
+                    ),
+                    grades = grades,
+                    transcript = trialOutput.transcript
+                ))
+            }
+        }
+
+        // Compute final summary
+        val totalTrials = allTrialResults.size
+        val passedTrials = allTrialResults.count { it.trial.outcome == TrialOutcome.PASS }
+        val failedTrials = allTrialResults.count { it.trial.outcome == TrialOutcome.FAIL }
+        val errorTrials = allTrialResults.count { it.trial.outcome == TrialOutcome.ERROR }
+        val overallPassRate = if (totalTrials > 0) passedTrials.toDouble() / totalTrials else 0.0
+        val averageScore = if (allTrialResults.isNotEmpty()) allTrialResults.map { it.trial.score }.average() else 0.0
+        val totalDurationMs = allTrialResults.sumOf { it.trial.durationMs }
+
+        // Pass@k and Pass^k
+        val trialsByTask = allTrialResults.groupBy { it.trial.taskId }
+        val (passAtK, passPowerK) = if (trialsPerTask > 1 && trialsByTask.isNotEmpty()) {
+            val taskPassAtK = trialsByTask.values.map { taskTrials ->
+                val outcomes = taskTrials.map { it.trial.outcome }
+                com.forge.eval.engine.stats.PassMetrics.passAtK(outcomes, trialsPerTask)
+            }
+            val taskPassPowerK = trialsByTask.values.map { taskTrials ->
+                val outcomes = taskTrials.map { it.trial.outcome }
+                com.forge.eval.engine.stats.PassMetrics.passPowerK(outcomes, trialsPerTask)
+            }
+            Pair(taskPassAtK.average(), taskPassPowerK.average())
+        } else {
+            Pair(null, null)
+        }
+
+        val summary = RunSummary(
+            totalTasks = trialsByTask.size,
+            totalTrials = totalTrials,
+            passedTrials = passedTrials,
+            failedTrials = failedTrials,
+            errorTrials = errorTrials,
+            overallPassRate = overallPassRate,
+            averageScore = averageScore,
+            totalDurationMs = totalDurationMs,
+            passAtK = passAtK,
+            passPowerK = passPowerK
         )
 
-        // Persist results
-        val savedRun = persistRunResult(runResult, request)
-        return buildRunResponse(savedRun, suite.name)
+        // Update Run to COMPLETED
+        val runEntity = runRepo.findById(runId).orElseThrow()
+        runEntity.status = RunStatusEnum.COMPLETED
+        runEntity.completedAt = Instant.now()
+        runEntity.summary = objectMapper.writeValueAsString(summary)
+        runRepo.save(runEntity)
+
+        logger.info("Async run {} completed: {} trials, pass rate={:.1f}%", runId, totalTrials, overallPassRate * 100)
+    }
+
+    /**
+     * 异常中断后，基于已入库的 trials 生成 summary，标记 FAILED 而非丢弃数据。
+     */
+    private fun finalizeRunOnError(runId: UUID, trialsPerTask: Int) {
+        try {
+            val runEntity = runRepo.findById(runId).orElse(null) ?: return
+            val trials = trialRepo.findByRunId(runId)
+
+            val totalTrials = trials.size
+            val passedTrials = trials.count { it.outcome == OutcomeEnum.PASS }
+            val failedTrials = trials.count { it.outcome == OutcomeEnum.FAIL }
+            val errorTrials = trials.count { it.outcome == OutcomeEnum.ERROR }
+            val overallPassRate = if (totalTrials > 0) passedTrials.toDouble() / totalTrials else 0.0
+            val averageScore = if (trials.isNotEmpty()) trials.map { it.score }.average() else 0.0
+            val totalDurationMs = trials.sumOf { it.durationMs }
+
+            val trialsByTask = trials.groupBy { it.taskId }
+            val (passAtK, passPowerK) = if (trialsPerTask > 1 && trialsByTask.isNotEmpty()) {
+                val taskPassAtK = trialsByTask.values.map { taskTrials ->
+                    val outcomes = taskTrials.map { TrialOutcome.valueOf(it.outcome.name) }
+                    com.forge.eval.engine.stats.PassMetrics.passAtK(outcomes, trialsPerTask)
+                }
+                val taskPassPowerK = trialsByTask.values.map { taskTrials ->
+                    val outcomes = taskTrials.map { TrialOutcome.valueOf(it.outcome.name) }
+                    com.forge.eval.engine.stats.PassMetrics.passPowerK(outcomes, trialsPerTask)
+                }
+                Pair(taskPassAtK.average(), taskPassPowerK.average())
+            } else {
+                Pair(null, null)
+            }
+
+            val summary = RunSummary(
+                totalTasks = trialsByTask.size,
+                totalTrials = totalTrials,
+                passedTrials = passedTrials,
+                failedTrials = failedTrials,
+                errorTrials = errorTrials,
+                overallPassRate = overallPassRate,
+                averageScore = averageScore,
+                totalDurationMs = totalDurationMs,
+                passAtK = passAtK,
+                passPowerK = passPowerK
+            )
+
+            runEntity.status = RunStatusEnum.FAILED
+            runEntity.completedAt = Instant.now()
+            runEntity.summary = objectMapper.writeValueAsString(summary)
+            runRepo.save(runEntity)
+
+            logger.warn("Run {} marked FAILED with {} completed trials (summary preserved)", runId, totalTrials)
+        } catch (e: Exception) {
+            logger.error("Failed to finalize run {} on error: {}", runId, e.message)
+        }
     }
 
     fun getRun(runId: UUID): RunResponse {
@@ -684,6 +919,7 @@ class EvalService(
             suiteName = suiteName,
             status = RunStatus.valueOf(run.status.name),
             trialsPerTask = run.trialsPerTask,
+            totalExpectedTrials = run.totalTasks * run.trialsPerTask,
             model = run.model,
             summary = run.summary?.let { objectMapper.readValue(it) },
             trials = trials.map { trial ->

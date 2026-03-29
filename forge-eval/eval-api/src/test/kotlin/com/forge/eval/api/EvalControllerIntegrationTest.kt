@@ -44,6 +44,22 @@ class EvalControllerIntegrationTest {
         var transcriptId: UUID? = null
     }
 
+    /** Poll GET /runs/{id} until status is COMPLETED or FAILED, max 30 seconds. */
+    private fun pollRunUntilCompleted(id: UUID): RunResponse {
+        val deadline = System.currentTimeMillis() + 30_000
+        while (System.currentTimeMillis() < deadline) {
+            val result = mockMvc.perform(get("/api/eval/v1/runs/$id"))
+                .andExpect(status().isOk)
+                .andReturn()
+            val response: RunResponse = objectMapper.readValue(result.response.contentAsString)
+            if (response.status == RunStatus.COMPLETED || response.status == RunStatus.FAILED) {
+                return response
+            }
+            Thread.sleep(200)
+        }
+        throw AssertionError("Run $id did not complete within 30 seconds")
+    }
+
     @Test
     @Order(1)
     fun `POST suites - creates a new eval suite`() {
@@ -156,32 +172,26 @@ class EvalControllerIntegrationTest {
                 .content(objectMapper.writeValueAsString(request))
         )
             .andExpect(status().isCreated)
-            .andExpect(jsonPath("$.status").value("COMPLETED"))
             .andExpect(jsonPath("$.trialsPerTask").value(1))
-            .andExpect(jsonPath("$.trials").isArray)
-            .andExpect(jsonPath("$.trials[0].trialNumber").value(1))
             .andReturn()
 
         val response: RunResponse = objectMapper.readValue(result.response.contentAsString)
         runId = response.id
         assertThat(runId).isNotNull()
-        assertThat(response.summary).isNotNull()
-        assertThat(response.summary!!.totalTasks).isEqualTo(1)
-        assertThat(response.summary!!.totalTrials).isEqualTo(1)
-        assertThat(response.trials).hasSize(1)
+
+        // Async run — poll until COMPLETED
+        val completed = pollRunUntilCompleted(runId!!)
+        assertThat(completed.summary).isNotNull()
+        assertThat(completed.summary!!.totalTasks).isEqualTo(1)
+        assertThat(completed.summary!!.totalTrials).isEqualTo(1)
+        assertThat(completed.trials).hasSize(1)
     }
 
     @Test
     @Order(8)
     fun `GET runs by id - returns run with trials and grades`() {
-        val result = mockMvc.perform(get("/api/eval/v1/runs/$runId"))
-            .andExpect(status().isOk)
-            .andExpect(jsonPath("$.id").value(runId.toString()))
-            .andExpect(jsonPath("$.status").value("COMPLETED"))
-            .andExpect(jsonPath("$.trials").isArray)
-            .andReturn()
-
-        val response: RunResponse = objectMapper.readValue(result.response.contentAsString)
+        val response = pollRunUntilCompleted(runId!!)
+        assertThat(response.status).isEqualTo(RunStatus.COMPLETED)
         assertThat(response.trials).hasSize(1)
         assertThat(response.trials[0].grades).isNotEmpty()
     }
@@ -189,6 +199,7 @@ class EvalControllerIntegrationTest {
     @Test
     @Order(9)
     fun `GET runs report JSON - returns structured report`() {
+        pollRunUntilCompleted(runId!!)
         mockMvc.perform(get("/api/eval/v1/runs/$runId/report?format=json"))
             .andExpect(status().isOk)
             .andExpect(jsonPath("$.suiteName").value("Integration Test Suite"))
@@ -200,6 +211,7 @@ class EvalControllerIntegrationTest {
     @Test
     @Order(10)
     fun `GET runs report Markdown - returns readable markdown`() {
+        pollRunUntilCompleted(runId!!)
         val result = mockMvc.perform(get("/api/eval/v1/runs/$runId/report?format=markdown"))
             .andExpect(status().isOk)
             .andReturn()
@@ -260,13 +272,15 @@ class EvalControllerIntegrationTest {
         )
             .andExpect(status().isCreated)
             .andExpect(jsonPath("$.trialsPerTask").value(3))
-            .andExpect(jsonPath("$.trials").isArray)
             .andReturn()
 
         val response: RunResponse = objectMapper.readValue(result.response.contentAsString)
         multiTrialRunId = response.id
-        assertThat(response.trials).hasSize(3)
-        assertThat(response.trials.map { it.trialNumber }).containsExactly(1, 2, 3)
+
+        // Async — poll until completed
+        val completed = pollRunUntilCompleted(multiTrialRunId!!)
+        assertThat(completed.trials).hasSize(3)
+        assertThat(completed.trials.map { it.trialNumber }).containsExactly(1, 2, 3)
     }
 
     @Test
@@ -328,7 +342,10 @@ class EvalControllerIntegrationTest {
     @Test
     @Order(40)
     fun `GET regressions - compare two runs`() {
-        // runId (order 7) and multiTrialRunId (order 20) are both against same suite
+        // Ensure both runs are completed
+        pollRunUntilCompleted(runId!!)
+        pollRunUntilCompleted(multiTrialRunId!!)
+
         mockMvc.perform(
             get("/api/eval/v1/regressions")
                 .param("suiteId", suiteId.toString())

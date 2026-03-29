@@ -134,6 +134,7 @@ export interface RunResponse {
   suiteName: string;
   status: RunStatus;
   trialsPerTask: number;
+  totalExpectedTrials: number;
   model?: string;
   summary?: RunSummary;
   trials: TrialResponse[];
@@ -371,15 +372,11 @@ export const evalApi = {
   },
 
   createRun(data: CreateRunRequest) {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 300_000); // 5 min timeout for model calls
     return fetch(`${BASE}/runs`, {
       method: "POST",
       headers: headers({ "Content-Type": "application/json" }),
       body: JSON.stringify(data),
-      signal: controller.signal,
-    }).then(r => { clearTimeout(timeout); return handleResponse<RunResponse>(r); })
-      .catch(e => { clearTimeout(timeout); throw e; });
+    }).then(r => handleResponse<RunResponse>(r));
   },
 
   getRun(runId: string) {
