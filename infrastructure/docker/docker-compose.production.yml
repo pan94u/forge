@@ -266,6 +266,7 @@ services:
       GATEWAY_CLIENT_ID: "${FORGE_GATEWAY_CLIENT_ID}"
       GATEWAY_CLIENT_SECRET: "${FORGE_GATEWAY_CLIENT_SECRET}"
       GATEWAY_UPSTREAM: "http://backend:8080"
+      GATEWAY_PUBLIC_URL: "https://forge.delivery"
       GATEWAY_PUBLIC_ROUTES: "/api/health,/actuator/health,/api/auth/sso-config"
       GATEWAY_PORT: "8090"
       NO_PROXY: "localhost,backend,auth.synapse.gold"
