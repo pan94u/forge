@@ -148,6 +148,7 @@ Forge is a Gradle monorepo (Kotlin DSL) with the following modules:
 - **Console fetch() 不自动加 basePath**: `<Link>` 和 `useRouter` 自动加 basePath，但 `fetch()` 不加。`api.ts` 中所有请求必须手动加 `process.env.NEXT_PUBLIC_BASE_PATH` 前缀，否则 nginx 直接路由到 backend（绕过 auth 代理层导致 401）
 - **Auth.js RFC 9207 issuer 校验**: Keycloak 24 在授权回调中带 `iss` 参数，Auth.js 会校验。`type: "oauth"` 时设置 `issuer` **不会**触发 OIDC discovery，但**必须**设置以通过 RFC 9207 校验
 - **nginx proxy_buffer_size**: NextAuth session cookie 超过 4KB 默认值，所有代理到 Console 的 nginx location 需设 `proxy_buffer_size 16k; proxy_buffers 4 16k;`
+- **JPA 非空字段必须配 Flyway 迁移**: 给 Entity 新增 Kotlin 非空字段（`Int`/`Long`/`String`）时，**必须同步写 Flyway 迁移脚本**（ADD COLUMN + UPDATE 回填 + SET NOT NULL）。`ddl-auto=update` 只管加列不回填，老数据 NULL 导致运行时崩溃。Session 30 的 `eval_runs.total_tasks` 踩过此坑
 
 ## 交付方法论（从 29 Session 实践总结）
 
