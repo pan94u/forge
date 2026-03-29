@@ -4,11 +4,11 @@
 
 | 项目 | 值 |
 |------|------|
+| 应用名 | forge |
 | 仓库路径 | `/opt/forge` |
 | Compose 文件 | `infrastructure/haier/docker-compose.yml`（海尔/当前生产）或 `infrastructure/docker/docker-compose.production.yml`（独立生产）。根据服务器上实际存在的 env 文件判断用哪个。 |
 | Env 文件 | `infrastructure/haier/.env`（海尔）或 `infrastructure/docker/.env.production`（独立生产） |
 | 镜像来源 | GHCR (`ghcr.io/pan94u/forge`) |
-| 日志文件 | `DEPLOYMENT_LOGBOOK.md`（仓库根目录，部署后提交推送） |
 
 ## 部署方式
 
@@ -49,10 +49,10 @@ docker compose -f <compose> --env-file <env> up -d --remove-orphans
 4. **backend 启动慢**：JVM 冷启动 + Flyway 迁移，首次 healthy 可能需要 60s
 5. **数据库迁移失败**：如果 Flyway 报版本冲突，查看 `docker logs forge-backend` 中的具体迁移文件名和错误
 
-## 部署后验证（可选）
+## 部署后验证
 
 ```bash
-curl -sf https://forge.delivery/api/knowledge/search | head -1
+curl -sf https://forge.delivery/api/health
 curl -sf -o /dev/null -w "%{http_code}" https://forge.delivery/console
 curl -sf -o /dev/null -w "%{http_code}" https://sso.synapse.gold/auth/realms/forge
 ```

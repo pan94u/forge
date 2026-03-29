@@ -1,12 +1,11 @@
 # /deploy — 应用部署
 
-将指定应用部署到当前服务器。
+将当前项目部署到服务器。
 
 ## 输入
 
-`$ARGUMENTS` 格式: `<app> [version]`
+`$ARGUMENTS` 格式: `[version]`
 
-- **app**: 应用名，对应 `infrastructure/deploy-manifests/<app>.md`
 - **version**: 可选。镜像 tag（如 `sha-abc1234`）、`latest`（默认）、或 `rollback`
 
 ## 你的角色
@@ -17,7 +16,7 @@
 
 ### Phase 1: 加载知识
 
-读取 `infrastructure/deploy-manifests/<app>.md`，理解该应用的部署拓扑、服务列表、健康检查方式和已知陷阱。如果清单不存在，告知用户可用的清单（ls deploy-manifests 目录）并停止。
+读取项目根目录的 `DEPLOY.md`，理解该应用的部署拓扑、服务列表、健康检查方式和已知陷阱。如果文件不存在，告知用户需要先创建 `DEPLOY.md`（参考部署套件安装指南）并停止。
 
 ### Phase 2: 环境预检
 
@@ -52,16 +51,15 @@
 
 ### Phase 6: 记录并提交
 
-部署完成后，将记录追加到**被部署项目仓库内**的 `DEPLOYMENT_LOGBOOK.md`（仓库根目录），格式：
+部署完成后，将记录追加到项目根目录的 `DEPLOYMENT_LOGBOOK.md`，格式：
 
 ```markdown
 ---
 
-## 部署 <app> — <YYYY-MM-DD HH:MM:SS>
+## <app> — <YYYY-MM-DD HH:MM:SS>
 
 | 项目 | 值 |
 |------|------|
-| 应用 | <app> |
 | 时间 | <timestamp> |
 | 版本 | `<deploy_tag>` |
 | Git | `<git short sha>` |
@@ -78,11 +76,10 @@
 
 如果本次部署修复了上次的问题或有特殊操作，在容器状态后补充 `### 备注` 段落。
 
-**记录写入后，在项目仓库内提交并推送**：
+**记录写入后提交并推送**：
 ```bash
-cd <项目仓库路径>
 git add DEPLOYMENT_LOGBOOK.md
-git commit -m "deploy: <app> <version> — <SUCCESS/PARTIAL/ROLLBACK>"
+git commit -m "deploy: <version> — <SUCCESS/PARTIAL/ROLLBACK>"
 git push
 ```
 

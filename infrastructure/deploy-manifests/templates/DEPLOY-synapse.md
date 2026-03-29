@@ -4,11 +4,11 @@
 
 | 项目 | 值 |
 |------|------|
+| 应用名 | synapse |
 | 仓库路径 | `/home/deploy/Synapse-AI` |
 | Compose 文件 | `docker-compose.production.yml` |
 | Env 文件 | `.env.production` |
 | 镜像来源 | 本地构建（`--build`） |
-| 日志文件 | `DEPLOYMENT_LOGBOOK.md`（仓库根目录，部署后提交推送） |
 
 ## 部署方式
 
