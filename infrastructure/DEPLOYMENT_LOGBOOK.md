@@ -575,3 +575,34 @@ forge-postgres             postgres:16-alpine                                Up 
 5. **postgres volume 路径适配**：生产 compose 的 named volume 绑定到 `/ssd-data/forge-postgres`（与海尔 compose 一致，保证数据连续性）
 6. **postgres 端口改为 5433**：避免与 cimc-postgres 的 5432 冲突
 7. **backend health check 改为 `/api/health`**：GatewayUserFilter 导致 `/api/knowledge/search` 返回 403
+
+---
+
+## 部署 forge — 2026-03-29 21:11:59
+
+| 项目 | 值 |
+|------|------|
+| 时间 | 2026-03-29 21:11:59 |
+| 版本 | `latest` |
+| Git | `c5bb5d5` |
+| 操作人 | deploy |
+| 状态 | SUCCESS |
+| 上一版本 | `latest@dd5ba28` |
+
+### 容器状态
+
+```
+NAME                       STATUS
+forge-backend              Up (healthy)
+forge-database-mcp         Up (healthy)
+forge-enterprise-console   Up
+forge-frontend             Up
+forge-gateway              Up
+forge-knowledge-mcp        Up (healthy)
+forge-nginx                Up
+forge-postgres             Up (healthy)
+```
+
+### 备注
+
+nginx 路由修复：消除 Keycloak 跳转残留，补全 `/gateway/` 端点路由。Gateway health check 验证通过 (`/gateway/health` → 200)。
