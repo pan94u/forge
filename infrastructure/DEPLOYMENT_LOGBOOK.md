@@ -637,3 +637,34 @@ forge-postgres             Up (healthy)
 ### 备注
 
 Gateway 镜像更新，仅 forge-gateway 容器重建，其余 7 个容器保持运行。
+
+---
+
+## 部署 forge — 2026-03-29 22:01:01
+
+| 项目 | 值 |
+|------|------|
+| 时间 | 2026-03-29 22:01:01 |
+| 版本 | `latest` |
+| Git | `a6c4232` |
+| 操作人 | deploy |
+| 状态 | SUCCESS |
+| 上一版本 | `latest@d129ce2` |
+
+### 容器状态
+
+```
+NAME                       STATUS
+forge-backend              Up (healthy)
+forge-database-mcp         Up (healthy)
+forge-enterprise-console   Up
+forge-frontend             Up
+forge-gateway              Up
+forge-knowledge-mcp        Up (healthy)
+forge-nginx                Up
+forge-postgres             Up (healthy)
+```
+
+### 备注
+
+Gateway compose 新增 `GATEWAY_PUBLIC_URL` 环境变量，gateway 镜像更新重建。
