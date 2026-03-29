@@ -256,7 +256,7 @@ services:
   # Forge Gateway — JWT 验签 + X-User-* 注入 (synapse/gateway)
   # ---------------------------------------------------------------------------
   forge-gateway:
-    image: ghcr.io/zhao055/synapse-gateway:latest
+    image: pan9pang/synapse-gateway:latest
     container_name: forge-gateway
     restart: unless-stopped
     cpus: 0.25
