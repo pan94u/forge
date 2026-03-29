@@ -78,6 +78,10 @@ services:
     build:
       context: ../../web-ide/backend
       dockerfile: Dockerfile
+      args:
+        GIT_COMMIT: ${GIT_COMMIT:-unknown}
+        GIT_BRANCH: ${GIT_BRANCH:-unknown}
+        BUILD_TIME: ${BUILD_TIME:-unknown}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     networks:
@@ -146,6 +150,10 @@ services:
     build:
       context: ../../web-ide/frontend
       dockerfile: Dockerfile
+      args:
+        GIT_COMMIT: ${GIT_COMMIT:-unknown}
+        GIT_BRANCH: ${GIT_BRANCH:-unknown}
+        BUILD_TIME: ${BUILD_TIME:-unknown}
     environment:
       BACKEND_URL: http://backend:8080
       BACKEND_WS_URL: ws://backend:8080

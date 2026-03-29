@@ -1,5 +1,6 @@
 import React from "react";
 import "./globals.css";
+import { VersionOverlay } from "@/components/common/VersionOverlay";
 
 export default function RootLayout({
   children,
@@ -10,6 +11,7 @@ export default function RootLayout({
     <html lang="zh" className="dark">
       <body className="min-h-screen bg-background font-sans antialiased">
         {children}
+        <VersionOverlay />
       </body>
     </html>
   );

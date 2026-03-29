@@ -51,7 +51,7 @@ class SecurityConfig {
             http
                 .authorizeHttpRequests { auth ->
                     auth
-                        .requestMatchers("/actuator/health", "/actuator/info").permitAll()
+                        .requestMatchers("/actuator/health", "/actuator/info", "/api/health").permitAll()
                         .requestMatchers("/ws/**").permitAll() // WebSocket upgrade
                         .requestMatchers("/api/auth/**").permitAll() // Auth endpoints
                         .requestMatchers("/h2-console/**").permitAll()
