@@ -606,3 +606,34 @@ forge-postgres             Up (healthy)
 ### 备注
 
 nginx 路由修复：消除 Keycloak 跳转残留，补全 `/gateway/` 端点路由。Gateway health check 验证通过 (`/gateway/health` → 200)。
+
+---
+
+## 部署 forge — 2026-03-29 21:34:12
+
+| 项目 | 值 |
+|------|------|
+| 时间 | 2026-03-29 21:34:12 |
+| 版本 | `latest` |
+| Git | `d129ce2` |
+| 操作人 | deploy |
+| 状态 | SUCCESS |
+| 上一版本 | `latest@c5bb5d5` |
+
+### 容器状态
+
+```
+NAME                       STATUS
+forge-backend              Up (healthy)
+forge-database-mcp         Up (healthy)
+forge-enterprise-console   Up
+forge-frontend             Up
+forge-gateway              Up
+forge-knowledge-mcp        Up (healthy)
+forge-nginx                Up
+forge-postgres             Up (healthy)
+```
+
+### 备注
+
+Gateway 镜像更新，仅 forge-gateway 容器重建，其余 7 个容器保持运行。
