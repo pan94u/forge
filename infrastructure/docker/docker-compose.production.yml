@@ -49,7 +49,6 @@ services:
       POSTGRES_DB: forge
       POSTGRES_USER: forge
       POSTGRES_PASSWORD: ${DB_PASSWORD}
-      PGDATA: /var/lib/postgresql/data/pgdata
     command: >
       postgres
       -c shared_buffers=128MB
@@ -62,7 +61,7 @@ services:
       -c random_page_cost=1.1
       -c log_min_duration_statement=1000
     volumes:
-      - forge-postgres-data:/var/lib/postgresql/data
+      - /ssd-data/forge-postgres:/var/lib/postgresql/data
     ports:
       - "127.0.0.1:5433:5432"
     healthcheck:
@@ -177,7 +176,7 @@ services:
     volumes:
       - ../../plugins:/plugins:ro
       - ../../knowledge-base:/knowledge-base:ro
-      - forge-backend-data:/app/data
+      - /data/forge/backend-data:/app/data
     ports:
       - "127.0.0.1:8080:8080"
     depends_on:
@@ -302,16 +301,3 @@ services:
         max-size: "50m"
         max-file: "3"
 
-volumes:
-  forge-postgres-data:
-    driver: local
-    driver_opts:
-      type: none
-      o: bind
-      device: /ssd-data/forge-postgres
-  forge-backend-data:
-    driver: local
-    driver_opts:
-      type: none
-      o: bind
-      device: /data/forge/backend-data
