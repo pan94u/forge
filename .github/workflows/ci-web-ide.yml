@@ -7,6 +7,7 @@ on:
       - 'web-ide/**'
       - 'adapters/**'
       - 'agent-eval/**'
+      - 'forge-eval/**'
       - 'build.gradle.kts'
       - 'settings.gradle.kts'
   push:
@@ -15,6 +16,7 @@ on:
       - 'web-ide/**'
       - 'adapters/**'
       - 'agent-eval/**'
+      - 'forge-eval/**'
 
 permissions:
   contents: read
@@ -108,6 +110,8 @@ jobs:
           ./gradlew :web-ide:backend:test --no-daemon
           ./gradlew :adapters:model-adapter:test --no-daemon
           ./gradlew :agent-eval:test --no-daemon
+          ./gradlew :forge-eval:eval-engine:test --no-daemon
+          ./gradlew :forge-eval:eval-api:test --no-daemon
 
       - name: Upload test reports
         if: always()
@@ -199,6 +203,10 @@ jobs:
           tags: |
             ghcr.io/${{ github.repository }}/backend:${{ github.sha }}
             ghcr.io/${{ github.repository }}/backend:latest
+          build-args: |
+            GIT_COMMIT=${{ github.sha }}
+            GIT_BRANCH=${{ github.ref_name }}
+            BUILD_TIME=${{ github.event.head_commit.timestamp }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -234,5 +242,9 @@ jobs:
           tags: |
             ghcr.io/${{ github.repository }}/frontend:${{ github.sha }}
             ghcr.io/${{ github.repository }}/frontend:latest
+          build-args: |
+            GIT_COMMIT=${{ github.sha }}
+            GIT_BRANCH=${{ github.ref_name }}
+            BUILD_TIME=${{ github.event.head_commit.timestamp }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

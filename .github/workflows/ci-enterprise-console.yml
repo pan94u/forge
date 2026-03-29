@@ -80,5 +80,9 @@ jobs:
           tags: |
             ghcr.io/${{ github.repository }}/enterprise-console:${{ github.sha }}
             ghcr.io/${{ github.repository }}/enterprise-console:latest
+          build-args: |
+            GIT_COMMIT=${{ github.sha }}
+            GIT_BRANCH=${{ github.ref_name }}
+            BUILD_TIME=${{ github.event.head_commit.timestamp }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
