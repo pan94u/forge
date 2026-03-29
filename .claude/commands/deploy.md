@@ -50,9 +50,9 @@
 3. 向用户报告并建议下一步（回滚 / 查看更多日志 / 手动修复）
 4. **不要自动回滚**——等用户确认
 
-### Phase 6: 记录
+### Phase 6: 记录并提交
 
-部署完成后，将记录追加到 `infrastructure/DEPLOYMENT_LOGBOOK.md`，格式：
+部署完成后，将记录追加到**被部署项目仓库内**的 `DEPLOYMENT_LOGBOOK.md`（仓库根目录），格式：
 
 ```markdown
 ---
@@ -77,6 +77,14 @@
 ```
 
 如果本次部署修复了上次的问题或有特殊操作，在容器状态后补充 `### 备注` 段落。
+
+**记录写入后，在项目仓库内提交并推送**：
+```bash
+cd <项目仓库路径>
+git add DEPLOYMENT_LOGBOOK.md
+git commit -m "deploy: <app> <version> — <SUCCESS/PARTIAL/ROLLBACK>"
+git push
+```
 
 ## 安全约束
 

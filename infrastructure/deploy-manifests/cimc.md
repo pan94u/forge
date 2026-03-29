@@ -7,7 +7,7 @@
 | 仓库路径 | `/home/deploy/CIMC` |
 | Compose 文件 | `docker-compose.yml` |
 | 镜像来源 | 本地构建（通过 `docker-build.sh`） |
-| 日志文件 | `/opt/forge/infrastructure/DEPLOYMENT_LOGBOOK.md` |
+| 日志文件 | `DEPLOYMENT_LOGBOOK.md`（仓库根目录，部署后提交推送） |
 
 ## 部署方式
 
