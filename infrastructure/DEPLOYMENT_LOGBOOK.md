@@ -348,3 +348,230 @@ SSO: sso.synapse.gold (独立机器)
 - `https://forge.delivery` 正常访问，SSO 登录跳转到 `sso.synapse.gold`
 - 7 个容器全部 Running/Healthy
 - PostgreSQL 旧数据恢复成功（Flyway 迁移通过）
+
+---
+
+## 部署 forge — 2026-03-26 18:48:19
+
+| 项目 | 值 |
+|------|------|
+| 应用 | forge |
+| 时间 | 2026-03-26 18:48:19 |
+| 版本 | `local-build@43ec7b7` |
+| Git | `43ec7b7` |
+| 操作人 | deploy |
+| 状态 | SUCCESS |
+| 上一版本 | `local-build@7880103` |
+
+### 变更内容
+
+- 远端更新: forge-eval 模块从 webide 中拆除（删除 12 个 Eval 相关文件，迁移到独立 `forge-eval` 模块）
+- 本地构建: backend bootJar + frontend npm build + enterprise-console npm build + MCP server shadowJar
+- 部署方式: `infrastructure/haier/docker-compose.yml`（本地构建模式）
+
+### 容器状态
+
+```
+NAME                       IMAGE                      STATUS
+forge-backend              haier-backend              Up About a minute (healthy)
+forge-database-mcp         haier-database-mcp         Up About a minute (healthy)
+forge-enterprise-console   haier-enterprise-console   Up 31 seconds
+forge-frontend             haier-frontend             Up 31 seconds
+forge-knowledge-mcp        haier-knowledge-mcp        Up About a minute (healthy)
+forge-nginx                nginx:alpine               Up 31 seconds
+forge-postgres             postgres:16-alpine         Up 35 hours (healthy)
+```
+
+---
+
+## 部署 forge — 2026-03-26 22:53:05
+
+| 项目 | 值 |
+|------|------|
+| 应用 | forge |
+| 时间 | 2026-03-26 22:53:05 |
+| 版本 | `latest` (GHCR) |
+| Git | `773ace5` |
+| 操作人 | deploy |
+| 状态 | SUCCESS |
+| 上一版本 | `local-build@43ec7b7` |
+
+### 容器状态
+
+```
+NAME                       IMAGE                                             STATUS
+forge-backend              ghcr.io/pan94u/forge/backend:latest               Up (healthy)
+forge-database-mcp         ghcr.io/pan94u/forge/forge-database-mcp:latest    Up (healthy)
+forge-enterprise-console   ghcr.io/pan94u/forge/enterprise-console:latest    Up
+forge-frontend             ghcr.io/pan94u/forge/frontend:latest              Up
+forge-knowledge-mcp        ghcr.io/pan94u/forge/forge-knowledge-mcp:latest   Up (healthy)
+forge-nginx                nginx:alpine                                      Up
+forge-postgres             postgres:16-alpine                                Up (healthy)
+```
+
+### 备注
+
+本次部署从本地构建模式切换回 GHCR 镜像模式。部署前发现 GHCR latest 后端镜像启动失败（`SkillToolHandler` 依赖 `SkillUsageRepository` 但 bean 未注册），根因是 `7d3bc5d` 引入 `@EnableJpaRepositories(basePackages = ["com.forge.eval.api.repository"])` 后覆盖了 Spring Boot 自动配置，导致 `com.forge.webide.repository` 包不再被扫描。修复提交 `773ace5` 将 webide 包加入显式扫描，CI 重新构建镜像后部署成功。
+
+---
+
+## 部署 forge — 2026-03-26 23:37:11
+
+| 项目 | 值 |
+|------|------|
+| 应用 | forge |
+| 时间 | 2026-03-26 23:37:11 |
+| 版本 | `latest` (GHCR) |
+| Git | `7ecc297` |
+| 操作人 | deploy |
+| 状态 | SUCCESS |
+| 上一版本 | `latest@773ace5` |
+
+### 容器状态
+
+```
+NAME                       IMAGE                                             STATUS
+forge-backend              ghcr.io/pan94u/forge/backend:latest               Up (healthy)
+forge-database-mcp         ghcr.io/pan94u/forge/forge-database-mcp:latest    Up (healthy)
+forge-enterprise-console   ghcr.io/pan94u/forge/enterprise-console:latest    Up
+forge-frontend             ghcr.io/pan94u/forge/frontend:latest              Up
+forge-knowledge-mcp        ghcr.io/pan94u/forge/forge-knowledge-mcp:latest   Up (healthy)
+forge-nginx                nginx:alpine                                      Up
+forge-postgres             postgres:16-alpine                                Up (healthy)
+```
+
+### 备注
+
+常规更新部署。git pull 同步了 forge-eval 模块的新增功能（ExternalAgentCaller + V27 数据库迁移）。backend/frontend/console/nginx 4 个容器重建，postgres/knowledge-mcp/database-mcp 保持运行。
+
+---
+
+## 部署 forge — 2026-03-28 10:18:40
+
+| 项目 | 值 |
+|------|------|
+| 应用 | forge |
+| 时间 | 2026-03-28 10:18:40 |
+| 版本 | `latest` (GHCR) |
+| Git | `72fa7e6` |
+| 操作人 | deploy |
+| 状态 | SUCCESS |
+| 上一版本 | `latest@7ecc297` |
+
+### 容器状态
+
+```
+NAME                       IMAGE                                             STATUS
+forge-backend              ghcr.io/pan94u/forge/backend:latest               Up (healthy)
+forge-database-mcp         ghcr.io/pan94u/forge/forge-database-mcp:latest    Up (healthy)
+forge-enterprise-console   ghcr.io/pan94u/forge/enterprise-console:latest    Up
+forge-frontend             ghcr.io/pan94u/forge/frontend:latest              Up
+forge-knowledge-mcp        ghcr.io/pan94u/forge/forge-knowledge-mcp:latest   Up (healthy)
+forge-nginx                nginx:alpine                                      Up
+forge-postgres             postgres:16-alpine                                Up (healthy)
+```
+
+### 备注
+
+常规更新。新增 Agent 端点前端配置（创建套件 + 详情页编辑 + 预设模板）。backend/frontend/console/nginx 4 个容器重建，postgres/knowledge-mcp/database-mcp 保持运行。
+
+---
+
+## 部署 forge — 2026-03-29 11:09:56
+
+| 项目 | 值 |
+|------|------|
+| 应用 | forge |
+| 时间 | 2026-03-29 11:09:56 |
+| 版本 | `latest` (GHCR) |
+| Git | `11d1c66` |
+| 操作人 | deploy |
+| 状态 | SUCCESS |
+| 上一版本 | `latest@72fa7e6` |
+
+### 容器状态
+
+```
+NAME                       STATUS
+forge-backend              Up (healthy)
+forge-database-mcp         Up (healthy)
+forge-enterprise-console   Up
+forge-frontend             Up
+forge-knowledge-mcp        Up (healthy)
+forge-nginx                Up
+forge-postgres             Up (healthy)
+```
+
+### 备注
+
+常规更新。新增版本可见性（/api/health + Cmd+Shift+V 浮窗）、Eval Run 异步执行（实时进度 + 异常恢复）。backend/frontend/console/nginx 4 容器重建，postgres/knowledge-mcp/database-mcp 保持运行。
+
+---
+
+## 部署 forge — 2026-03-29 11:51:51
+
+| 项目 | 值 |
+|------|------|
+| 应用 | forge |
+| 时间 | 2026-03-29 11:51:51 |
+| 版本 | `latest` (GHCR) |
+| Git | `94077cd` |
+| 操作人 | deploy |
+| 状态 | SUCCESS |
+| 上一版本 | `latest@11d1c66` |
+
+### 容器状态
+
+```
+NAME                       STATUS
+forge-backend              Up (healthy)
+forge-database-mcp         Up (healthy)
+forge-enterprise-console   Up
+forge-frontend             Up
+forge-knowledge-mcp        Up (healthy)
+forge-nginx                Up
+forge-postgres             Up (healthy)
+```
+
+### 备注
+
+Flyway V28 迁移（eval_runs.total_tasks 列初始化）。backend/frontend/console/nginx 4 容器重建。
+
+---
+
+## 部署 forge — 2026-03-29 19:03:36
+
+| 项目 | 值 |
+|------|------|
+| 时间 | 2026-03-29 19:03:36 |
+| 版本 | `latest` (GHCR + Docker Hub gateway) |
+| Git | `dd5ba28` |
+| 操作人 | deploy |
+| 状态 | SUCCESS |
+| 上一版本 | `latest@94077cd` |
+
+### 容器状态
+
+```
+NAME                       IMAGE                                             STATUS
+forge-backend              ghcr.io/pan94u/forge/backend:latest               Up (healthy)
+forge-database-mcp         ghcr.io/pan94u/forge/forge-database-mcp:latest    Up (healthy)
+forge-enterprise-console   ghcr.io/pan94u/forge/enterprise-console:latest    Up
+forge-frontend             ghcr.io/pan94u/forge/frontend:latest              Up
+forge-gateway              pan9pang/synapse-gateway:latest                   Up
+forge-knowledge-mcp        ghcr.io/pan94u/forge/forge-knowledge-mcp:latest   Up (healthy)
+forge-nginx                nginx:alpine                                      Up
+forge-postgres             postgres:16-alpine                                Up (healthy)
+```
+
+### 备注
+
+**重大架构变更 — Gateway 认证模式切换**：
+
+1. **从海尔 compose 切换到生产 compose** (`docker-compose.production.yml`)
+2. **新增 forge-gateway 容器** (`pan9pang/synapse-gateway:latest`)：JWT 验签 + X-User-* header 注入，替代原来 backend 内置的 Keycloak JWT 认证
+3. **nginx 改为内部代理**：forge-nginx 只监听 9000 端口（去掉 SSL/443），SSL 终止由外层 gateway-nginx 处理
+4. **请求链路变更**：gateway-nginx:443 → forge-nginx:9000 → forge-gateway:8090 → backend:8080（API/WS 路径）
+5. **postgres volume 路径适配**：生产 compose 的 named volume 绑定到 `/ssd-data/forge-postgres`（与海尔 compose 一致，保证数据连续性）
+6. **postgres 端口改为 5433**：避免与 cimc-postgres 的 5432 冲突
+7. **backend health check 改为 `/api/health`**：GatewayUserFilter 导致 `/api/knowledge/search` 返回 403
