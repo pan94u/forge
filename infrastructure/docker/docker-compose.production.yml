@@ -167,14 +167,11 @@ services:
       DB_DRIVER: "org.postgresql.Driver"
       # --- MCP ---
       FORGE_MCP_SERVERS: "http://knowledge-mcp:8081,http://database-mcp:8082"
-      # --- 安全 + SSO ---
+      # --- 安全 (Gateway header-based) ---
       FORGE_SECURITY_ENABLED: "true"
       FORGE_ENCRYPTION_KEY: ${FORGE_ENCRYPTION_KEY}
       FORGE_CORS_ALLOWED_ORIGINS: ${FORGE_CORS_ALLOWED_ORIGINS}
       FORGE_FRONTEND_URL: ${FORGE_FRONTEND_URL}
-      # SSO 统一 URL（跨机部署，通过 HTTPS 访问 SSO 服务器）
-      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: "${SSO_URL}/realms/forge"
-      FORGE_SECURITY_JWK_SET_URI: "${SSO_URL}/realms/forge/protocol/openid-connect/certs"
       # --- 插件 ---
       FORGE_PLUGINS_PATH: /plugins
     volumes:
@@ -246,6 +243,32 @@ services:
       NEXTAUTH_URL: ${NEXTAUTH_URL:-https://forge.delivery}
       NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
       AUTH_TRUST_HOST: "true"
+    depends_on:
+      backend:
+        condition: service_healthy
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "2"
+
+  # ---------------------------------------------------------------------------
+  # Forge Gateway — JWT 验签 + X-User-* 注入 (synapse/gateway)
+  # ---------------------------------------------------------------------------
+  forge-gateway:
+    image: ghcr.io/zhao055/synapse-gateway:latest
+    container_name: forge-gateway
+    restart: unless-stopped
+    cpus: 0.25
+    mem_limit: 128m
+    environment:
+      GATEWAY_AUTH_ISSUER: "https://auth.synapse.gold"
+      GATEWAY_CLIENT_ID: "${FORGE_GATEWAY_CLIENT_ID}"
+      GATEWAY_CLIENT_SECRET: "${FORGE_GATEWAY_CLIENT_SECRET}"
+      GATEWAY_UPSTREAM: "http://backend:8080"
+      GATEWAY_PUBLIC_ROUTES: "/api/health,/actuator/health,/api/auth/sso-config"
+      GATEWAY_PORT: "8090"
+      NO_PROXY: "localhost,backend,auth.synapse.gold"
     depends_on:
       backend:
         condition: service_healthy
