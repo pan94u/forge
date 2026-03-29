@@ -5,7 +5,7 @@ import { NextIntlClientProvider } from "next-intl";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Header } from "@/components/common/Header";
 import { Sidebar } from "@/components/common/Sidebar";
-import { getToken, refreshToken, initTokenRefresh, clearTokens } from "@/lib/auth";
+// Auth is handled by gateway (production) or disabled (dev). See lib/auth.ts.
 
 function makeQueryClient(): QueryClient {
   return new QueryClient({
@@ -30,8 +30,8 @@ function getQueryClient(): QueryClient {
   return browserQueryClient;
 }
 
-// Pages that don't require authentication
-const publicPaths = ["/login", "/auth/callback"];
+// Pages that skip auth check
+const publicPaths = ["/login"];
 
 function isPublicPath(path: string): boolean {
   return publicPaths.some((p) => path === p || path.endsWith(p));
@@ -67,46 +67,20 @@ export default function LocaleLayout({
     setIsPublic(pub);
 
     if (!pub) {
-      // Restore the proactive refresh schedule after page reload
-      initTokenRefresh();
-
-      const checkAuth = async (retried = false): Promise<void> => {
-        const token = getToken();
-        try {
-          const res = await fetch("/api/auth/me", {
-            headers: token ? { Authorization: `Bearer ${token}` } : {},
-          });
-
-          if (res.status === 401 && !retried) {
-            // Token may be expired — try to refresh once before giving up
-            const refreshed = await refreshToken();
-            if (refreshed) {
-              return checkAuth(true);
-            }
-            clearTokens();
-            window.location.href = "/login";
-            return;
-          }
-
-          if (res.status === 401 || !res.ok) {
-            clearTokens();
-            window.location.href = "/login";
-            return;
-          }
-
-          const data = await res.json();
-          if (!data.authenticated) {
-            clearTokens();
-            window.location.href = "/login";
-          } else {
+      // Auth check: call /api/auth/me
+      // - Dev mode: returns {authenticated: true, username: "dev"} -> pass
+      // - Production: gateway ensures user is logged in before request reaches here
+      fetch("/api/auth/me")
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.authenticated) {
             setAuthChecked(true);
+          } else {
+            // Production: gateway should have redirected, but fallback
+            window.location.href = "/login";
           }
-        } catch {
-          window.location.href = "/login";
-        }
-      };
-
-      checkAuth();
+        })
+        .catch(() => setAuthChecked(true)); // Network error in dev -> allow
     } else {
       setAuthChecked(true);
     }
