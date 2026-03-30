@@ -17,12 +17,23 @@ import { logout, isAuthenticated } from "@/lib/auth";
 import { useLocale } from "next-intl";
 import { useRouter, usePathname } from "@/navigation";
 
+export interface UserInfo {
+  username: string;
+  email?: string | null;
+  org?: string | null;
+}
+
 interface HeaderProps {
   role: "developer" | "product";
   onRoleChange: (role: "developer" | "product") => void;
+  user?: UserInfo;
 }
 
-export function Header({ role, onRoleChange }: HeaderProps) {
+export function Header({ role, onRoleChange, user }: HeaderProps) {
+  const displayName = user?.username || "User";
+  const displayEmail = user?.email || "";
+  const displayOrg = user?.org || "";
+  const initial = displayName.charAt(0).toUpperCase();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const locale = useLocale();
@@ -110,11 +121,18 @@ export function Header({ role, onRoleChange }: HeaderProps) {
             className="flex items-center gap-2 rounded-md px-2 py-1 hover:bg-accent"
           >
             <div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
-              Q
+              {initial}
             </div>
-            <span className="hidden text-sm font-medium md:block">
-              Qi Zhao
-            </span>
+            <div className="hidden md:flex md:flex-col md:items-start">
+              <span className="text-sm font-medium leading-tight">
+                {displayName}
+              </span>
+              {displayOrg && (
+                <span className="text-[10px] leading-tight text-muted-foreground">
+                  {displayOrg}
+                </span>
+              )}
+            </div>
             <ChevronDown className="h-3 w-3 text-muted-foreground" />
           </button>
 
@@ -126,10 +144,17 @@ export function Header({ role, onRoleChange }: HeaderProps) {
               />
               <div className="absolute right-0 top-full z-50 mt-1 w-48 rounded-md border border-border bg-popover shadow-lg">
                 <div className="border-b border-border px-3 py-2">
-                  <p className="text-sm font-medium">Qi Zhao</p>
-                  <p className="text-xs text-muted-foreground">
-                    qi@forge.dev
-                  </p>
+                  <p className="text-sm font-medium">{displayName}</p>
+                  {displayEmail && (
+                    <p className="text-xs text-muted-foreground">
+                      {displayEmail}
+                    </p>
+                  )}
+                  {displayOrg && (
+                    <p className="text-xs text-muted-foreground">
+                      {displayOrg}
+                    </p>
+                  )}
                 </div>
                 <div className="py-1">
                   <Link

@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { NextIntlClientProvider } from "next-intl";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { Header } from "@/components/common/Header";
+import { Header, type UserInfo } from "@/components/common/Header";
 import { Sidebar } from "@/components/common/Sidebar";
 // Auth is handled by gateway (production) or disabled (dev). See lib/auth.ts.
 
@@ -48,6 +48,7 @@ export default function LocaleLayout({
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [role, setRole] = useState<"developer" | "product">("developer");
   const [authChecked, setAuthChecked] = useState(false);
+  const [user, setUser] = useState<UserInfo | undefined>(undefined);
   const [isPublic, setIsPublic] = useState(false);
   const [messages, setMessages] = useState<Record<string, unknown> | null>(null);
   const [locale, setLocale] = useState<string>("zh");
@@ -74,6 +75,11 @@ export default function LocaleLayout({
         .then((res) => res.json())
         .then((data) => {
           if (data.authenticated) {
+            setUser({
+              username: data.username,
+              email: data.email,
+              org: data.org,
+            });
             setAuthChecked(true);
           } else {
             // Production: gateway should have redirected, but fallback
@@ -120,7 +126,7 @@ export default function LocaleLayout({
     <NextIntlClientProvider locale={locale} messages={messages}>
       <QueryClientProvider client={queryClient}>
         <div className="flex h-screen flex-col overflow-hidden">
-          <Header role={role} onRoleChange={setRole} />
+          <Header role={role} onRoleChange={setRole} user={user} />
           <div className="flex flex-1 overflow-hidden">
             <Sidebar
               collapsed={sidebarCollapsed}
