@@ -49,6 +49,37 @@ docker compose -f <compose> --env-file <env> up -d --remove-orphans
 4. **backend 启动慢**：JVM 冷启动 + Flyway 迁移，首次 healthy 可能需要 60s
 5. **数据库迁移失败**：如果 Flyway 报版本冲突，查看 `docker logs forge-backend` 中的具体迁移文件名和错误
 
+## ⚠ 部署经验
+
+### 1. 必须使用 production compose，不要用 haier compose
+
+**问题**：`infrastructure/haier/docker-compose.yml` 是旧的海尔内网配置，**缺少 `forge-gateway` 服务**和对应的 `nginx-production.conf`。误用会导致：
+- API 请求绕过 gateway 直连 backend → 无 `X-User-*` header 注入 → `/api/auth/me` 返回 `authenticated: false`
+- 前端检测未认证 → 跳转 `/login` → 无 gateway 处理 OIDC → 页面来回跳转循环
+
+**正确命令**：
+```bash
+cd /opt/forge
+docker compose -f infrastructure/docker/docker-compose.production.yml \
+  --env-file infrastructure/docker/.env.production pull
+docker compose -f infrastructure/docker/docker-compose.production.yml \
+  --env-file infrastructure/docker/.env.production up -d --remove-orphans
+```
+
+**两套配置的关键差异**：
+
+| 差异 | haier (❌ 勿用) | production (✅ 正确) |
+|------|---------|-----------|
+| gateway 服务 | 无 | `forge-gateway` (JWT 验签 + X-User-* 注入) |
+| nginx 配置 | `nginx.conf` (API 直连 backend) | `nginx-production.conf` (API 经 gateway) |
+| SSO 网络 | 依赖 `sso-net` external (Keycloak) | 不需要 (auth.synapse.gold 公网) |
+| Env 文件 | `haier/.env` | `docker/.env.production` |
+
+### 2. Gateway 的 X-User-* header 必须编码非 ASCII 字符
+
+**问题**：`proxy.ts` 中 `headers.set('X-User-Name', '胖弟弟')` 直接报 TypeError — HTTP header 值不允许非 ASCII。
+**修复**：注入时 `encodeURIComponent(value)`，后端读取时 `decodeURIComponent(header)`。
+
 ## 部署后验证
 
 ```bash
