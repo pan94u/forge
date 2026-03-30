@@ -71,8 +71,11 @@ class EvalController(
     }
 
     @PostMapping("/runs")
-    fun createRun(@RequestBody request: CreateRunRequest): ResponseEntity<RunResponse> {
-        val run = evalService.createRun(request)
+    fun createRun(
+        @RequestBody request: CreateRunRequest,
+        @RequestHeader("Authorization", required = false) authHeader: String?
+    ): ResponseEntity<RunResponse> {
+        val run = evalService.createRun(request, authHeader)
         return ResponseEntity.status(HttpStatus.CREATED).body(run)
     }
 

@@ -153,7 +153,7 @@ class EvalService(
 
     // ── Run Execution ───────────────────────────────────────────────
 
-    fun createRun(request: CreateRunRequest): RunResponse {
+    fun createRun(request: CreateRunRequest, authHeader: String? = null): RunResponse {
         val suite = suiteRepo.findById(request.suiteId)
             .orElseThrow { NotFoundException("Suite not found: ${request.suiteId}") }
 
@@ -187,8 +187,16 @@ class EvalService(
         val agentConfig: AgentEndpointConfig? = suite.agentConfig?.let {
             try { objectMapper.readValue(it, AgentEndpointConfig::class.java) } catch (_: Exception) { null }
         }
+        // Inject caller's JWT into agent config headers for cross-gateway auth
+        val effectiveConfig = if (!authHeader.isNullOrBlank() && agentConfig != null) {
+            agentConfig.copy(headers = agentConfig.headers + ("Authorization" to authHeader))
+        } else if (!authHeader.isNullOrBlank()) {
+            AgentEndpointConfig(headers = mapOf("Authorization" to authHeader))
+        } else {
+            agentConfig
+        }
         val outputProvider: (EvalTask) -> TrialOutput = if (!agentEndpoint.isNullOrBlank()) {
-            { task -> externalAgentCaller.call(agentEndpoint, agentConfig, task) }
+            { task -> externalAgentCaller.call(agentEndpoint, effectiveConfig, task) }
         } else {
             { task -> callModel(task, request.model) }
         }
