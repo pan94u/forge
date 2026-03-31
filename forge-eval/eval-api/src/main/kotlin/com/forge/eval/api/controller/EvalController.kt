@@ -63,6 +63,24 @@ class EvalController(
         return evalService.getTasksForSuite(suiteId)
     }
 
+    @PatchMapping("/suites/{suiteId}/tasks/{taskId}")
+    fun updateTask(
+        @PathVariable suiteId: UUID,
+        @PathVariable taskId: UUID,
+        @RequestBody request: Map<String, Any?>
+    ): EvalTask {
+        return evalService.updateTask(suiteId, taskId, request)
+    }
+
+    @DeleteMapping("/suites/{suiteId}/tasks/{taskId}")
+    fun deleteTask(
+        @PathVariable suiteId: UUID,
+        @PathVariable taskId: UUID
+    ): ResponseEntity<Void> {
+        evalService.deleteTask(suiteId, taskId)
+        return ResponseEntity.noContent().build()
+    }
+
     // ── Run endpoints ───────────────────────────────────────────────
 
     @GetMapping("/suites/{suiteId}/runs")

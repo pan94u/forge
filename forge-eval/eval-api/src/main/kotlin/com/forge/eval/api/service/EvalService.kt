@@ -142,6 +142,39 @@ class EvalService(
         return taskRepo.findBySuiteId(suiteId).map { toEvalTask(it) }
     }
 
+    @Transactional
+    fun updateTask(suiteId: UUID, taskId: UUID, updates: Map<String, Any?>): EvalTask {
+        val entity = taskRepo.findById(taskId)
+            .orElseThrow { NotFoundException("Task not found: $taskId") }
+        if (entity.suiteId != suiteId) {
+            throw NotFoundException("Task $taskId does not belong to suite $suiteId")
+        }
+
+        updates["name"]?.let { entity.name = it as String }
+        updates["description"]?.let { entity.description = it as String }
+        updates["prompt"]?.let { entity.prompt = it as String }
+        updates["context"]?.let { entity.context = objectMapper.writeValueAsString(it) }
+        updates["referenceAnswer"]?.let { entity.referenceAnswer = it as? String }
+        updates["graderConfigs"]?.let { entity.graderConfigs = objectMapper.writeValueAsString(it) }
+        updates["difficulty"]?.let { entity.difficulty = DifficultyEnum.valueOf((it as String).uppercase()) }
+        updates["tags"]?.let { entity.tags = objectMapper.writeValueAsString(it) }
+        updates["baselinePassRate"]?.let { entity.baselinePassRate = (it as Number).toDouble() }
+        entity.updatedAt = Instant.now()
+
+        val saved = taskRepo.save(entity)
+        return toEvalTask(saved)
+    }
+
+    @Transactional
+    fun deleteTask(suiteId: UUID, taskId: UUID) {
+        val entity = taskRepo.findById(taskId)
+            .orElseThrow { NotFoundException("Task not found: $taskId") }
+        if (entity.suiteId != suiteId) {
+            throw NotFoundException("Task $taskId does not belong to suite $suiteId")
+        }
+        taskRepo.delete(entity)
+    }
+
     // ── Run Listing ──────────────────────────────────────────────────
 
     fun getRunsForSuite(suiteId: UUID): List<RunResponse> {
