@@ -27,44 +27,58 @@ context:
   bottleneck: "PANEL_OUT_SIDE 外侧板线 130台/班次上限"
   current_daily_capacity: "180台/天 (双班)"
 
-assertions:
-  - type: tool_used
-    expected: "aps_query_capacity"
-    description: "调用 APS 产能查询，了解当前负荷"
+graders:
+  - type: CODE_BASED
+    assertions:
+      - type: tool_used
+        expected: "aps_query_capacity"
+        description: "调用 APS 产能查询，了解当前负荷"
 
-  - type: tool_used
-    expected: "sap_check_material_readiness"
-    description: "调用 SAP 物料齐套检查"
+      - type: tool_used
+        expected: "sap_check_material_readiness"
+        description: "调用 SAP 物料齐套检查"
 
-  - type: tool_used
-    expected: "aps_impact_analysis"
-    description: "调用插单冲击分析"
+      - type: tool_used
+        expected: "aps_impact_analysis"
+        description: "调用插单冲击分析"
 
-  - type: contains
-    expected: "交期优先"
-    description: "包含交期优先策略"
-    case_insensitive: true
+      - type: contains
+        expected: "交期优先"
+        description: "包含交期优先策略"
+        case_insensitive: true
 
-  - type: contains
-    expected: "成本优先"
-    description: "包含成本优先策略"
-    case_insensitive: true
+      - type: contains
+        expected: "成本优先"
+        description: "包含成本优先策略"
+        case_insensitive: true
 
-  - type: matches_pattern
-    expected: "外侧板|PANEL_OUT_SIDE|瓶颈"
-    description: "识别并提及瓶颈工序的影响"
+      - type: matches_pattern
+        expected: "外侧板|PANEL_OUT_SIDE|瓶颈"
+        description: "识别并提及瓶颈工序的影响"
 
-  - type: matches_pattern
-    expected: "\\d+[天日]|交付|交期"
-    description: "给出具体的交付时间预测"
+      - type: matches_pattern
+        expected: "\\d+[天日]|交付|交期"
+        description: "给出具体的交付时间预测"
 
-  - type: matches_pattern
-    expected: "加班|overtime|合规|劳动法"
-    description: "如涉及加班，需提及劳动法合规"
+      - type: matches_pattern
+        expected: "加班|overtime|合规|劳动法"
+        description: "如涉及加班，需提及劳动法合规"
 
-quality_criteria:
-  scenario_completeness: 0.90
-  multi_strategy_comparison: 0.90
-  bottleneck_awareness: 0.85
-  material_readiness_check: 0.85
-  actionability: 0.85
+  - type: MODEL_BASED
+    model: claude-sonnet-4-6
+    rubric:
+      - criterion: 场景完整性
+        weight: 0.90
+        description: "是否完整覆盖产能评估、物料检查、排产调整等全流程"
+      - criterion: 多策略对比
+        weight: 0.90
+        description: "是否提供交期优先、成本优先等多种策略并对比优劣"
+      - criterion: 瓶颈感知
+        weight: 0.85
+        description: "是否识别瓶颈工序并评估其对插单的制约"
+      - criterion: 物料齐套检查
+        weight: 0.85
+        description: "是否检查物料可用性并纳入方案约束"
+      - criterion: 可执行性
+        weight: 0.85
+        description: "方案是否具体到班次、人员安排等可直接执行的细节"

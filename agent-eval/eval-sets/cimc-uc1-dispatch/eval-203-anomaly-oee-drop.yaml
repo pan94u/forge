@@ -26,46 +26,60 @@ context:
   oee_drop: "11个百分点"
   three_factors: "需要分解 可用率 × 性能率 × 良品率"
 
-assertions:
-  - type: tool_used
-    expected: "mom_query_oee"
-    description: "查询 OEE 三因子分解数据"
+graders:
+  - type: CODE_BASED
+    assertions:
+      - type: tool_used
+        expected: "mom_query_oee"
+        description: "查询 OEE 三因子分解数据"
 
-  - type: tool_used
-    expected: "mom_query_equipment"
-    description: "查询设备运行状态和维护记录"
+      - type: tool_used
+        expected: "mom_query_equipment"
+        description: "查询设备运行状态和维护记录"
 
-  - type: tool_used
-    expected: "mom_query_anomalies"
-    description: "查询近期异常记录"
+      - type: tool_used
+        expected: "mom_query_anomalies"
+        description: "查询近期异常记录"
 
-  - type: matches_pattern
-    expected: "可用率|可用性|availability"
-    description: "分析可用率因子"
+      - type: matches_pattern
+        expected: "可用率|可用性|availability"
+        description: "分析可用率因子"
 
-  - type: matches_pattern
-    expected: "性能率|性能|performance"
-    description: "分析性能率因子"
+      - type: matches_pattern
+        expected: "性能率|性能|performance"
+        description: "分析性能率因子"
 
-  - type: matches_pattern
-    expected: "良品率|质量率|quality|合格率"
-    description: "分析良品率因子"
+      - type: matches_pattern
+        expected: "良品率|质量率|quality|合格率"
+        description: "分析良品率因子"
 
-  - type: matches_pattern
-    expected: "主要.*原因|根因|主因|最大.*影响|导致.*下降"
-    description: "明确定位 OEE 下降的主要原因"
+      - type: matches_pattern
+        expected: "主要.*原因|根因|主因|最大.*影响|导致.*下降"
+        description: "明确定位 OEE 下降的主要原因"
 
-  - type: matches_pattern
-    expected: "\\d+%.*下降|下降.*\\d+|损失.*\\d+"
-    description: "量化各因子对 OEE 下降的贡献"
+      - type: matches_pattern
+        expected: "\\d+%.*下降|下降.*\\d+|损失.*\\d+"
+        description: "量化各因子对 OEE 下降的贡献"
 
-  - type: matches_pattern
-    expected: "建议|改善|恢复|提升|措施"
-    description: "给出针对性的改善建议"
+      - type: matches_pattern
+        expected: "建议|改善|恢复|提升|措施"
+        description: "给出针对性的改善建议"
 
-quality_criteria:
-  three_factor_decomposition: 0.95
-  root_cause_accuracy: 0.90
-  quantitative_analysis: 0.85
-  corrective_actions: 0.85
-  data_driven_reasoning: 0.85
+  - type: MODEL_BASED
+    model: claude-sonnet-4-6
+    rubric:
+      - criterion: 三因子分解
+        weight: 0.95
+        description: "是否完整分解可用率、性能率、良品率三因子并分别量化"
+      - criterion: 根因准确性
+        weight: 0.90
+        description: "是否准确定位导致 OEE 下降的主要因子和根因"
+      - criterion: 量化分析
+        weight: 0.85
+        description: "分析是否有具体数据支撑，而非泛泛而谈"
+      - criterion: 纠正措施
+        weight: 0.85
+        description: "改善建议是否针对根因，而非散弹枪式罗列"
+      - criterion: 数据驱动推理
+        weight: 0.85
+        description: "推理过程是否基于数据证据，而非经验猜测"

@@ -34,62 +34,76 @@ context:
   output_format: "结构化简报，重点突出"
   required_coverage: "产出/排产/异常/人员/物料/关注事项 6个维度"
 
-assertions:
-  - type: tool_used
-    expected: "mom_query_production"
-    description: "查询昨日产出统计"
+graders:
+  - type: CODE_BASED
+    assertions:
+      - type: tool_used
+        expected: "mom_query_production"
+        description: "查询昨日产出统计"
 
-  - type: tool_used
-    expected: "mom_query_workorders"
-    description: "查询当前在产工单状态"
+      - type: tool_used
+        expected: "mom_query_workorders"
+        description: "查询当前在产工单状态"
 
-  - type: tool_used
-    expected: "aps_query_schedule"
-    description: "查询今日排产计划"
+      - type: tool_used
+        expected: "aps_query_schedule"
+        description: "查询今日排产计划"
 
-  - type: tool_used
-    expected: "mom_query_anomalies"
-    description: "查询当前异常列表"
+      - type: tool_used
+        expected: "mom_query_anomalies"
+        description: "查询当前异常列表"
 
-  - type: tool_used
-    expected: "ope_query_attendance"
-    description: "查询今日出勤情况"
+      - type: tool_used
+        expected: "ope_query_attendance"
+        description: "查询今日出勤情况"
 
-  - type: tool_used
-    expected: "ope_detect_gaps"
-    description: "检测人员缺口"
+      - type: tool_used
+        expected: "ope_detect_gaps"
+        description: "检测人员缺口"
 
-  - type: tool_used
-    expected: "sap_query_inventory"
-    description: "查询物料库存及预警"
+      - type: tool_used
+        expected: "sap_query_inventory"
+        description: "查询物料库存及预警"
 
-  - type: matches_pattern
-    expected: "产出|产量|完成"
-    description: "包含昨日产出信息"
+      - type: matches_pattern
+        expected: "产出|产量|完成"
+        description: "包含昨日产出信息"
 
-  - type: matches_pattern
-    expected: "排产|计划|今日.*生产"
-    description: "包含今日排产信息"
+      - type: matches_pattern
+        expected: "排产|计划|今日.*生产"
+        description: "包含今日排产信息"
 
-  - type: matches_pattern
-    expected: "异常|风险|告警|关注"
-    description: "包含异常/风险信息"
+      - type: matches_pattern
+        expected: "异常|风险|告警|关注"
+        description: "包含异常/风险信息"
 
-  - type: matches_pattern
-    expected: "到岗|出勤|缺员|人员"
-    description: "包含人员到岗信息"
+      - type: matches_pattern
+        expected: "到岗|出勤|缺员|人员"
+        description: "包含人员到岗信息"
 
-  - type: matches_pattern
-    expected: "物料|库存|齐套|材料"
-    description: "包含物料状态信息"
+      - type: matches_pattern
+        expected: "物料|库存|齐套|材料"
+        description: "包含物料状态信息"
 
-  - type: not_contains
-    expected: "详细分析如下"
-    description: "晨会简报应简洁，避免冗长分析"
+      - type: not_contains
+        expected: "详细分析如下"
+        description: "晨会简报应简洁，避免冗长分析"
 
-quality_criteria:
-  coverage_completeness: 0.95
-  information_accuracy: 0.90
-  brevity_and_clarity: 0.90
-  priority_highlighting: 0.85
-  cross_system_integration: 0.85
+  - type: MODEL_BASED
+    model: claude-sonnet-4-6
+    rubric:
+      - criterion: 覆盖完整性
+        weight: 0.95
+        description: "是否完整覆盖产出/排产/异常/人员/物料/关注事项6个维度"
+      - criterion: 信息准确性
+        weight: 0.90
+        description: "各维度数据是否来自正确的系统查询，而非凭空编造"
+      - criterion: 简洁清晰
+        weight: 0.90
+        description: "报告是否简洁有力，适合5分钟内汇报完，避免冗余"
+      - criterion: 重点突出
+        weight: 0.85
+        description: "是否突出今日需重点关注的风险和行动项"
+      - criterion: 跨系统集成
+        weight: 0.85
+        description: "是否有效整合 MOM/APS/SAP/OPE 多系统数据形成全景视图"

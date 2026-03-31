@@ -31,50 +31,64 @@ context:
   compound_impact: "异常降低了可用产能，而插单需要额外产能"
   decision_complexity: "两个问题相互影响，不能独立处理"
 
-assertions:
-  - type: tool_used
-    expected: "mom_diagnose_anomaly"
-    description: "对发泡线异常进行诊断"
+graders:
+  - type: CODE_BASED
+    assertions:
+      - type: tool_used
+        expected: "mom_diagnose_anomaly"
+        description: "对发泡线异常进行诊断"
 
-  - type: tool_used
-    expected: "aps_query_capacity"
-    description: "查询考虑异常后的真实可用产能"
+      - type: tool_used
+        expected: "aps_query_capacity"
+        description: "查询考虑异常后的真实可用产能"
 
-  - type: tool_used
-    expected: "aps_impact_analysis"
-    description: "在异常背景下评估插单冲击"
+      - type: tool_used
+        expected: "aps_impact_analysis"
+        description: "在异常背景下评估插单冲击"
 
-  - type: tool_used
-    expected: "sap_check_material_readiness"
-    description: "检查 50 台订单的物料齐套"
+      - type: tool_used
+        expected: "sap_check_material_readiness"
+        description: "检查 50 台订单的物料齐套"
 
-  - type: matches_pattern
-    expected: "优先|先.*后|第一|首要|紧急.*度"
-    description: "明确给出两个问题的处理优先级"
+      - type: matches_pattern
+        expected: "优先|先.*后|第一|首要|紧急.*度"
+        description: "明确给出两个问题的处理优先级"
 
-  - type: matches_pattern
-    expected: "影响.*产能|产能.*不足|异常.*导致|叠加|雪上加霜|联动"
-    description: "认识到异常降低产能与插单需要产能之间的矛盾"
+      - type: matches_pattern
+        expected: "影响.*产能|产能.*不足|异常.*导致|叠加|雪上加霜|联动"
+        description: "认识到异常降低产能与插单需要产能之间的矛盾"
 
-  - type: matches_pattern
-    expected: "温控|发泡|修复|维修|恢复|密度"
-    description: "给出发泡线异常的处置方案"
+      - type: matches_pattern
+        expected: "温控|发泡|修复|维修|恢复|密度"
+        description: "给出发泡线异常的处置方案"
 
-  - type: matches_pattern
-    expected: "排产|调整|加班|交期|ONE"
-    description: "给出考虑异常约束的插单方案"
+      - type: matches_pattern
+        expected: "排产|调整|加班|交期|ONE"
+        description: "给出考虑异常约束的插单方案"
 
-  - type: tool_used
-    expected: "mom_query_oee"
-    description: "查 OEE 量化异常对产能的影响"
+      - type: tool_used
+        expected: "mom_query_oee"
+        description: "查 OEE 量化异常对产能的影响"
 
-  - type: not_contains
-    expected: "先不管异常"
-    description: "不应建议忽略异常只处理插单"
+      - type: not_contains
+        expected: "先不管异常"
+        description: "不应建议忽略异常只处理插单"
 
-quality_criteria:
-  dual_problem_coordination: 0.95
-  priority_reasoning: 0.90
-  anomaly_impact_on_capacity: 0.90
-  feasible_integrated_plan: 0.85
-  risk_awareness: 0.85
+  - type: MODEL_BASED
+    model: claude-sonnet-4-6
+    rubric:
+      - criterion: 双问题协调
+        weight: 0.95
+        description: "是否将插单和异常作为相互关联的问题统筹处理，而非独立应对"
+      - criterion: 优先级推理
+        weight: 0.90
+        description: "两个紧急事项的处理顺序是否有充分的逻辑支撑"
+      - criterion: 异常对产能影响
+        weight: 0.90
+        description: "是否量化异常导致的产能下降对插单可行性的影响"
+      - criterion: 可行集成方案
+        weight: 0.85
+        description: "最终方案是否在异常约束下仍为插单找到可行路径"
+      - criterion: 风险意识
+        weight: 0.85
+        description: "是否识别并量化方案执行中的关键风险和应急预案"

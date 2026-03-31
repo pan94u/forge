@@ -26,42 +26,56 @@ context:
   labor_law_limits: "周加班不超过36小时，日加班不超过3小时（常规日），疲劳风险"
   compliance_rules: "config/compliance/production-safety.yaml"
 
-assertions:
-  - type: tool_used
-    expected: "ope_query_compliance"
-    description: "查询劳动法合规状态"
+graders:
+  - type: CODE_BASED
+    assertions:
+      - type: tool_used
+        expected: "ope_query_compliance"
+        description: "查询劳动法合规状态"
 
-  - type: tool_used
-    expected: "ope_query_workhours"
-    description: "查询本周累计工时"
+      - type: tool_used
+        expected: "ope_query_workhours"
+        description: "查询本周累计工时"
 
-  - type: tool_used
-    expected: "ope_query_shifts"
-    description: "查询当前班次安排"
+      - type: tool_used
+        expected: "ope_query_shifts"
+        description: "查询当前班次安排"
 
-  - type: matches_pattern
-    expected: "36小时|加班.*上限|超时|累计.*小时"
-    description: "提及劳动法加班时长限制"
+      - type: matches_pattern
+        expected: "36小时|加班.*上限|超时|累计.*小时"
+        description: "提及劳动法加班时长限制"
 
-  - type: matches_pattern
-    expected: "疲劳|风险|超标|接近.*上限|不宜"
-    description: "识别加班时长接近上限或疲劳风险高的人员"
+      - type: matches_pattern
+        expected: "疲劳|风险|超标|接近.*上限|不宜"
+        description: "识别加班时长接近上限或疲劳风险高的人员"
 
-  - type: matches_pattern
-    expected: "\\d+.*人.*可以|可安排.*\\d+|可加班"
-    description: "明确给出可安排加班的人数"
+      - type: matches_pattern
+        expected: "\\d+.*人.*可以|可安排.*\\d+|可加班"
+        description: "明确给出可安排加班的人数"
 
-  - type: not_contains
-    expected: "全部安排加班即可"
-    description: "不应跳过合规检查直接安排全员加班"
+      - type: not_contains
+        expected: "全部安排加班即可"
+        description: "不应跳过合规检查直接安排全员加班"
 
-  - type: matches_pattern
-    expected: "证书|资质|有效期|cert|过期"
-    description: "检查特种工种证书有效期"
+      - type: matches_pattern
+        expected: "证书|资质|有效期|cert|过期"
+        description: "检查特种工种证书有效期"
 
-quality_criteria:
-  compliance_awareness: 0.95
-  fatigue_risk_assessment: 0.90
-  precise_headcount: 0.85
-  legal_knowledge: 0.85
-  worker_wellbeing: 0.80
+  - type: MODEL_BASED
+    model: claude-sonnet-4-6
+    rubric:
+      - criterion: 合规意识
+        weight: 0.95
+        description: "是否主动检查劳动法加班时长限制并据此约束方案"
+      - criterion: 疲劳风险评估
+        weight: 0.90
+        description: "是否识别累计工时接近上限或连续加班的疲劳风险人员"
+      - criterion: 精确人数
+        weight: 0.85
+        description: "是否给出可加班/不可加班的精确人数而非模糊表述"
+      - criterion: 法律知识
+        weight: 0.85
+        description: "引用的法规条款是否准确（如月加班36小时上限）"
+      - criterion: 工人福祉
+        weight: 0.80
+        description: "是否在产能需求与工人身心健康之间寻求平衡"

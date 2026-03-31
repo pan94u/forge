@@ -26,42 +26,56 @@ context:
   affected_work_centers: "UNCOIL (开卷), SANDBLAST (喷砂)"
   downstream_risk: "已进入产线的不良品可能流转到后续工序"
 
-assertions:
-  - type: tool_used
-    expected: "mom_diagnose_anomaly"
-    description: "调用知识库匹配历史类似案例"
+graders:
+  - type: CODE_BASED
+    assertions:
+      - type: tool_used
+        expected: "mom_diagnose_anomaly"
+        description: "调用知识库匹配历史类似案例"
 
-  - type: tool_used
-    expected: "mom_query_work_centers"
-    description: "查询受影响工作中心的当前状态"
+      - type: tool_used
+        expected: "mom_query_work_centers"
+        description: "查询受影响工作中心的当前状态"
 
-  - type: tool_used
-    expected: "sap_query_inventory"
-    description: "查询库存中是否有合格替代物料"
+      - type: tool_used
+        expected: "sap_query_inventory"
+        description: "查询库存中是否有合格替代物料"
 
-  - type: tool_used
-    expected: "mom_query_quality"
-    description: "查询质量趋势和帕累托分析"
+      - type: tool_used
+        expected: "mom_query_quality"
+        description: "查询质量趋势和帕累托分析"
 
-  - type: matches_pattern
-    expected: "开卷|喷砂|UNCOIL|SANDBLAST|在制|WIP"
-    description: "明确识别已受影响的工作中心"
+      - type: matches_pattern
+        expected: "开卷|喷砂|UNCOIL|SANDBLAST|在制|WIP"
+        description: "明确识别已受影响的工作中心"
 
-  - type: matches_pattern
-    expected: "隔离|封存|退货|返工|筛选|全检"
-    description: "给出物料质量处置措施（隔离/退货/筛选等）"
+      - type: matches_pattern
+        expected: "隔离|封存|退货|返工|筛选|全检"
+        description: "给出物料质量处置措施（隔离/退货/筛选等）"
 
-  - type: matches_pattern
-    expected: "下游|后续|追溯|流转|已.*工序"
-    description: "考虑已流入下游工序的不良品追溯"
+      - type: matches_pattern
+        expected: "下游|后续|追溯|流转|已.*工序"
+        description: "考虑已流入下游工序的不良品追溯"
 
-  - type: not_contains
-    expected: "影响不大"
-    description: "15%不良率不应被轻描淡写"
+      - type: not_contains
+        expected: "影响不大"
+        description: "15%不良率不应被轻描淡写"
 
-quality_criteria:
-  defect_scope_analysis: 0.95
-  traceability: 0.90
-  quality_disposition: 0.90
-  supply_chain_response: 0.85
-  downstream_protection: 0.85
+  - type: MODEL_BASED
+    model: claude-sonnet-4-6
+    rubric:
+      - criterion: 缺陷范围分析
+        weight: 0.95
+        description: "是否准确界定受影响的物料批次、数量和工作中心范围"
+      - criterion: 追溯能力
+        weight: 0.90
+        description: "是否追溯已流入下游工序的不良品，给出追溯路径"
+      - criterion: 质量处置
+        weight: 0.90
+        description: "处置方案是否涵盖隔离、筛选、退货、返工等完整措施"
+      - criterion: 供应链响应
+        weight: 0.85
+        description: "是否联动库存查询替代料源，给出供应链层面的应对"
+      - criterion: 下游保护
+        weight: 0.85
+        description: "是否给出防止不良品继续流转的即时保护措施"

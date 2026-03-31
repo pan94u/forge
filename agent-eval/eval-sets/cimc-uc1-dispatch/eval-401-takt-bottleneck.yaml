@@ -26,46 +26,60 @@ context:
   daily_capacity: "180台/天 (双班)"
   target_capacity: "200台/天"
 
-assertions:
-  - type: tool_used
-    expected: "mom_query_takt"
-    description: "查询各工作中心节拍协调数据"
+graders:
+  - type: CODE_BASED
+    assertions:
+      - type: tool_used
+        expected: "mom_query_takt"
+        description: "查询各工作中心节拍协调数据"
 
-  - type: tool_used
-    expected: "mom_query_bottleneck"
-    description: "查询瓶颈分析（约束评分+级联影响）"
+      - type: tool_used
+        expected: "mom_query_bottleneck"
+        description: "查询瓶颈分析（约束评分+级联影响）"
 
-  - type: tool_used
-    expected: "mom_query_oee"
-    description: "查询瓶颈工序的 OEE 分解"
+      - type: tool_used
+        expected: "mom_query_oee"
+        description: "查询瓶颈工序的 OEE 分解"
 
-  - type: tool_used
-    expected: "aps_query_capacity"
-    description: "查询各工序产能负荷率"
+      - type: tool_used
+        expected: "aps_query_capacity"
+        description: "查询各工序产能负荷率"
 
-  - type: matches_pattern
-    expected: "外侧板|PANEL_OUT_SIDE|瓶颈.*工序"
-    description: "准确定位瓶颈工序"
+      - type: matches_pattern
+        expected: "外侧板|PANEL_OUT_SIDE|瓶颈.*工序"
+        description: "准确定位瓶颈工序"
 
-  - type: matches_pattern
-    expected: "460.*414|414.*460|46.*秒|11%|11\\."
-    description: "量化目标与实际的节拍差距"
+      - type: matches_pattern
+        expected: "460.*414|414.*460|46.*秒|11%|11\\."
+        description: "量化目标与实际的节拍差距"
 
-  - type: matches_pattern
-    expected: "设备|人员|工艺|约束|制约|限制"
-    description: "分析瓶颈的约束来源"
+      - type: matches_pattern
+        expected: "设备|人员|工艺|约束|制约|限制"
+        description: "分析瓶颈的约束来源"
 
-  - type: tool_used
-    expected: "ope_query_labor_surplus"
-    description: "检查瓶颈工序是否人力不足"
+      - type: tool_used
+        expected: "ope_query_labor_surplus"
+        description: "检查瓶颈工序是否人力不足"
 
-  - type: matches_pattern
-    expected: "优先|第一|首先|最.*有效|建议.*1"
-    description: "给出有优先级排序的改善路径"
+      - type: matches_pattern
+        expected: "优先|第一|首先|最.*有效|建议.*1"
+        description: "给出有优先级排序的改善路径"
 
-quality_criteria:
-  bottleneck_identification: 0.95
-  constraint_decomposition: 0.90
-  takt_gap_quantification: 0.90
-  improvement_prioritization: 0.85
-  toc_thinking: 0.80
+  - type: MODEL_BASED
+    model: claude-sonnet-4-6
+    rubric:
+      - criterion: 瓶颈识别
+        weight: 0.95
+        description: "是否准确定位制约整线节拍的瓶颈工序"
+      - criterion: 约束分解
+        weight: 0.90
+        description: "是否分析瓶颈的约束来源（设备/人员/工艺）"
+      - criterion: 节拍差距量化
+        weight: 0.90
+        description: "是否量化目标节拍与实际节拍的差距及其影响"
+      - criterion: 改善优先级
+        weight: 0.85
+        description: "改善建议是否有优先级排序，聚焦 ROI 最高的措施"
+      - criterion: TOC思维
+        weight: 0.80
+        description: "是否体现约束理论（TOC）的系统思维，而非局部优化"

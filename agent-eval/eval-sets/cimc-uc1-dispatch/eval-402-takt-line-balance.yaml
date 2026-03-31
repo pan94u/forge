@@ -26,42 +26,56 @@ context:
   target_line_balance: "≥85%"
   lean_principle: "消除等待浪费，拉动式生产"
 
-assertions:
-  - type: tool_used
-    expected: "mom_query_takt"
-    description: "查询各工序节拍和线平衡数据"
+graders:
+  - type: CODE_BASED
+    assertions:
+      - type: tool_used
+        expected: "mom_query_takt"
+        description: "查询各工序节拍和线平衡数据"
 
-  - type: tool_used
-    expected: "mom_query_work_centers"
-    description: "查询各工作中心状态和WIP"
+      - type: tool_used
+        expected: "mom_query_work_centers"
+        description: "查询各工作中心状态和WIP"
 
-  - type: tool_used
-    expected: "aps_query_capacity"
-    description: "对比各工序产能利用率差异"
+      - type: tool_used
+        expected: "aps_query_capacity"
+        description: "对比各工序产能利用率差异"
 
-  - type: matches_pattern
-    expected: "WIP|在制|堆积|堆料|缓冲"
-    description: "识别 WIP 堆积的位置和原因"
+      - type: matches_pattern
+        expected: "WIP|在制|堆积|堆料|缓冲"
+        description: "识别 WIP 堆积的位置和原因"
 
-  - type: matches_pattern
-    expected: "线平衡|平衡率|balance|\\d+%.*平衡"
-    description: "给出线平衡率数据"
+      - type: matches_pattern
+        expected: "线平衡|平衡率|balance|\\d+%.*平衡"
+        description: "给出线平衡率数据"
 
-  - type: matches_pattern
-    expected: "最慢|最快|差异|不均衡|偏差"
-    description: "对比最快和最慢工序的节拍差异"
+      - type: matches_pattern
+        expected: "最慢|最快|差异|不均衡|偏差"
+        description: "对比最快和最慢工序的节拍差异"
 
-  - type: matches_pattern
-    expected: "调整|优化|匹配|拉动|均衡|平衡"
-    description: "给出产能匹配优化建议"
+      - type: matches_pattern
+        expected: "调整|优化|匹配|拉动|均衡|平衡"
+        description: "给出产能匹配优化建议"
 
-  - type: matches_pattern
-    expected: "板材|PANEL|发泡|FOAM|板.*泡"
-    description: "具体分析板材到发泡段的节拍关系"
+      - type: matches_pattern
+        expected: "板材|PANEL|发泡|FOAM|板.*泡"
+        description: "具体分析板材到发泡段的节拍关系"
 
-quality_criteria:
-  line_balance_analysis: 0.90
-  wip_root_cause: 0.90
-  takt_distribution_clarity: 0.85
-  optimization_feasibility: 0.85
-  lean_thinking: 0.80
+  - type: MODEL_BASED
+    model: claude-sonnet-4-6
+    rubric:
+      - criterion: 线平衡分析
+        weight: 0.90
+        description: "是否给出线平衡率数据并识别不平衡的关键段"
+      - criterion: WIP根因
+        weight: 0.90
+        description: "是否从节拍差异角度解释 WIP 堆积的根本原因"
+      - criterion: 节拍分布清晰度
+        weight: 0.85
+        description: "各工序节拍数据是否清晰呈现，便于快速理解"
+      - criterion: 优化可行性
+        weight: 0.85
+        description: "平衡优化建议是否考虑实施约束（设备改造周期、人员技能等）"
+      - criterion: 精益思维
+        weight: 0.80
+        description: "是否体现精益生产理念（消除浪费、拉动式生产）"

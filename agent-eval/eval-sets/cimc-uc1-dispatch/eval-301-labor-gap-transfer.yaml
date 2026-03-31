@@ -26,42 +26,56 @@ context:
   constraint: "技能匹配是硬约束：焊工→焊工，喷漆工→喷漆工"
   labor_efficiency_target: "≤4.5人/台"
 
-assertions:
-  - type: tool_used
-    expected: "ope_query_labor_surplus"
-    description: "查询各工作中心的人员盈缺状态"
+graders:
+  - type: CODE_BASED
+    assertions:
+      - type: tool_used
+        expected: "ope_query_labor_surplus"
+        description: "查询各工作中心的人员盈缺状态"
 
-  - type: tool_used
-    expected: "ope_query_skills"
-    description: "查询工人技能矩阵进行匹配"
+      - type: tool_used
+        expected: "ope_query_skills"
+        description: "查询工人技能矩阵进行匹配"
 
-  - type: tool_used
-    expected: "ope_detect_gaps"
-    description: "调用动态缺口检测"
+      - type: tool_used
+        expected: "ope_detect_gaps"
+        description: "调用动态缺口检测"
 
-  - type: matches_pattern
-    expected: "富余|多余|可借|盈余|surplus"
-    description: "识别有人员富余的工作中心"
+      - type: matches_pattern
+        expected: "富余|多余|可借|盈余|surplus"
+        description: "识别有人员富余的工作中心"
 
-  - type: matches_pattern
-    expected: "焊工|焊接|技能.*匹配|skill|持证"
-    description: "借调建议考虑技能匹配"
+      - type: matches_pattern
+        expected: "焊工|焊接|技能.*匹配|skill|持证"
+        description: "借调建议考虑技能匹配"
 
-  - type: matches_pattern
-    expected: "借调|调配|从.*到|转移.*人"
-    description: "给出具体的借调方案（从哪到哪）"
+      - type: matches_pattern
+        expected: "借调|调配|从.*到|转移.*人"
+        description: "给出具体的借调方案（从哪到哪）"
 
-  - type: not_contains
-    expected: "普工调到焊接岗"
-    description: "不应建议无焊接资质的人去焊接"
+      - type: not_contains
+        expected: "普工调到焊接岗"
+        description: "不应建议无焊接资质的人去焊接"
 
-  - type: tool_used
-    expected: "ope_query_attendance"
-    description: "查询今日考勤确认实际在岗人数"
+      - type: tool_used
+        expected: "ope_query_attendance"
+        description: "查询今日考勤确认实际在岗人数"
 
-quality_criteria:
-  gap_identification: 0.95
-  skill_matching_accuracy: 0.95
-  transfer_feasibility: 0.90
-  safety_compliance: 0.90
-  efficiency_impact_assessment: 0.80
+  - type: MODEL_BASED
+    model: claude-sonnet-4-6
+    rubric:
+      - criterion: 缺口识别
+        weight: 0.95
+        description: "是否准确识别各工作中心的人员盈缺状态"
+      - criterion: 技能匹配准确性
+        weight: 0.95
+        description: "借调建议是否严格匹配技能要求，不出现资质不符的安排"
+      - criterion: 借调可行性
+        weight: 0.90
+        description: "方案是否考虑借出方的产能影响，确保不拆东墙补西墙"
+      - criterion: 安全合规
+        weight: 0.90
+        description: "是否确保特种工种的资质证书要求得到满足"
+      - criterion: 效率影响评估
+        weight: 0.80
+        description: "是否评估借调后对整体人均效率（人/台）的影响"

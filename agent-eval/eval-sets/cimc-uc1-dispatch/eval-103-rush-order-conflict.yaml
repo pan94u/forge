@@ -31,46 +31,60 @@ context:
   bottleneck_load: "92%"
   scheduling_rules: "客户优先级 > 交期紧迫度 > 产品换型成本"
 
-assertions:
-  - type: tool_used
-    expected: "mom_query_workorders"
-    description: "查询当前在产工单，了解现有排产"
+graders:
+  - type: CODE_BASED
+    assertions:
+      - type: tool_used
+        expected: "mom_query_workorders"
+        description: "查询当前在产工单，了解现有排产"
 
-  - type: tool_used
-    expected: "aps_query_capacity"
-    description: "查询瓶颈产能利用率"
+      - type: tool_used
+        expected: "aps_query_capacity"
+        description: "查询瓶颈产能利用率"
 
-  - type: tool_used
-    expected: "aps_multi_strategy"
-    description: "调用多策略对比分析"
+      - type: tool_used
+        expected: "aps_multi_strategy"
+        description: "调用多策略对比分析"
 
-  - type: matches_pattern
-    expected: "S级|CMA.*优先|客户.*等级|优先级"
-    description: "体现客户等级对排产优先级的影响"
+      - type: matches_pattern
+        expected: "S级|CMA.*优先|客户.*等级|优先级"
+        description: "体现客户等级对排产优先级的影响"
 
-  - type: matches_pattern
-    expected: "换型|切换|20GP.*40HC|产品.*不同"
-    description: "分析不同产品类型的换型成本影响"
+      - type: matches_pattern
+        expected: "换型|切换|20GP.*40HC|产品.*不同"
+        description: "分析不同产品类型的换型成本影响"
 
-  - type: matches_pattern
-    expected: "\\d+%.*负荷|负荷.*\\d+%|超载|过载|92%"
-    description: "量化瓶颈工序的负荷影响"
+      - type: matches_pattern
+        expected: "\\d+%.*负荷|负荷.*\\d+%|超载|过载|92%"
+        description: "量化瓶颈工序的负荷影响"
 
-  - type: matches_pattern
-    expected: "建议.*优先|推荐.*先|方案.*一|首先"
-    description: "给出明确的订单优先级排序建议"
+      - type: matches_pattern
+        expected: "建议.*优先|推荐.*先|方案.*一|首先"
+        description: "给出明确的订单优先级排序建议"
 
-  - type: matches_pattern
-    expected: "SeaCube|在产|延期|推迟|影响.*现有"
-    description: "分析对在产 SeaCube 订单的影响"
+      - type: matches_pattern
+        expected: "SeaCube|在产|延期|推迟|影响.*现有"
+        description: "分析对在产 SeaCube 订单的影响"
 
-  - type: not_contains
-    expected: "两个订单都可以按时完成"
-    description: "不应在92%负荷下乐观判断两单都能如期完成"
+      - type: not_contains
+        expected: "两个订单都可以按时完成"
+        description: "不应在92%负荷下乐观判断两单都能如期完成"
 
-quality_criteria:
-  priority_reasoning: 0.95
-  conflict_resolution: 0.90
-  bottleneck_analysis: 0.90
-  customer_tier_awareness: 0.85
-  changeover_cost_analysis: 0.80
+  - type: MODEL_BASED
+    model: claude-sonnet-4-6
+    rubric:
+      - criterion: 优先级推理
+        weight: 0.95
+        description: "优先级排序是否有清晰的逻辑支撑（客户等级、交期、换型成本等多维度权衡）"
+      - criterion: 冲突解决
+        weight: 0.90
+        description: "是否给出明确的冲突解决方案而非模棱两可的建议"
+      - criterion: 瓶颈分析
+        weight: 0.90
+        description: "是否量化分析瓶颈工序在多单并行时的负荷情况"
+      - criterion: 客户等级感知
+        weight: 0.85
+        description: "是否在决策中体现客户等级差异的商业影响"
+      - criterion: 换型成本分析
+        weight: 0.80
+        description: "是否考虑不同产品类型切换的时间和成本代价"

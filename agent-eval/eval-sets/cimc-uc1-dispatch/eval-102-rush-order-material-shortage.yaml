@@ -27,42 +27,56 @@ context:
   hint: "防腐钢板库存接近安全库存线"
   known_shortage_risk: "防腐蚀钢板 (Q345R) 在途38吨 预计3天到"
 
-assertions:
-  - type: tool_used
-    expected: "sap_query_inventory"
-    description: "查询当前物料库存状态"
+graders:
+  - type: CODE_BASED
+    assertions:
+      - type: tool_used
+        expected: "sap_query_inventory"
+        description: "查询当前物料库存状态"
 
-  - type: tool_used
-    expected: "sap_check_material_readiness"
-    description: "执行物料齐套性检查"
+      - type: tool_used
+        expected: "sap_check_material_readiness"
+        description: "执行物料齐套性检查"
 
-  - type: tool_used
-    expected: "aps_query_capacity"
-    description: "查询当前产能负荷"
+      - type: tool_used
+        expected: "aps_query_capacity"
+        description: "查询当前产能负荷"
 
-  - type: matches_pattern
-    expected: "钢板|短缺|不足|缺料|安全库存|齐套"
-    description: "识别并报告物料短缺情况"
+      - type: matches_pattern
+        expected: "钢板|短缺|不足|缺料|安全库存|齐套"
+        description: "识别并报告物料短缺情况"
 
-  - type: matches_pattern
-    expected: "在途|到货|\\d+[天日].*到"
-    description: "提及在途物料及预计到货时间"
+      - type: matches_pattern
+        expected: "在途|到货|\\d+[天日].*到"
+        description: "提及在途物料及预计到货时间"
 
-  - type: matches_pattern
-    expected: "分批|分段|优先|调整|替代|先.*后"
-    description: "给出物料约束下的可行方案（如分批交付）"
+      - type: matches_pattern
+        expected: "分批|分段|优先|调整|替代|先.*后"
+        description: "给出物料约束下的可行方案（如分批交付）"
 
-  - type: not_contains
-    expected: "物料充足，无需担心"
-    description: "不应错误判断物料充足"
+      - type: not_contains
+        expected: "物料充足，无需担心"
+        description: "不应错误判断物料充足"
 
-  - type: tool_used
-    expected: "aps_impact_analysis"
-    description: "执行插单冲击分析"
+      - type: tool_used
+        expected: "aps_impact_analysis"
+        description: "执行插单冲击分析"
 
-quality_criteria:
-  material_risk_identification: 0.95
-  supply_chain_awareness: 0.90
-  feasible_workaround: 0.85
-  timeline_accuracy: 0.85
-  cross_system_coordination: 0.80
+  - type: MODEL_BASED
+    model: claude-sonnet-4-6
+    rubric:
+      - criterion: 物料风险识别
+        weight: 0.95
+        description: "是否准确识别物料短缺项及其影响程度"
+      - criterion: 供应链感知
+        weight: 0.90
+        description: "是否考虑在途物料、到货时间、供应商响应等供应链因素"
+      - criterion: 可行替代方案
+        weight: 0.85
+        description: "是否给出分批交付、替代物料等务实可行的应对方案"
+      - criterion: 时间线准确性
+        weight: 0.85
+        description: "交付时间预测是否合理，是否考虑物料到货对工期的影响"
+      - criterion: 跨系统协调
+        weight: 0.80
+        description: "是否协调 APS 排产与 SAP 物料两个系统的数据给出联合方案"

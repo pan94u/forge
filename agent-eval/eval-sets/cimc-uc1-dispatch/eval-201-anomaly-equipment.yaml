@@ -26,42 +26,56 @@ context:
   expected_oee_impact: "可用率下降 → OEE 整体下降"
   cascade_risk: "瓶颈停机 = 全线受影响"
 
-assertions:
-  - type: tool_used
-    expected: "mom_diagnose_anomaly"
-    description: "调用知识库自动诊断"
+graders:
+  - type: CODE_BASED
+    assertions:
+      - type: tool_used
+        expected: "mom_diagnose_anomaly"
+        description: "调用知识库自动诊断"
 
-  - type: tool_used
-    expected: "mom_query_oee"
-    description: "查询 OEE 分解数据定位损失"
+      - type: tool_used
+        expected: "mom_query_oee"
+        description: "查询 OEE 分解数据定位损失"
 
-  - type: tool_used
-    expected: "mom_query_anomalies"
-    description: "查询当前异常列表"
+      - type: tool_used
+        expected: "mom_query_anomalies"
+        description: "查询当前异常列表"
 
-  - type: matches_pattern
-    expected: "瓶颈|关键工序|全线|级联|连锁"
-    description: "识别瓶颈工序停机的全局影响"
+      - type: matches_pattern
+        expected: "瓶颈|关键工序|全线|级联|连锁"
+        description: "识别瓶颈工序停机的全局影响"
 
-  - type: matches_pattern
-    expected: "可用率|可用性|availability|OEE"
-    description: "从 OEE 可用率维度分析停机影响"
+      - type: matches_pattern
+        expected: "可用率|可用性|availability|OEE"
+        description: "从 OEE 可用率维度分析停机影响"
 
-  - type: matches_pattern
-    expected: "方案|措施|建议|处置|应急"
-    description: "给出具体的处置方案"
+      - type: matches_pattern
+        expected: "方案|措施|建议|处置|应急"
+        description: "给出具体的处置方案"
 
-  - type: matches_pattern
-    expected: "\\d+分钟|尽快|立即|紧急|每.*分钟.*损失"
-    description: "体现时间紧迫性和停机损失"
+      - type: matches_pattern
+        expected: "\\d+分钟|尽快|立即|紧急|每.*分钟.*损失"
+        description: "体现时间紧迫性和停机损失"
 
-  - type: tool_used
-    expected: "aps_query_buffer"
-    description: "查询排产缓冲能否吸收停机影响"
+      - type: tool_used
+        expected: "aps_query_buffer"
+        description: "查询排产缓冲能否吸收停机影响"
 
-quality_criteria:
-  root_cause_diagnosis: 0.90
-  oee_decomposition: 0.85
-  cascade_impact_analysis: 0.90
-  actionable_remediation: 0.85
-  urgency_awareness: 0.85
+  - type: MODEL_BASED
+    model: claude-sonnet-4-6
+    rubric:
+      - criterion: 根因诊断
+        weight: 0.90
+        description: "是否基于知识库和历史案例给出可能的根因分析"
+      - criterion: OEE分解
+        weight: 0.85
+        description: "是否从可用率/性能率/良品率三因子角度分析停机影响"
+      - criterion: 级联影响分析
+        weight: 0.90
+        description: "是否分析瓶颈停机对上下游工序和全线产出的级联影响"
+      - criterion: 可执行处置方案
+        weight: 0.85
+        description: "处置建议是否具体、分级（紧急/短期/长期），可直接执行"
+      - criterion: 紧迫性感知
+        weight: 0.85
+        description: "是否体现时间敏感性，量化每分钟停机损失"
