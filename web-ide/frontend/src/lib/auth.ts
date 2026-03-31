@@ -1,15 +1,20 @@
 /**
  * Authentication helper for Forge Web IDE.
  *
- * Architecture:
- * - Local dev: No auth, no gateway. Backend returns {enabled: false} from /api/auth/sso-config.
- *   All API calls work without tokens. isAuthenticated() returns true.
- * - Production: synapse/gateway sits in front of backend, handles OIDC login via
- *   Synapse Enterprise Console. Gateway injects X-User-* headers. Frontend doesn't
- *   manage tokens — gateway manages session via httpOnly cookie.
+ * Uses @opc-ai/auth SDK for token-first auth:
+ * - Gateway OIDC callback delivers JWT via URL params (_token/_refresh)
+ * - initAuth() captures token, stores in localStorage as 'forge_access_token'
+ * - All 6 API files (skill-api, workspace-api, etc.) read this key automatically
+ * - Cross-domain calls work via Bearer token
  *
- * This file is intentionally minimal. Auth is handled by the gateway, not the frontend.
+ * Dev mode: No gateway, no token, all API files' getAuthHeader() returns {}
  */
+import { initAuth as sdkInit, getToken as sdkGetToken, getUser as sdkGetUser, logout as sdkLogout, clearTokens as sdkClear, authFetch } from '@opc-ai/auth/client';
+
+const AUTH_OPTIONS = {
+  tokenKey: 'forge_access_token',
+  refreshKey: 'forge_refresh_token',
+};
 
 let _authEnabled: boolean | null = null;
 
@@ -25,36 +30,38 @@ async function checkAuthEnabled(): Promise<boolean> {
   return _authEnabled;
 }
 
+/** Call on page load — captures _token from URL if present */
+export function initAuth(): boolean {
+  return sdkInit(AUTH_OPTIONS);
+}
+
 export async function login(): Promise<void> {
   const enabled = await checkAuthEnabled();
-  if (!enabled) return; // dev mode, no login needed
-  // Production: gateway handles login redirect, just reload
+  if (!enabled) return;
   window.location.href = "/";
 }
 
 export async function logout(): Promise<void> {
-  // Production: gateway clears session
-  window.location.href = "/gateway/logout";
+  sdkLogout();
 }
 
 export function getToken(): string | null {
-  return null; // Gateway handles auth via cookie, frontend doesn't manage tokens
+  return sdkGetToken();
 }
 
 export function isAuthenticated(): boolean {
-  return true; // If request reached frontend, user is authenticated (gateway validated)
+  if (typeof window === 'undefined') return true;
+  return !!sdkGetToken() || !_authEnabled;
 }
 
 export function clearTokens(): void {
-  // No-op: gateway manages session
+  sdkClear();
 }
 
-export async function initTokenRefresh(): Promise<void> {
-  // No-op: gateway manages token lifecycle
-}
+export async function initTokenRefresh(): Promise<void> {}
 
 export async function refreshToken(): Promise<boolean> {
-  return true; // Gateway handles refresh
+  return true;
 }
 
 export function getRedirectAfterLogin(): string {
@@ -62,9 +69,13 @@ export function getRedirectAfterLogin(): string {
 }
 
 export function getAuthHeaders(): Record<string, string> {
-  return {}; // Gateway injects auth, frontend doesn't need to
+  const token = sdkGetToken();
+  if (!token) return {};
+  return { Authorization: `Bearer ${token}` };
 }
 
 export async function handleCallback(_code: string): Promise<boolean> {
-  return true; // Gateway handles OIDC callback
+  return true;
 }
+
+export { authFetch };

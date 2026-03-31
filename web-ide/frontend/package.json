@@ -11,6 +11,7 @@
     "test:e2e": "playwright test"
   },
   "dependencies": {
+    "@opc-ai/auth": "^0.1.0",
     "@monaco-editor/react": "^4.6.0",
     "@swc/helpers": "^0.5.20",
     "@tanstack/react-query": "^5.62.0",

@@ -6,6 +6,7 @@ const withNextIntl = createNextIntlPlugin("./i18n/request.ts");
 const nextConfig: NextConfig = {
   output: "standalone",
   reactStrictMode: true,
+  transpilePackages: ["@opc-ai/auth"],
   webpack: (config, { isServer }) => {
     // Monaco Editor webpack configuration
     if (!isServer) {

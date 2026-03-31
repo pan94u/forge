@@ -5,7 +5,7 @@ import { NextIntlClientProvider } from "next-intl";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Header, type UserInfo } from "@/components/common/Header";
 import { Sidebar } from "@/components/common/Sidebar";
-// Auth is handled by gateway (production) or disabled (dev). See lib/auth.ts.
+import { initAuth } from "@/lib/auth";
 
 function makeQueryClient(): QueryClient {
   return new QueryClient({
@@ -63,6 +63,9 @@ export default function LocaleLayout({
   }, [params]);
 
   useEffect(() => {
+    // Capture _token from URL after Gateway OIDC callback
+    initAuth();
+
     const path = window.location.pathname;
     const pub = isPublicPath(path);
     setIsPublic(pub);
