@@ -78,13 +78,19 @@ Forge is a Gradle monorepo (Kotlin DSL) with the following modules:
 - **Build**: Gradle Kotlin DSL
 - **Testing**: JUnit 5 + MockK + AssertJ (backend), Jest + Playwright (frontend)
 
+## 认证 (@opc-ai/auth SDK)
+
+- 前端: `@opc-ai/auth/client`, `initAuth({ tokenKey: 'forge_access_token' })` 兼容现有 6 个 API 文件零改动
+- 后端: Kotlin `GatewayUserFilter.kt` (与 SDK 的 `synapseAuth()` 模式等价, 语言不同)
+- Next.js 必须 `transpilePackages: ['@opc-ai/auth']` (SDK 发布 .ts 源文件)
+- trial compose 的 enterprise-console 容器占 :19001, 本地联调 Gateway 用 :19002 避开
+
 ## Docker 部署注意事项
 
-- **4 容器**: backend + frontend + nginx + keycloak（`docker-compose.trial.yml`）
-- **后端 Dockerfile**: 单阶段 `eclipse-temurin:21-jre-alpine`（Alpine 无 bash，shell 脚本不可用）
-- **Health check**: 使用 `/api/knowledge/search`（非 `/actuator/health`）
-- **Keycloak**: 端口 8180，realm `forge`，client `forge-web-ide`（OIDC PKCE）
-- **环境变量**: `ANTHROPIC_API_KEY`, `FORGE_SECURITY_ENABLED`, `FORGE_PLUGINS_PATH=/plugins`
+- **后端 Dockerfile**: 单阶段 `eclipse-temurin:21-jre-alpine`（Alpine 无 bash）
+- **前端 Dockerfile**: COPY 预构建 `.next/standalone`, 需先在宿主机 `bun run build`
+- **trial 模式**: `FORGE_SECURITY_ENABLED=false`, 无 Gateway, 无认证
+- **production 模式**: Gateway sidecar, OIDC 认证, X-User-* headers
 - **Volume 挂载**: `plugins/` 和 `knowledge-base/` 必须挂载为只读
 
 ## MCP 工具清单（20 个）
