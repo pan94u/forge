@@ -1,0 +1,76 @@
+id: eval-103-rush-order-conflict
+name: 紧急插单 — 多单冲突场景
+description: >
+  评测智能体在已有紧急订单的情况下处理新插单的优先级冲突能力。
+  系统中已有多个在产工单，新插单会与现有高优先级订单争抢瓶颈资源。
+  智能体应能分析订单优先级、客户等级，给出全局最优的排序和调度建议。
+tags:
+  - cimc
+  - uc1
+  - rush-order
+  - priority-conflict
+  - scheduling-rules
+  - expert
+baseline_pass_rate: 0.70
+
+prompt: |
+  刚收到两个插单请求：
+  1. CMA CGM（S级客户）要求插 40 台 40HC冷藏箱，5天交付
+  2. TS Line（B级客户）要求插 30 台 20GP标箱，3天交付
+
+  目前产线上还有 SeaCube 的 120 台订单正在生产，完成率约 60%。
+  瓶颈工序负荷已经 92% 了。两个都插的话排得下吗？
+  如果只能保一个，保哪个？给出你的分析和建议。
+
+context:
+  skill: rush-order-response
+  conflict_type: "双插单 + 在产订单冲突"
+  existing_order: "SeaCube 120台 40HC 完成率60%"
+  rush_order_1: "CMA CGM S级 40台 40HC 5天"
+  rush_order_2: "TS Line B级 30台 20GP 3天"
+  bottleneck_load: "92%"
+  scheduling_rules: "客户优先级 > 交期紧迫度 > 产品换型成本"
+
+assertions:
+  - type: tool_used
+    expected: "mom_query_workorders"
+    description: "查询当前在产工单，了解现有排产"
+
+  - type: tool_used
+    expected: "aps_query_capacity"
+    description: "查询瓶颈产能利用率"
+
+  - type: tool_used
+    expected: "aps_multi_strategy"
+    description: "调用多策略对比分析"
+
+  - type: matches_pattern
+    expected: "S级|CMA.*优先|客户.*等级|优先级"
+    description: "体现客户等级对排产优先级的影响"
+
+  - type: matches_pattern
+    expected: "换型|切换|20GP.*40HC|产品.*不同"
+    description: "分析不同产品类型的换型成本影响"
+
+  - type: matches_pattern
+    expected: "\\d+%.*负荷|负荷.*\\d+%|超载|过载|92%"
+    description: "量化瓶颈工序的负荷影响"
+
+  - type: matches_pattern
+    expected: "建议.*优先|推荐.*先|方案.*一|首先"
+    description: "给出明确的订单优先级排序建议"
+
+  - type: matches_pattern
+    expected: "SeaCube|在产|延期|推迟|影响.*现有"
+    description: "分析对在产 SeaCube 订单的影响"
+
+  - type: not_contains
+    expected: "两个订单都可以按时完成"
+    description: "不应在92%负荷下乐观判断两单都能如期完成"
+
+quality_criteria:
+  priority_reasoning: 0.95
+  conflict_resolution: 0.90
+  bottleneck_analysis: 0.90
+  customer_tier_awareness: 0.85
+  changeover_cost_analysis: 0.80

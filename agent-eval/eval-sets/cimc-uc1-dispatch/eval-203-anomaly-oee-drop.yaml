@@ -1,0 +1,71 @@
+id: eval-203-anomaly-oee-drop
+name: 异常诊断 — OEE 骤降分析
+description: >
+  评测智能体对 OEE 骤降的综合诊断能力。当监控发现某工作中心 OEE
+  低于 85% 阈值时，应能自动分解三因子（可用率/性能率/良品率），
+  定位主要损失来源，关联近期异常和设备维护记录，给出根因分析。
+tags:
+  - cimc
+  - uc1
+  - anomaly-diagnosis
+  - oee-analysis
+  - three-factor
+baseline_pass_rate: 0.80
+
+prompt: |
+  系统监测到发泡线（FOAM_SIDE）的 OEE 从昨天的 89% 骤降到 78%，
+  低于 85% 的预警线。帮我分析是什么原因导致的？是设备问题、
+  节拍变慢还是质量问题？
+
+context:
+  skill: anomaly-diagnosis
+  trigger: "OEE < 85% 阈值触发"
+  work_center: FOAM_SIDE
+  oee_yesterday: "89%"
+  oee_today: "78%"
+  oee_drop: "11个百分点"
+  three_factors: "需要分解 可用率 × 性能率 × 良品率"
+
+assertions:
+  - type: tool_used
+    expected: "mom_query_oee"
+    description: "查询 OEE 三因子分解数据"
+
+  - type: tool_used
+    expected: "mom_query_equipment"
+    description: "查询设备运行状态和维护记录"
+
+  - type: tool_used
+    expected: "mom_query_anomalies"
+    description: "查询近期异常记录"
+
+  - type: matches_pattern
+    expected: "可用率|可用性|availability"
+    description: "分析可用率因子"
+
+  - type: matches_pattern
+    expected: "性能率|性能|performance"
+    description: "分析性能率因子"
+
+  - type: matches_pattern
+    expected: "良品率|质量率|quality|合格率"
+    description: "分析良品率因子"
+
+  - type: matches_pattern
+    expected: "主要.*原因|根因|主因|最大.*影响|导致.*下降"
+    description: "明确定位 OEE 下降的主要原因"
+
+  - type: matches_pattern
+    expected: "\\d+%.*下降|下降.*\\d+|损失.*\\d+"
+    description: "量化各因子对 OEE 下降的贡献"
+
+  - type: matches_pattern
+    expected: "建议|改善|恢复|提升|措施"
+    description: "给出针对性的改善建议"
+
+quality_criteria:
+  three_factor_decomposition: 0.95
+  root_cause_accuracy: 0.90
+  quantitative_analysis: 0.85
+  corrective_actions: 0.85
+  data_driven_reasoning: 0.85

@@ -1,0 +1,71 @@
+id: eval-401-takt-bottleneck
+name: 节拍分析 — 瓶颈诊断
+description: >
+  评测智能体对生产节拍瓶颈的诊断能力。当前节拍 460s 高于目标 414s，
+  智能体应能定位瓶颈工序、分析约束来源（设备/人员/工艺），
+  并给出提升节拍的优先级建议（TOC 约束理论思维）。
+tags:
+  - cimc
+  - uc1
+  - takt-analysis
+  - bottleneck
+  - toc
+  - capacity
+baseline_pass_rate: 0.80
+
+prompt: |
+  我们的目标节拍是 414 秒/台，但实际跑到 460 秒了，超了 11%。
+  帮我分析一下瓶颈在哪？是哪个工序拖了后腿？怎么才能把节拍压下来？
+
+context:
+  skill: takt-analysis
+  current_takt: "460s/台"
+  target_takt: "414s/台"
+  variance: "+11.1%"
+  known_bottleneck: "PANEL_OUT_SIDE 130台/班次上限"
+  daily_capacity: "180台/天 (双班)"
+  target_capacity: "200台/天"
+
+assertions:
+  - type: tool_used
+    expected: "mom_query_takt"
+    description: "查询各工作中心节拍协调数据"
+
+  - type: tool_used
+    expected: "mom_query_bottleneck"
+    description: "查询瓶颈分析（约束评分+级联影响）"
+
+  - type: tool_used
+    expected: "mom_query_oee"
+    description: "查询瓶颈工序的 OEE 分解"
+
+  - type: tool_used
+    expected: "aps_query_capacity"
+    description: "查询各工序产能负荷率"
+
+  - type: matches_pattern
+    expected: "外侧板|PANEL_OUT_SIDE|瓶颈.*工序"
+    description: "准确定位瓶颈工序"
+
+  - type: matches_pattern
+    expected: "460.*414|414.*460|46.*秒|11%|11\\."
+    description: "量化目标与实际的节拍差距"
+
+  - type: matches_pattern
+    expected: "设备|人员|工艺|约束|制约|限制"
+    description: "分析瓶颈的约束来源"
+
+  - type: tool_used
+    expected: "ope_query_labor_surplus"
+    description: "检查瓶颈工序是否人力不足"
+
+  - type: matches_pattern
+    expected: "优先|第一|首先|最.*有效|建议.*1"
+    description: "给出有优先级排序的改善路径"
+
+quality_criteria:
+  bottleneck_identification: 0.95
+  constraint_decomposition: 0.90
+  takt_gap_quantification: 0.90
+  improvement_prioritization: 0.85
+  toc_thinking: 0.80

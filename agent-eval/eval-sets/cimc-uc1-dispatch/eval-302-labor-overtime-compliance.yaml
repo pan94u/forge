@@ -1,0 +1,67 @@
+id: eval-302-labor-overtime-compliance
+name: 人效分析 — 加班合规审查
+description: >
+  评测智能体在安排加班时的劳动法合规意识。当产能缺口需要通过
+  加班弥补时，应自动检查工人本周累计加班时长、疲劳风险、证书
+  有效期等合规约束，确保加班安排既满足产能需求又符合法规。
+tags:
+  - cimc
+  - uc1
+  - labor-efficiency
+  - overtime
+  - compliance
+  - labor-law
+baseline_pass_rate: 0.80
+
+prompt: |
+  这周有个大单要赶交期，需要安排外侧板线和发泡线周六加班一天。
+  帮我检查一下这两条线的工人本周加班情况，有没有超时风险？
+  能安排多少人加班？
+
+context:
+  skill: labor-efficiency
+  scenario: "加班合规审查"
+  overtime_request: "周六全天加班 (8小时)"
+  target_centers: "PANEL_OUT_SIDE, FOAM_SIDE"
+  labor_law_limits: "周加班不超过36小时，日加班不超过3小时（常规日），疲劳风险"
+  compliance_rules: "config/compliance/production-safety.yaml"
+
+assertions:
+  - type: tool_used
+    expected: "ope_query_compliance"
+    description: "查询劳动法合规状态"
+
+  - type: tool_used
+    expected: "ope_query_workhours"
+    description: "查询本周累计工时"
+
+  - type: tool_used
+    expected: "ope_query_shifts"
+    description: "查询当前班次安排"
+
+  - type: matches_pattern
+    expected: "36小时|加班.*上限|超时|累计.*小时"
+    description: "提及劳动法加班时长限制"
+
+  - type: matches_pattern
+    expected: "疲劳|风险|超标|接近.*上限|不宜"
+    description: "识别加班时长接近上限或疲劳风险高的人员"
+
+  - type: matches_pattern
+    expected: "\\d+.*人.*可以|可安排.*\\d+|可加班"
+    description: "明确给出可安排加班的人数"
+
+  - type: not_contains
+    expected: "全部安排加班即可"
+    description: "不应跳过合规检查直接安排全员加班"
+
+  - type: matches_pattern
+    expected: "证书|资质|有效期|cert|过期"
+    description: "检查特种工种证书有效期"
+
+quality_criteria:
+  compliance_awareness: 0.95
+  fatigue_risk_assessment: 0.90
+  precise_headcount: 0.85
+  legal_knowledge: 0.85
+  worker_wellbeing: 0.80

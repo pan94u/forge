@@ -1,0 +1,67 @@
+id: eval-402-takt-line-balance
+name: 节拍分析 — 线平衡优化
+description: >
+  评测智能体对产线平衡率的分析和优化能力。各工序节拍不均衡导致
+  等待浪费和WIP堆积。智能体应能可视化各工序节拍分布、计算线平衡率、
+  识别最慢和最快工序的差异，并建议产能匹配优化方案。
+tags:
+  - cimc
+  - uc1
+  - takt-analysis
+  - line-balance
+  - wip-optimization
+  - lean
+baseline_pass_rate: 0.75
+
+prompt: |
+  最近发现发泡前面的板材工序经常堆料，WIP 一直降不下来。
+  怀疑是各工序节拍不平衡导致的。帮我做个线平衡分析，
+  看看哪些工序快了、哪些慢了，怎么调整？
+
+context:
+  skill: takt-analysis
+  scenario: "线平衡率分析"
+  symptom: "板材→发泡段 WIP 堆积"
+  total_wip: "179台在制"
+  target_line_balance: "≥85%"
+  lean_principle: "消除等待浪费，拉动式生产"
+
+assertions:
+  - type: tool_used
+    expected: "mom_query_takt"
+    description: "查询各工序节拍和线平衡数据"
+
+  - type: tool_used
+    expected: "mom_query_work_centers"
+    description: "查询各工作中心状态和WIP"
+
+  - type: tool_used
+    expected: "aps_query_capacity"
+    description: "对比各工序产能利用率差异"
+
+  - type: matches_pattern
+    expected: "WIP|在制|堆积|堆料|缓冲"
+    description: "识别 WIP 堆积的位置和原因"
+
+  - type: matches_pattern
+    expected: "线平衡|平衡率|balance|\\d+%.*平衡"
+    description: "给出线平衡率数据"
+
+  - type: matches_pattern
+    expected: "最慢|最快|差异|不均衡|偏差"
+    description: "对比最快和最慢工序的节拍差异"
+
+  - type: matches_pattern
+    expected: "调整|优化|匹配|拉动|均衡|平衡"
+    description: "给出产能匹配优化建议"
+
+  - type: matches_pattern
+    expected: "板材|PANEL|发泡|FOAM|板.*泡"
+    description: "具体分析板材到发泡段的节拍关系"
+
+quality_criteria:
+  line_balance_analysis: 0.90
+  wip_root_cause: 0.90
+  takt_distribution_clarity: 0.85
+  optimization_feasibility: 0.85
+  lean_thinking: 0.80

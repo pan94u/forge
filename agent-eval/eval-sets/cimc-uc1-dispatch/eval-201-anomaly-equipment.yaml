@@ -1,0 +1,67 @@
+id: eval-201-anomaly-equipment
+name: 异常诊断 — 设备故障
+description: >
+  评测智能体对设备类异常（SBYC）的诊断能力。收到设备故障报告后，
+  应自动匹配知识库历史案例，分解 OEE 三因子定位损失来源，
+  评估下游影响范围，并给出分级处置建议。
+tags:
+  - cimc
+  - uc1
+  - anomaly-diagnosis
+  - equipment-failure
+  - knowledge-base
+  - oee
+baseline_pass_rate: 0.80
+
+prompt: |
+  外侧板线（PANEL_OUT_SIDE）焊接机器人报警停机了，已经停了 20 分钟。
+  这是瓶颈工序，帮我快速诊断原因，评估影响，给处置方案。
+
+context:
+  skill: anomaly-diagnosis
+  anomaly_code: SBYC
+  work_center: PANEL_OUT_SIDE
+  is_bottleneck: true
+  downtime_minutes: 20
+  expected_oee_impact: "可用率下降 → OEE 整体下降"
+  cascade_risk: "瓶颈停机 = 全线受影响"
+
+assertions:
+  - type: tool_used
+    expected: "mom_diagnose_anomaly"
+    description: "调用知识库自动诊断"
+
+  - type: tool_used
+    expected: "mom_query_oee"
+    description: "查询 OEE 分解数据定位损失"
+
+  - type: tool_used
+    expected: "mom_query_anomalies"
+    description: "查询当前异常列表"
+
+  - type: matches_pattern
+    expected: "瓶颈|关键工序|全线|级联|连锁"
+    description: "识别瓶颈工序停机的全局影响"
+
+  - type: matches_pattern
+    expected: "可用率|可用性|availability|OEE"
+    description: "从 OEE 可用率维度分析停机影响"
+
+  - type: matches_pattern
+    expected: "方案|措施|建议|处置|应急"
+    description: "给出具体的处置方案"
+
+  - type: matches_pattern
+    expected: "\\d+分钟|尽快|立即|紧急|每.*分钟.*损失"
+    description: "体现时间紧迫性和停机损失"
+
+  - type: tool_used
+    expected: "aps_query_buffer"
+    description: "查询排产缓冲能否吸收停机影响"
+
+quality_criteria:
+  root_cause_diagnosis: 0.90
+  oee_decomposition: 0.85
+  cascade_impact_analysis: 0.90
+  actionable_remediation: 0.85
+  urgency_awareness: 0.85

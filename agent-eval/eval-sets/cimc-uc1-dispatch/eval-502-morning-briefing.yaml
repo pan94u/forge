@@ -1,0 +1,95 @@
+id: eval-502-morning-briefing
+name: 跨技能集成 — 晨会全景调度
+description: >
+  评测智能体作为"AI调度中枢"进行每日晨会全景汇报的综合能力。
+  调度经理每天早上需要一份全景报告，涵盖昨日产出、在制状态、
+  异常汇总、今日排产、人员到岗、物料齐套、重点关注事项。
+  这是对智能体全部 4 个技能的综合调用和信息整合能力的终极测试。
+tags:
+  - cimc
+  - uc1
+  - integration
+  - morning-briefing
+  - comprehensive
+  - all-skills
+  - expert
+baseline_pass_rate: 0.65
+
+prompt: |
+  现在是早上 8 点，我是调度经理，马上要开晨会。
+  帮我出一份今日调度全景报告，包括：
+  - 昨日产出完成情况
+  - 当前在制和排产进度
+  - 有没有异常或风险
+  - 今日人员到岗和缺口
+  - 物料有没有问题
+  - 今天重点要盯的事
+
+  简洁一些，我要在 5 分钟内讲完。
+
+context:
+  skill: "all skills integration"
+  scenario: "每日晨会全景调度报告"
+  audience: "调度经理（5分钟汇报）"
+  output_format: "结构化简报，重点突出"
+  required_coverage: "产出/排产/异常/人员/物料/关注事项 6个维度"
+
+assertions:
+  - type: tool_used
+    expected: "mom_query_production"
+    description: "查询昨日产出统计"
+
+  - type: tool_used
+    expected: "mom_query_workorders"
+    description: "查询当前在产工单状态"
+
+  - type: tool_used
+    expected: "aps_query_schedule"
+    description: "查询今日排产计划"
+
+  - type: tool_used
+    expected: "mom_query_anomalies"
+    description: "查询当前异常列表"
+
+  - type: tool_used
+    expected: "ope_query_attendance"
+    description: "查询今日出勤情况"
+
+  - type: tool_used
+    expected: "ope_detect_gaps"
+    description: "检测人员缺口"
+
+  - type: tool_used
+    expected: "sap_query_inventory"
+    description: "查询物料库存及预警"
+
+  - type: matches_pattern
+    expected: "产出|产量|完成"
+    description: "包含昨日产出信息"
+
+  - type: matches_pattern
+    expected: "排产|计划|今日.*生产"
+    description: "包含今日排产信息"
+
+  - type: matches_pattern
+    expected: "异常|风险|告警|关注"
+    description: "包含异常/风险信息"
+
+  - type: matches_pattern
+    expected: "到岗|出勤|缺员|人员"
+    description: "包含人员到岗信息"
+
+  - type: matches_pattern
+    expected: "物料|库存|齐套|材料"
+    description: "包含物料状态信息"
+
+  - type: not_contains
+    expected: "详细分析如下"
+    description: "晨会简报应简洁，避免冗长分析"
+
+quality_criteria:
+  coverage_completeness: 0.95
+  information_accuracy: 0.90
+  brevity_and_clarity: 0.90
+  priority_highlighting: 0.85
+  cross_system_integration: 0.85

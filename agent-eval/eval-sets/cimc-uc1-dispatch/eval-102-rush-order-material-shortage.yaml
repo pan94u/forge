@@ -1,0 +1,68 @@
+id: eval-102-rush-order-material-shortage
+name: 紧急插单 — 物料短缺场景
+description: >
+  评测智能体在物料不足情况下处理紧急插单的能力。当物料齐套检查
+  发现短缺时，智能体应能识别缺料项、评估到货时间对交期的影响，
+  并给出含物料约束的调整方案（如分批交付、替代物料建议）。
+tags:
+  - cimc
+  - uc1
+  - rush-order
+  - material-shortage
+  - sap-integration
+baseline_pass_rate: 0.75
+
+prompt: |
+  紧急情况：Dole 客户要求插单 80 台 40HC冷藏箱，7天内交付。
+  我记得上周仓库反馈过防腐钢板库存偏低，帮我综合评估一下，
+  物料够不够？产能排得下吗？给个可行方案。
+
+context:
+  skill: rush-order-response
+  customer: Dole
+  customer_tier: A级
+  product_type: 40HC冷藏箱
+  quantity: 80
+  deadline_days: 7
+  hint: "防腐钢板库存接近安全库存线"
+  known_shortage_risk: "防腐蚀钢板 (Q345R) 在途38吨 预计3天到"
+
+assertions:
+  - type: tool_used
+    expected: "sap_query_inventory"
+    description: "查询当前物料库存状态"
+
+  - type: tool_used
+    expected: "sap_check_material_readiness"
+    description: "执行物料齐套性检查"
+
+  - type: tool_used
+    expected: "aps_query_capacity"
+    description: "查询当前产能负荷"
+
+  - type: matches_pattern
+    expected: "钢板|短缺|不足|缺料|安全库存|齐套"
+    description: "识别并报告物料短缺情况"
+
+  - type: matches_pattern
+    expected: "在途|到货|\\d+[天日].*到"
+    description: "提及在途物料及预计到货时间"
+
+  - type: matches_pattern
+    expected: "分批|分段|优先|调整|替代|先.*后"
+    description: "给出物料约束下的可行方案（如分批交付）"
+
+  - type: not_contains
+    expected: "物料充足，无需担心"
+    description: "不应错误判断物料充足"
+
+  - type: tool_used
+    expected: "aps_impact_analysis"
+    description: "执行插单冲击分析"
+
+quality_criteria:
+  material_risk_identification: 0.95
+  supply_chain_awareness: 0.90
+  feasible_workaround: 0.85
+  timeline_accuracy: 0.85
+  cross_system_coordination: 0.80

@@ -1,0 +1,67 @@
+id: eval-202-anomaly-material-quality
+name: 异常诊断 — 物料质量问题
+description: >
+  评测智能体对物料/质量类异常（WLYC/PZYC）的诊断能力。当来料
+  检验发现质量问题时，应能追溯物料批次、评估在制品影响范围、
+  联动 SAP 库存查询替代料源，并给出质量处置+生产调整的联合方案。
+tags:
+  - cimc
+  - uc1
+  - anomaly-diagnosis
+  - material-quality
+  - sap-integration
+baseline_pass_rate: 0.75
+
+prompt: |
+  品质部报告：今天到的一批防腐蚀钢板（Q345R）抽检发现涂层厚度不达标，
+  不良率约 15%。这批料已经有部分送到了开卷线和喷砂线。
+  帮我评估影响范围，需要做哪些处置？
+
+context:
+  skill: anomaly-diagnosis
+  anomaly_code: WLYC
+  material: "防腐蚀钢板 Q345R"
+  defect: "涂层厚度不达标"
+  defect_rate: "15%"
+  affected_work_centers: "UNCOIL (开卷), SANDBLAST (喷砂)"
+  downstream_risk: "已进入产线的不良品可能流转到后续工序"
+
+assertions:
+  - type: tool_used
+    expected: "mom_diagnose_anomaly"
+    description: "调用知识库匹配历史类似案例"
+
+  - type: tool_used
+    expected: "mom_query_work_centers"
+    description: "查询受影响工作中心的当前状态"
+
+  - type: tool_used
+    expected: "sap_query_inventory"
+    description: "查询库存中是否有合格替代物料"
+
+  - type: tool_used
+    expected: "mom_query_quality"
+    description: "查询质量趋势和帕累托分析"
+
+  - type: matches_pattern
+    expected: "开卷|喷砂|UNCOIL|SANDBLAST|在制|WIP"
+    description: "明确识别已受影响的工作中心"
+
+  - type: matches_pattern
+    expected: "隔离|封存|退货|返工|筛选|全检"
+    description: "给出物料质量处置措施（隔离/退货/筛选等）"
+
+  - type: matches_pattern
+    expected: "下游|后续|追溯|流转|已.*工序"
+    description: "考虑已流入下游工序的不良品追溯"
+
+  - type: not_contains
+    expected: "影响不大"
+    description: "15%不良率不应被轻描淡写"
+
+quality_criteria:
+  defect_scope_analysis: 0.95
+  traceability: 0.90
+  quality_disposition: 0.90
+  supply_chain_response: 0.85
+  downstream_protection: 0.85

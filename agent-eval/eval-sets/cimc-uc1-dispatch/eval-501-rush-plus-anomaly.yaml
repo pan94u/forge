@@ -1,0 +1,80 @@
+id: eval-501-rush-plus-anomaly
+name: 跨技能集成 — 插单+异常联合场景
+description: >
+  评测智能体在同时面对紧急插单和产线异常的复杂场景下的综合决策能力。
+  这是最接近真实生产现场的高压场景：一边有客户催单，一边有设备报警。
+  智能体必须在信息不完整的情况下，同时处理两个问题并给出协调一致的方案。
+tags:
+  - cimc
+  - uc1
+  - integration
+  - rush-order
+  - anomaly
+  - multi-skill
+  - expert
+baseline_pass_rate: 0.65
+
+prompt: |
+  紧急情况！两件事同时发生：
+
+  1. ONE（S级客户）刚来电话要紧急插 50 台 40HC，4天交付，说晚了要扣违约金
+  2. 调度刚报告发泡线（FOAM_TOP）的连续发泡机出现温控异常，泡沫密度不均匀，
+     已停机等待处理，影响后续总装的节奏
+
+  现在怎么办？先处理哪个？能不能两个都稳住？
+
+context:
+  skill: "rush-order-response + anomaly-diagnosis 联合"
+  urgency: "双重紧急，需要优先级判断"
+  rush_order: "ONE S级 50台 40HC 4天"
+  anomaly: "FOAM_TOP 温控异常 → 泡沫密度不均 → 质量风险"
+  compound_impact: "异常降低了可用产能，而插单需要额外产能"
+  decision_complexity: "两个问题相互影响，不能独立处理"
+
+assertions:
+  - type: tool_used
+    expected: "mom_diagnose_anomaly"
+    description: "对发泡线异常进行诊断"
+
+  - type: tool_used
+    expected: "aps_query_capacity"
+    description: "查询考虑异常后的真实可用产能"
+
+  - type: tool_used
+    expected: "aps_impact_analysis"
+    description: "在异常背景下评估插单冲击"
+
+  - type: tool_used
+    expected: "sap_check_material_readiness"
+    description: "检查 50 台订单的物料齐套"
+
+  - type: matches_pattern
+    expected: "优先|先.*后|第一|首要|紧急.*度"
+    description: "明确给出两个问题的处理优先级"
+
+  - type: matches_pattern
+    expected: "影响.*产能|产能.*不足|异常.*导致|叠加|雪上加霜|联动"
+    description: "认识到异常降低产能与插单需要产能之间的矛盾"
+
+  - type: matches_pattern
+    expected: "温控|发泡|修复|维修|恢复|密度"
+    description: "给出发泡线异常的处置方案"
+
+  - type: matches_pattern
+    expected: "排产|调整|加班|交期|ONE"
+    description: "给出考虑异常约束的插单方案"
+
+  - type: tool_used
+    expected: "mom_query_oee"
+    description: "查 OEE 量化异常对产能的影响"
+
+  - type: not_contains
+    expected: "先不管异常"
+    description: "不应建议忽略异常只处理插单"
+
+quality_criteria:
+  dual_problem_coordination: 0.95
+  priority_reasoning: 0.90
+  anomaly_impact_on_capacity: 0.90
+  feasible_integrated_plan: 0.85
+  risk_awareness: 0.85

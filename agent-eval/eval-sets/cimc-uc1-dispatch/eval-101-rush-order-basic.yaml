@@ -1,0 +1,70 @@
+id: eval-101-rush-order-basic
+name: 紧急插单 — 基础场景
+description: >
+  评测智能体处理标准紧急插单的完整流程：接收紧急订单请求后，
+  应自动查询当前产能、物料库存和人员状态，生成多策略对比方案
+  （交期优先/成本优先/均衡），并给出可执行的排产调整建议。
+tags:
+  - cimc
+  - uc1
+  - rush-order
+  - multi-strategy
+  - core
+baseline_pass_rate: 0.80
+
+prompt: |
+  紧急插单：客户 Hapag-Lloyd 追加一批 40HC冷藏箱，数量 60 台，
+  要求 4 天内交付。请评估产能影响并给出排产方案。
+
+context:
+  skill: rush-order-response
+  customer: Hapag-Lloyd
+  customer_tier: S级
+  product_type: 40HC冷藏箱
+  quantity: 60
+  deadline_days: 4
+  factory_takt: "460s/台 (目标414s)"
+  bottleneck: "PANEL_OUT_SIDE 外侧板线 130台/班次上限"
+  current_daily_capacity: "180台/天 (双班)"
+
+assertions:
+  - type: tool_used
+    expected: "aps_query_capacity"
+    description: "调用 APS 产能查询，了解当前负荷"
+
+  - type: tool_used
+    expected: "sap_check_material_readiness"
+    description: "调用 SAP 物料齐套检查"
+
+  - type: tool_used
+    expected: "aps_impact_analysis"
+    description: "调用插单冲击分析"
+
+  - type: contains
+    expected: "交期优先"
+    description: "包含交期优先策略"
+    case_insensitive: true
+
+  - type: contains
+    expected: "成本优先"
+    description: "包含成本优先策略"
+    case_insensitive: true
+
+  - type: matches_pattern
+    expected: "外侧板|PANEL_OUT_SIDE|瓶颈"
+    description: "识别并提及瓶颈工序的影响"
+
+  - type: matches_pattern
+    expected: "\\d+[天日]|交付|交期"
+    description: "给出具体的交付时间预测"
+
+  - type: matches_pattern
+    expected: "加班|overtime|合规|劳动法"
+    description: "如涉及加班，需提及劳动法合规"
+
+quality_criteria:
+  scenario_completeness: 0.90
+  multi_strategy_comparison: 0.90
+  bottleneck_awareness: 0.85
+  material_readiness_check: 0.85
+  actionability: 0.85
