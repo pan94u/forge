@@ -94,3 +94,30 @@ forge-postgres             postgres             Up (healthy)
 ### 备注
 
 常规更新：拉取最新 GHCR 镜像 + 更新 synapse-gateway 到最新版（包含 `/gateway/me` 端点、CJK header 编码修复）。
+
+---
+
+## forge — 2026-04-01 00:58:00
+
+| 项目 | 值 |
+|------|------|
+| 时间 | 2026-04-01 00:58:00 |
+| 版本 | `latest` |
+| Git | `d0edcc6` |
+| 操作人 | deploy |
+| 状态 | SUCCESS |
+| 上一版本 | `04c5be2` |
+
+### 容器状态
+
+```
+NAME                       SERVICE              STATUS
+forge-backend              backend              Up (healthy)
+forge-database-mcp         database-mcp         Up (healthy)
+forge-enterprise-console   enterprise-console   Up
+forge-frontend             frontend             Up
+forge-gateway              forge-gateway        Up
+forge-knowledge-mcp        knowledge-mcp        Up (healthy)
+forge-nginx                nginx                Up
+forge-postgres             postgres             Up (healthy)
+```
