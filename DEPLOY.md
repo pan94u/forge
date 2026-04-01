@@ -80,6 +80,23 @@ docker compose -f infrastructure/docker/docker-compose.production.yml \
 **问题**：`proxy.ts` 中 `headers.set('X-User-Name', '胖弟弟')` 直接报 TypeError — HTTP header 值不允许非 ASCII。
 **修复**：注入时 `encodeURIComponent(value)`，后端读取时 `decodeURIComponent(header)`。
 
+### 3. 端口不能绑定 127.0.0.1
+
+**问题**：尝试将 forge-nginx/enterprise-console 端口从 `0.0.0.0` 改为 `127.0.0.1`，导致 gateway-nginx 502。
+**原因**：gateway-nginx 运行在独立 Docker 网络（`gateway_default`），通过 `host.docker.internal` 访问宿主机端口。`127.0.0.1` 绑定的端口从容器内不可达。
+**结论**：端口安全加固需用云厂商安全组/防火墙，不能靠绑定地址。
+
+### 4. Gateway 镜像更新
+
+```bash
+docker pull pan9pang/synapse-gateway:latest
+cd /opt/forge
+docker compose -f infrastructure/docker/docker-compose.production.yml \
+  --env-file infrastructure/docker/.env.production up -d forge-gateway
+```
+
+**注意**：容器内热修复（`docker cp`）在镜像更新后会丢失，不要依赖。
+
 ## 部署后验证
 
 ```bash

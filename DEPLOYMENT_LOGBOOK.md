@@ -121,3 +121,7 @@ forge-knowledge-mcp        knowledge-mcp        Up (healthy)
 forge-nginx                nginx                Up
 forge-postgres             postgres             Up (healthy)
 ```
+
+### 备注
+
+架构维护期间的部署。gateway 镜像更新到最新版（多端口支持、`/gateway/me`、CJK 编码修复）。尝试将 forge-nginx/enterprise-console 端口绑定 `127.0.0.1`，但 gateway-nginx 通过 `host.docker.internal` 无法访问 127.0.0.1 端口（导致 502），已回退。
