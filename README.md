@@ -104,6 +104,73 @@ Effect: New sessions immediately have project context, saving 30-40% token consu
 - **Four-dimensional evaluation learning loop**: Intent understanding + Completion + Quality + Experience, auto-generates improvement suggestions
 - **Prompt Caching**: System Prompt cached for 5 minutes, 90% cost savings on cache hits
 
+### Forge Eval — Agent Evaluation & Quality Guard
+
+AI Agent outputs are non-deterministic. "It worked once" does not mean "it works reliably." Forge Eval is a **continuous quality guard** that turns "I think the agent works" into "data proves the agent works — consistently."
+
+#### Three Trust Layers
+
+| Layer | Meaning | Metric | Graduation Criteria |
+|-------|---------|--------|-------------------|
+| **Capability** | Can do it | Pass@5 > 0 (at least 1 success in 5 attempts) | — |
+| **Regression** | Does it reliably | Pass^5 ≈ 1.0 (all 5 attempts succeed) | 5 consecutive runs ≥ 95% pass rate, Pass^3 ≥ 90% |
+| **Saturated** | No longer needs watching | 20 consecutive runs all-pass | Auto-reduces eval frequency, freeing resources for new capabilities |
+
+Each eval task has its own **lifecycle** managed by `LifecycleManager`, automatically progressing from exploring capability boundaries → guarding existing capabilities → releasing human attention.
+
+#### Composite Grading Architecture
+
+Three grader types, composable via `CompositeGrader`:
+
+| Grader | When to Use | Characteristics |
+|--------|------------|-----------------|
+| **Code-Based** | Clear right/wrong criteria | Deterministic, zero cost, 11 assertion types |
+| **Model-Based** | Subjective quality judgment | LLM-as-Judge with rubric scoring + confidence |
+| **Human** | Calibrate the first two | Deferred scoring via review queue |
+
+**11 Code-Based assertion types** across three dimensions:
+
+| Dimension | Assertions | What it Evaluates |
+|-----------|-----------|-------------------|
+| Output correctness | `contains`, `not_contains`, `matches_pattern`, `json_schema`, `json_path` | Is the result correct? |
+| Behavioral process | `tool_used`, `tool_not_used`, `tool_call_count`, `tool_call_order` | Is the execution path correct? |
+| Efficiency | `turn_count_max` | Did the agent waste steps? |
+
+#### Statistical Rigor
+
+- **Pass@k** (unbiased estimator): Probability of at least 1 success in k trials — measures **capability**
+- **Pass^k**: Probability of all k trials succeeding — measures **reliability**
+- **Regression detection**: Binomial test with Wilson Score confidence intervals distinguishes real regressions from random variance
+- **Human review triggers**: Auto-flags grades for review when LLM confidence < 0.7, Code vs Model score divergence > 0.3, random 10% sampling, or first 3 runs of new tasks
+- **Cohen's Kappa**: Measures human-machine agreement rate for calibrating automated graders
+
+#### Key Capabilities
+
+| Capability | How | Outcome |
+|------------|-----|---------|
+| **Assess new agent capabilities** | Create Suite + Tasks, run multi-trial evaluations | Pass rates, Pass@k, per-assertion breakdowns |
+| **Model upgrade A/B comparison** | Run same Suite before/after, regression detection | Per-task regression report with statistical significance |
+| **External agent evaluation** | Configure SSE/REST endpoint (Dify, Coze, OpenAI-compatible, etc.) | Same scoring standard for any agent |
+| **Production quality audit** | Submit historical transcripts for post-hoc grading | Quality scoring on conversations that already happened |
+| **Trend monitoring** | Time-series dashboard of pass rates across runs | Spot quality inflection points before users do |
+| **Lifecycle management** | Auto-graduation from Capability → Regression → Saturated | Saturated tasks auto-reduce frequency, focus on new problems |
+
+#### Architecture
+
+```
+forge-eval/
+├── eval-protocol/   # Data model & types (Platform, AgentType, Lifecycle, Difficulty, etc.)
+├── eval-engine/     # Execution engine + graders + stats + lifecycle
+│   ├── grader/      # CodeBasedGrader, ModelBasedGrader, CompositeGrader
+│   ├── stats/       # PassMetrics (Pass@k, Pass^k, Wilson CI), RegressionDetector
+│   ├── lifecycle/   # LifecycleManager (CAPABILITY → REGRESSION → SATURATED)
+│   ├── review/      # ReviewTriggerRules (4 auto-trigger conditions)
+│   └── harness/     # External agent harness (SSE/REST protocols)
+└── eval-api/        # 17 REST endpoints + JPA persistence + review queue
+```
+
+**17 API endpoints** covering suites, tasks, runs, transcripts, regressions, trends, lifecycle, and human reviews — usable from the Eval Dashboard UI or directly via API for CI/CD integration.
+
 ### Web IDE
 
 ```
@@ -232,7 +299,8 @@ forge-platform/
 │   ├── forge-deployment/  # Deployment Skills (2: K8s/CI-CD)
 │   └── forge-team-templates/ # Team templates (backend/data/mobile)
 ├── cli/                   # Forge CLI (Kotlin + GraalVM Native)
-├── agent-eval/            # SuperAgent evaluation framework
+├── forge-eval/            # Unified evaluation engine (eval-protocol + eval-engine + eval-api)
+├── agent-eval/            # Legacy YAML-based evaluation framework (bridged to forge-eval)
 ├── skill-tests/           # Skill validation framework
 ├── knowledge-base/        # Knowledge base documents (13+ docs)
 └── infrastructure/
@@ -471,6 +539,8 @@ npm run dev
 | Development Logbook | `docs/planning/dev-logbook.md` | Complete session-by-session development records |
 | Architecture Overview | `docs/architecture/overview.md` | System architecture documentation |
 | Trial Guide | `docs/product/TRIAL-GUIDE.md` | Internal trial operation manual |
+| Eval Handbook | `docs/guides/eval-handbook.md` | Complete eval usage guide (why, what, how) |
+| Eval Value Paths | `docs/acceptance-tests/forge-eval-value-paths.md` | E2E test procedures for 5 eval value paths |
 | Acceptance Tests | `docs/acceptance-tests/` | Phase-by-phase acceptance test reports |
 | Bug List | `docs/analysis/buglist.md` | Known issue tracking |
 
