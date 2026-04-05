@@ -24,7 +24,7 @@ class ModelBasedGrader(
     private val logger = LoggerFactory.getLogger(ModelBasedGrader::class.java)
 
     companion object {
-        const val DEFAULT_JUDGE_MODEL = "claude-sonnet-4-6"
+        const val DEFAULT_JUDGE_MODEL = "MiniMax-M2.7-highspeed"
         private const val FALLBACK_SCORE = 0.5
         private const val FALLBACK_CONFIDENCE = 0.2
     }
