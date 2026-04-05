@@ -97,6 +97,68 @@ docker compose -f infrastructure/docker/docker-compose.production.yml \
 
 **注意**：容器内热修复（`docker cp`）在镜像更新后会丢失，不要依赖。
 
+### 5. Eval 集成外部 Agent（如 CIMC）
+
+Forge 的 eval 功能可以对接外部 Agent 进行评估。配置 `eval_suites` 时需注意以下陷阱：
+
+**agent_endpoint 必须用公网 IP，禁止 localhost**
+
+Forge backend 运行在 Docker 容器中，`localhost` 是容器自身，不是宿主机。eval 调用外部 Agent 时必须使用公网地址：
+```
+# ✅ 正确
+http://124.156.192.129:5810/api/agent/chat
+
+# ❌ 错误 — 容器内 localhost 不是宿主机
+http://localhost:5810/api/agent/chat
+```
+
+**agent_config 禁止使用 requestTemplate**
+
+`requestTemplate` 通过 `{{prompt}}` 字符串替换构造 JSON body。但 eval prompt 包含换行符和引号，替换后会破坏 JSON 语法。应删除 `requestTemplate` 字段，让 `ExternalAgentCaller`（`ExternalAgentCaller.kt:232-236`）使用默认的 `objectMapper` 序列化，它会正确处理转义。
+
+**认证 header 用 x-service-token**
+
+对接 synapse-gateway 类目标（如 CIMC）时，认证 header 不是 `Authorization: Bearer <token>`，而是：
+```json
+{
+  "headers": {
+    "x-service-token": "<CIMC 的 SERVICE_TOKEN>"
+  }
+}
+```
+
+**grader_configs 必须显式指定 model**
+
+`MODEL_BASED` grader 默认用 `claude-sonnet-4-6`，但当 `MODEL_PROVIDER=minimax` 时，请求走 MiniMax 的 Anthropic 兼容端点，模型名映射可能失败。必须在 `eval_tasks.grader_configs` 中显式设置 model：
+```json
+{
+  "type": "MODEL_BASED",
+  "model": "MiniMax-M2.7-highspeed",
+  "criteria": "..."
+}
+```
+
+**CIMC 轮换 SERVICE_TOKEN 后同步更新**
+
+CIMC 每次轮换 SERVICE_TOKEN，必须同步更新 Forge 数据库中的 eval suite 配置：
+```sql
+UPDATE eval_suites
+SET agent_config = jsonb_set(
+  agent_config,
+  '{headers,x-service-token}',
+  '"<new-token>"'
+)
+WHERE name LIKE '%CIMC%';
+```
+
+### 6. MiniMax 模型配置
+
+当 `MODEL_PROVIDER=minimax` 时，请求经 MiniMax 的 Anthropic 兼容端点（`MINIMAX_API_URL`）。模型名在 MiniMax 侧会内部映射（如 `claude-sonnet-4-6` → `MiniMax-M2.7`）。注意：
+
+- 确认 MiniMax token 套餐支持映射后的目标模型
+- 推荐显式使用 MiniMax 原生模型名（如 `MiniMax-M2.7-highspeed`），避免隐式映射导致的意外
+- eval grader、agent chat、知识库摘要等所有用到 LLM 的地方都受此影响
+
 ## 部署后验证
 
 ```bash
