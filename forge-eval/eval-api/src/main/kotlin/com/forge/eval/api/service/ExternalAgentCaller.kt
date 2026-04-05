@@ -182,10 +182,14 @@ class ExternalAgentCaller(
                     }
                     // 工具调用
                     "tool_use", "tool_call", "tool_use_start" -> {
-                        val toolName = event.get("name")?.asText()
+                        // Synapse wraps in "call" object: {"type":"tool_call","call":{"id":"...","name":"...","arguments":{...}}}
+                        val callObj = event.get("call")
+                        val toolName = callObj?.get("name")?.asText()
+                            ?: event.get("name")?.asText()
                             ?: event.get("toolName")?.asText()
                             ?: "unknown"
-                        val args = event.get("input")?.toString()
+                        val args = callObj?.get("arguments")?.toString()
+                            ?: event.get("input")?.toString()
                             ?: event.get("arguments")?.toString()
                             ?: event.get("toolInput")?.toString()
                             ?: "{}"
