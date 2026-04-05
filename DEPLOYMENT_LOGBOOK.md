@@ -2,6 +2,33 @@
 
 ---
 
+## forge — 2026-04-05 15:06:06
+
+| 项目 | 值 |
+|------|------|
+| 时间 | 2026-04-05 15:06:06 |
+| 版本 | `latest` |
+| Git | `c6255f8` |
+| 操作人 | deploy |
+| 状态 | SUCCESS |
+| 上一版本 | `54995a3` |
+
+### 容器状态
+
+```
+NAME                       SERVICE              STATUS                        PORTS
+forge-backend              backend              Up About a minute (healthy)   127.0.0.1:8080->8080/tcp
+forge-database-mcp         database-mcp         Up 22 hours (healthy)         8082/tcp
+forge-enterprise-console   enterprise-console   Up 37 seconds                 3000/tcp, 0.0.0.0:9001->9001/tcp
+forge-frontend             frontend             Up 37 seconds                 3000/tcp
+forge-gateway              forge-gateway        Up 37 seconds                 19501/tcp
+forge-knowledge-mcp        knowledge-mcp        Up 22 hours (healthy)         8081/tcp
+forge-nginx                nginx                Up 36 seconds                 80/tcp, 0.0.0.0:9000->9000/tcp
+forge-postgres             postgres             Up 22 hours (healthy)         127.0.0.1:5433->5432/tcp
+```
+
+---
+
 ## forge — 2026-03-30 23:49:43
 
 | 项目 | 值 |
