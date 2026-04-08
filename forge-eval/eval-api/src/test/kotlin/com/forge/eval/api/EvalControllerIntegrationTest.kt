@@ -188,6 +188,26 @@ class EvalControllerIntegrationTest {
     }
 
     @Test
+    @Order(7)
+    fun `POST runs - reads user JWT from X-Forwarded-Authorization for cross-app calls`() {
+        // 验证 Synapse Gateway 集成: Gateway 默认剥离 Authorization, 转存到 X-Forwarded-Authorization。
+        // EvalController 必须从 X-Forwarded-Authorization 取出用户 JWT, 否则跨应用调用 (CIMC agent) 拿不到用户身份。
+        // 这个测试只验证 controller 能正确接收 header 且不报错; agentEndpoint 未配置时 service 走默认 model 路径。
+        val request = CreateRunRequest(
+            suiteId = suiteId!!,
+            trialsPerTask = 1
+        )
+
+        mockMvc.perform(
+            post("/api/eval/v1/runs")
+                .header("X-Forwarded-Authorization", "Bearer test-jwt-from-gateway")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request))
+        )
+            .andExpect(status().isCreated)
+    }
+
+    @Test
     @Order(8)
     fun `GET runs by id - returns run with trials and grades`() {
         val response = pollRunUntilCompleted(runId!!)

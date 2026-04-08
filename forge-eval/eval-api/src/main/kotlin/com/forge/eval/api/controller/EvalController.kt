@@ -91,9 +91,11 @@ class EvalController(
     @PostMapping("/runs")
     fun createRun(
         @RequestBody request: CreateRunRequest,
-        @RequestHeader("Authorization", required = false) authHeader: String?
+        // Synapse Gateway 默认剥离 Authorization, 转存到 X-Forwarded-Authorization
+        // 跨应用调用 (CIMC agent) 时显式从这里取用户 JWT 透传给下游 Gateway
+        @RequestHeader("X-Forwarded-Authorization", required = false) forwardedAuth: String?
     ): ResponseEntity<RunResponse> {
-        val run = evalService.createRun(request, authHeader)
+        val run = evalService.createRun(request, forwardedAuth)
         return ResponseEntity.status(HttpStatus.CREATED).body(run)
     }
 
