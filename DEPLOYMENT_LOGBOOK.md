@@ -152,3 +152,30 @@ forge-postgres             postgres             Up (healthy)
 ### 备注
 
 架构维护期间的部署。gateway 镜像更新到最新版（多端口支持、`/gateway/me`、CJK 编码修复）。尝试将 forge-nginx/enterprise-console 端口绑定 `127.0.0.1`，但 gateway-nginx 通过 `host.docker.internal` 无法访问 127.0.0.1 端口（导致 502），已回退。
+
+---
+
+## forge — 2026-04-10 20:44:16
+
+| 项目 | 值 |
+|------|------|
+| 时间 | 2026-04-10 20:44:16 |
+| 版本 | `latest` |
+| Git | `0a125bf` |
+| 操作人 | deploy |
+| 状态 | SUCCESS |
+| 上一版本 | `latest` |
+
+### 容器状态
+
+```
+NAME                       IMAGE                                             COMMAND                  SERVICE              CREATED              STATUS                PORTS
+forge-backend              ghcr.io/pan94u/forge/backend:latest               "java -jar app.jar"      backend              4 days ago           Up 4 days (healthy)   127.0.0.1:8080->8080/tcp
+forge-database-mcp         ghcr.io/pan94u/forge/forge-database-mcp:latest    "java -jar /app/app.…"   database-mcp         10 days ago          Up 6 days (healthy)   8082/tcp
+forge-enterprise-console   ghcr.io/pan94u/forge/enterprise-console:latest    "docker-entrypoint.s…"   enterprise-console   About a minute ago   Up About a minute     3000/tcp, 0.0.0.0:9001->9001/tcp, :::9001->9001/tcp
+forge-frontend             ghcr.io/pan94u/forge/frontend:latest              "docker-entrypoint.s…"   frontend             About a minute ago   Up About a minute     3000/tcp
+forge-gateway              pan9pang/synapse-gateway:latest                   "/usr/local/bin/dock…"   forge-gateway        5 days ago           Up 5 days             19501/tcp
+forge-knowledge-mcp        ghcr.io/pan94u/forge/forge-knowledge-mcp:latest   "java -jar /app/app.…"   knowledge-mcp        10 days ago          Up 6 days (healthy)   8081/tcp
+forge-nginx                nginx:alpine                                      "/docker-entrypoint.…"   nginx                About a minute ago   Up About a minute     80/tcp, 0.0.0.0:9000->9000/tcp, :::9000->9000/tcp
+forge-postgres             postgres:16-alpine                                "docker-entrypoint.s…"   postgres             10 days ago          Up 6 days (healthy)   127.0.0.1:5433->5432/tcp
+```
