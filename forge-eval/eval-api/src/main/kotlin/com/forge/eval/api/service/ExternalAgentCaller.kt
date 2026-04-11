@@ -223,13 +223,23 @@ class ExternalAgentCaller(
 
     // ── 请求构建 ───────────────────────────────────────────────────
 
+    /**
+     * 把字符串编码为 JSON 字符串字面量内容（不含外层引号），用于安全地嵌入 requestTemplate。
+     * 必须做这一步，否则 prompt 中的换行/双引号/反斜杠会破坏 template 的 JSON 结构，
+     * 导致下游 Agent 报 "Unterminated string" 之类的解析错误。
+     */
+    private fun jsonEscape(s: String): String {
+        val quoted = objectMapper.writeValueAsString(s)
+        return quoted.substring(1, quoted.length - 1)
+    }
+
     private fun buildRequestBody(config: AgentEndpointConfig, task: EvalTask): String {
         val template = config.requestTemplate
         if (!template.isNullOrBlank()) {
             return template
-                .replace("{{prompt}}", task.prompt)
+                .replace("{{prompt}}", jsonEscape(task.prompt))
                 .replace("{{taskId}}", task.id.toString())
-                .replace("{{taskName}}", task.name)
+                .replace("{{taskName}}", jsonEscape(task.name))
         }
 
         // 默认格式：兼容 Anthropic 风格 Agent（CIMC / Synapse）

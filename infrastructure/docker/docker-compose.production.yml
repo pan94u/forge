@@ -141,6 +141,8 @@ services:
     restart: unless-stopped
     cpus: 1.5
     mem_limit: 1536m
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       # --- JVM 调优 ---
       JAVA_OPTS: >-
