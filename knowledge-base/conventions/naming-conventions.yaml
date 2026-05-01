@@ -1,0 +1,16 @@
+category: naming-and-structure
+last_mined: '2026-05-01T10:19:40.358325'
+source: pan94u/forge
+patterns:
+- pattern: Files with 'junit_tests' pattern
+  occurrences: 43
+  recommendation: enforce
+- pattern: Files with 'service_suffix' pattern
+  occurrences: 59
+  recommendation: enforce
+- pattern: Files with 'controller_suffix' pattern
+  occurrences: 29
+  recommendation: enforce
+- pattern: Files with 'repository_suffix' pattern
+  occurrences: 31
+  recommendation: enforce
